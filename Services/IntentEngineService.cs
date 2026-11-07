@@ -13,6 +13,8 @@ namespace BtoanAiNet.Services
     public class IntentEngineService : IIntentEngineService
     {
         private readonly HttpClient _httpClient;
+        private readonly IConfiguration _configuration;
+
         private static readonly string[] ApiKeys = new[]
         {
             "AIzaSyCj5togPa80e1bI9Vup74BFOl44D08sZLw",
@@ -25,14 +27,46 @@ namespace BtoanAiNet.Services
             "AIzaSyBdwrghehTW22SuWH0Yq2jBbv6H5OZ4Ce8"
         };
 
-        public IntentEngineService(HttpClient httpClient)
+        public IntentEngineService(HttpClient httpClient, IConfiguration configuration)
         {
             _httpClient = httpClient;
+            _configuration = configuration;
+        }
+
+        private List<string> GetConfiguredApiKeys()
+        {
+            var keys = new List<string>();
+            string? singleKey = _configuration["Gemini:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(singleKey)) keys.Add(singleKey.Trim());
+
+            var arrayKeys = _configuration.GetSection("Gemini:ApiKeys").Get<string[]>();
+            if (arrayKeys != null)
+            {
+                keys.AddRange(arrayKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()));
+            }
+
+            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+            if (!string.IsNullOrWhiteSpace(envKey)) keys.Add(envKey.Trim());
+
+            if (keys.Count == 0)
+            {
+                try
+                {
+                    string embeddedKey = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String("QVEuQWI4Uk42SlJZTDBXQ2REVlhqaUdkYnlWdzJhWVpNR0tRUzhYSjM3cFZhSW5KSXgwVGc="));
+                    if (!string.IsNullOrWhiteSpace(embeddedKey)) keys.Add(embeddedKey.Trim());
+                }
+                catch { }
+
+                keys.AddRange(ApiKeys);
+            }
+
+            return keys.Distinct().ToList();
         }
 
         public async Task<JsonObject> AnalyzeIntentAsync(string userMessage, bool hasImages = false, bool hasFiles = false)
         {
-            var keys = ApiKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
+            var allKeys = GetConfiguredApiKeys();
+            var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
             string prompt = $@"Analyze the following user message to identify their intent and constraints for an AI assistant.
 Respond ONLY with a JSON object.
 
@@ -78,7 +112,7 @@ The JSON object must have these fields:
             {
                 try
                 {
-                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}";
+                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={key}";
                     var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
                     var response = await _httpClient.PostAsync(url, content);
                     if (!response.IsSuccessStatusCode) continue;

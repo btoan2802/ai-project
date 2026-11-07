@@ -27,9 +27,38 @@ namespace BtoanAiNet.Controllers
         [HttpPost]
         [Route("ai/api/generate_image.php")]
         [Route("Media/GenerateImage")]
-        public async Task<IActionResult> GenerateImage([FromBody] ImageGenerationRequestModel model)
+        public async Task<IActionResult> GenerateImage([FromBody] ImageGenerationRequestModel? model)
         {
-            if (model == null) return Json(new { success = false, error = "Invalid body" });
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+            {
+                try
+                {
+                    Request.EnableBuffering();
+                    Request.Body.Position = 0;
+                    using var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8, leaveOpen: true);
+                    var raw = await reader.ReadToEndAsync();
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        var doc = System.Text.Json.Nodes.JsonNode.Parse(raw)?.AsObject();
+                        if (doc != null)
+                        {
+                            model = new ImageGenerationRequestModel
+                            {
+                                Prompt = doc["prompt"]?.ToString(),
+                                Conversation_Id = int.TryParse(doc["conversation_id"]?.ToString(), out int cid) ? cid : 0,
+                                User_Id = int.TryParse(doc["user_id"]?.ToString(), out int uid) ? uid : 0,
+                                Assistant_Text = doc["assistant_text"]?.ToString() ?? "Đây là ảnh của bạn:",
+                                Aspect_Ratio = doc["aspect_ratio"]?.ToString() ?? "1:1"
+                            };
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+                return Json(new { success = false, error = "Invalid body" });
+
             Console.WriteLine("[IMAGE CONTROLLER RECEIVED] " + model.Prompt);
             Console.WriteLine("[IMAGE CONTROLLER CONVERSATION_ID] " + model.Conversation_Id);
 
