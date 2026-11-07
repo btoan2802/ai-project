@@ -15,6 +15,7 @@ builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        options.JsonSerializerOptions.Converters.Add(new BtoanAiNet.ViewModels.FlexibleStringConverter());
     });
 
 var dbProvider = builder.Configuration.GetValue<string>("DbProvider") ?? "SqlServer";
@@ -448,6 +449,12 @@ app.UseHttpsRedirection();
 app.UseStaticFiles(new StaticFileOptions
 {
     ServeUnknownFileTypes = true
+});
+
+app.Use((context, next) =>
+{
+    context.Request.EnableBuffering();
+    return next();
 });
 
 app.UseRouting();

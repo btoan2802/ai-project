@@ -115,7 +115,7 @@ namespace BtoanAiNet.Services
             string? accessToken = await GetAccessTokenAsync(keyFilePath);
             if (string.IsNullOrEmpty(accessToken))
             {
-                return new JsonObject { ["success"] = false, ["error"] = "Auth failed (token generation)." };
+                return new JsonObject { ["success"] = false, ["error"] = "Tính năng tạo video yêu cầu khóa Google Cloud Service Account (google-key.json) để khởi chạy mô hình Veo." };
             }
 
             long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -207,7 +207,7 @@ namespace BtoanAiNet.Services
 
             if (string.IsNullOrEmpty(accessToken))
             {
-                return new JsonObject { ["success"] = false, ["error"] = "Auth failed" };
+                return new JsonObject { ["success"] = false, ["error"] = "Tính năng tạo video yêu cầu khóa Google Cloud Service Account (google-key.json) để kiểm tra tiến trình." };
             }
 
             string url = $"https://{Location}-aiplatform.googleapis.com/v1/projects/{ProjectId}/locations/{Location}/publishers/google/models/{ModelId}:fetchPredictOperation";
