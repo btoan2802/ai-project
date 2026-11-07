@@ -102,6 +102,16 @@ namespace BtoanAiNet.Services
             }
 
             string keyFilePath = Path.Combine(contentRootPath, "ai", "api", "google-key.json");
+            if (!File.Exists(keyFilePath))
+            {
+                string alt1 = Path.Combine(contentRootPath, "google-key.json");
+                string alt2 = Path.Combine(Directory.GetParent(contentRootPath)?.FullName ?? contentRootPath, "ai", "api", "google-key.json");
+                string alt3 = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS") ?? "";
+                if (File.Exists(alt1)) keyFilePath = alt1;
+                else if (File.Exists(alt2)) keyFilePath = alt2;
+                else if (File.Exists(alt3)) keyFilePath = alt3;
+            }
+
             string? accessToken = await GetAccessTokenAsync(keyFilePath);
             if (string.IsNullOrEmpty(accessToken))
             {
@@ -183,6 +193,16 @@ namespace BtoanAiNet.Services
 
             string contentRootPath = Directory.GetCurrentDirectory();
             string keyFilePath = Path.Combine(contentRootPath, "ai", "api", "google-key.json");
+            if (!File.Exists(keyFilePath))
+            {
+                string alt1 = Path.Combine(contentRootPath, "google-key.json");
+                string alt2 = Path.Combine(Directory.GetParent(contentRootPath)?.FullName ?? contentRootPath, "ai", "api", "google-key.json");
+                string alt3 = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS") ?? "";
+                if (File.Exists(alt1)) keyFilePath = alt1;
+                else if (File.Exists(alt2)) keyFilePath = alt2;
+                else if (File.Exists(alt3)) keyFilePath = alt3;
+            }
+
             string? accessToken = await GetAccessTokenAsync(keyFilePath);
 
             if (string.IsNullOrEmpty(accessToken))

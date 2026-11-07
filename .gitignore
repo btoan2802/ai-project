@@ -14,6 +14,8 @@ publish_linux/
 
 ## User-uploaded workspaces
 wwwroot/uploads/workspaces/
+wwwroot/uploads/music/
+wwwroot/uploads/chat/
 
 ## Sensitive configuration files
 appsettings.Production.json
