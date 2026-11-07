@@ -43,6 +43,13 @@ Ngành Khoa học máy tính, công nghệ thông tin.
   Sử dụng thẻ [GENIMAGE] ở dòng cuối cùng.
   Mô tả sau thẻ phải bằng tiếng Anh, chi tiết và nghệ thuật.
   Ví dụ: [GENIMAGE] A beautiful landscape of Ha Long Bay at sunset, cinematic lighting, 8k.
+* Nếu người dùng yêu cầu tạo nhạc, bài hát, giai điệu hoặc phổ nhạc:
+  Sáng tác lời bài hát hoặc hợp âm, và LUÔN kết thúc câu trả lời bằng thẻ:
+  [GENMUSIC] <mô tả phong cách âm nhạc bằng tiếng Anh>
+  Ví dụ: [GENMUSIC] Upbeat joyful acoustic pop song about a puppy, acoustic guitar, clapping rhythm, cheerful melody.
+  TUYỆT ĐỐI KHÔNG dùng thẻ [GENVIDEO] khi người dùng yêu cầu tạo nhạc hay bài hát.
+* Nếu người dùng yêu cầu tạo video hoặc hoạt cảnh chuyển động:
+  Sử dụng thẻ [GENVIDEO] ở dòng cuối cùng.
 ";
 
         public ChatService(
@@ -214,6 +221,19 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                     {
                         ["ok"] = true,
                         ["answer"] = $"Dưới đây là bức tranh của bạn:\n\n[GENIMAGE] {cleanedPrompt}",
+                        ["images"] = new JsonArray(),
+                        ["conversation_id"] = conversationId
+                    };
+                }
+
+                bool isMusicPrompt = lowerQ.Contains("nhạc") || lowerQ.Contains("bài hát") || lowerQ.Contains("song") ||
+                                     lowerQ.Contains("music") || lowerQ.Contains("giai điệu") || lowerQ.Contains("sáng tác");
+                if (isMusicPrompt)
+                {
+                    return new JsonObject
+                    {
+                        ["ok"] = true,
+                        ["answer"] = $"Dưới đây là giai điệu âm nhạc dành cho bạn:\n\n[GENMUSIC] {question ?? "acoustic upbeat melody"}",
                         ["images"] = new JsonArray(),
                         ["conversation_id"] = conversationId
                     };

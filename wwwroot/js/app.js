@@ -1065,6 +1065,31 @@ async function send() {
 
         // 🔥 AUTO GENVIDEO
         if (reply.includes("[GENVIDEO]")) {
+            const isActuallyMusic = (userText || "").toLowerCase().match(/nhạc|bài hát|song|music|giai điệu|hòa âm|melody|sáng tác/);
+            if (isActuallyMusic) {
+                const tag = "[GENVIDEO]";
+                const index = reply.indexOf(tag);
+                let textBefore = reply.substring(0, index).trim();
+                let remainder = reply.substring(index + tag.length).trim();
+                let promptLines = remainder.split("\n");
+                const musicPrompt = promptLines[0].trim() || userText;
+                let textAfter = promptLines.slice(1).join("\n").trim();
+                const fullText = (textBefore + "\n" + textAfter).trim();
+
+                typing.remove();
+                if (fullText) streamBot(fullText, exportType);
+
+                const musicLoading = document.createElement("div");
+                musicLoading.className = "msgrow bot";
+                musicLoading.innerHTML = `<div class="bubble music-card assistant">🎵 Đang soạn nhạc cho bạn...</div>`;
+                chatEl.appendChild(musicLoading);
+                scrollToBottom();
+
+                triggerMusicGeneration(musicPrompt, musicLoading, current_chat_id);
+                isSending = false;
+                return;
+            }
+
             const tag = "[GENVIDEO]";
             const index = reply.indexOf(tag);
 
