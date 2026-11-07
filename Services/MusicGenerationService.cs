@@ -67,11 +67,7 @@ namespace BtoanAiNet.Services
 
         public async Task<JsonObject> GenerateMusicAsync(MusicGenerationRequestModel model, string webRootPath)
         {
-            if ((model.User_Id ?? 0) <= 0)
-            {
-                return new JsonObject { ["success"] = false, ["error"] = "User not logged in" };
-            }
-
+            // Allow guests (user_id=0) to generate music
             string prompt = model.Prompt?.Trim() ?? "";
             if (string.IsNullOrEmpty(prompt))
             {
@@ -95,75 +91,92 @@ namespace BtoanAiNet.Services
 
             var allKeys = GetConfiguredApiKeys();
             var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
-            string musicModel = "lyria-3-clip-preview";
+            var musicModels = new[] { "lyria-3.5", "lyria-3-clip-preview", "lyria-3-pro-preview" };
             string lastError = "Music generation failed";
 
-            foreach (var key in keys)
+            foreach (var musicModel in musicModels)
             {
-                try
+                foreach (var key in keys)
                 {
-                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/{musicModel}:generateContent?key={key}";
-
-                    var payload = new JsonObject
+                    try
                     {
-                        ["contents"] = new JsonArray
+                        string url = $"https://generativelanguage.googleapis.com/v1beta/models/{musicModel}:generateContent?key={key}";
+
+                        var payload = new JsonObject
                         {
-                            new JsonObject
+                            ["contents"] = new JsonArray
                             {
-                                ["parts"] = new JsonArray { new JsonObject { ["text"] = finalPrompt } }
-                            }
-                        },
-                        ["generationConfig"] = new JsonObject { ["candidateCount"] = 1 }
-                    };
-
-                    var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
-                    var response = await _httpClient.PostAsync(url, content);
-                    string rawResponse = await response.Content.ReadAsStringAsync();
-
-                    if (!response.IsSuccessStatusCode) continue;
-
-                    using var doc = JsonDocument.Parse(rawResponse);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
-                    {
-                        var parts = candidates[0].GetProperty("content").GetProperty("parts");
-                        foreach (var part in parts.EnumerateArray())
-                        {
-                            if (part.TryGetProperty("inlineData", out var inlineData))
-                            {
-                                string base64Audio = inlineData.GetProperty("data").GetString() ?? "";
-                                byte[] audioBytes = Convert.FromBase64String(base64Audio);
-
-                                string musicDir = Path.Combine(webRootPath, "uploads", "music");
-                                if (!Directory.Exists(musicDir)) Directory.CreateDirectory(musicDir);
-
-                                string filename = $"music_{Guid.NewGuid().ToString("N").Substring(0, 10)}.mp3";
-                                string savePath = Path.Combine(musicDir, filename);
-                                string publicUrl = $"/uploads/music/{filename}";
-
-                                await File.WriteAllBytesAsync(savePath, audioBytes);
-
-                                return new JsonObject
+                                new JsonObject
                                 {
-                                    ["success"] = true,
-                                    ["music_url"] = publicUrl,
-                                    ["music_prompt"] = model.Prompt,
-                                    ["music_duration"] = model.Duration,
-                                    ["conversation_id"] = model.Conversation_Id,
-                                    ["message"] = "Tạo nhạc thành công"
-                                };
+                                    ["parts"] = new JsonArray { new JsonObject { ["text"] = finalPrompt } }
+                                }
+                            },
+                            ["generationConfig"] = new JsonObject { ["candidateCount"] = 1 }
+                        };
+
+                        var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+                        var response = await _httpClient.PostAsync(url, content);
+                        string rawResponse = await response.Content.ReadAsStringAsync();
+
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            lastError = $"[{musicModel}] HTTP {(int)response.StatusCode}: {rawResponse.Substring(0, Math.Min(300, rawResponse.Length))}";
+                            Console.WriteLine($"[MUSIC ERROR] {lastError}");
+                            continue;
+                        }
+
+                        using var doc = JsonDocument.Parse(rawResponse);
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
+                        {
+                            var parts = candidates[0].GetProperty("content").GetProperty("parts");
+                            foreach (var part in parts.EnumerateArray())
+                            {
+                                if (part.TryGetProperty("inlineData", out var inlineData))
+                                {
+                                    string base64Audio = inlineData.GetProperty("data").GetString() ?? "";
+                                    byte[] audioBytes = Convert.FromBase64String(base64Audio);
+
+                                    string musicDir = Path.Combine(webRootPath, "uploads", "music");
+                                    if (!Directory.Exists(musicDir)) Directory.CreateDirectory(musicDir);
+
+                                    string filename = $"music_{Guid.NewGuid().ToString("N").Substring(0, 10)}.mp3";
+                                    string savePath = Path.Combine(musicDir, filename);
+                                    string publicUrl = $"/uploads/music/{filename}";
+
+                                    await File.WriteAllBytesAsync(savePath, audioBytes);
+
+                                    return new JsonObject
+                                    {
+                                        ["success"] = true,
+                                        ["music_url"] = publicUrl,
+                                        ["music_prompt"] = model.Prompt,
+                                        ["music_duration"] = model.Duration,
+                                        ["conversation_id"] = model.Conversation_Id,
+                                        ["message"] = "Tạo nhạc thành công"
+                                    };
+                                }
                             }
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex.Message;
+                    catch (Exception ex)
+                    {
+                        lastError = ex.Message;
+                    }
                 }
             }
 
-            return new JsonObject { ["success"] = false, ["error"] = lastError };
+            // Friendly error for quota
+            string friendlyError = lastError;
+            if (lastError.Contains("429") || lastError.Contains("Quota") || lastError.Contains("quota"))
+            {
+                friendlyError = "Hệ thống tạo nhạc Lyria AI đang bị giới hạn lượt dùng (quota hết). " +
+                    "Bạn vui lòng thử lại sau 1-2 phút. " +
+                    "Lưu ý: API Lyria miễn phí có giới hạn khoảng 10-20 bài/ngày.";
+            }
+
+            return new JsonObject { ["success"] = false, ["error"] = friendlyError };
         }
     }
 }

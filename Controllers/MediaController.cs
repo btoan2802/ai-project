@@ -70,9 +70,37 @@ namespace BtoanAiNet.Controllers
         [HttpPost]
         [Route("ai/api/edit_image.php")]
         [Route("Media/EditImage")]
-        public async Task<IActionResult> EditImage([FromBody] EditImageRequestModel model)
+        public async Task<IActionResult> EditImage([FromBody] EditImageRequestModel? model)
         {
-            if (model == null) return Json(new { success = false, error = "Invalid body" });
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+            {
+                try
+                {
+                    Request.EnableBuffering();
+                    Request.Body.Position = 0;
+                    using var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8, leaveOpen: true);
+                    var raw = await reader.ReadToEndAsync();
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        var doc = System.Text.Json.Nodes.JsonNode.Parse(raw)?.AsObject();
+                        if (doc != null)
+                        {
+                            model = new EditImageRequestModel
+                            {
+                                Prompt = doc["prompt"]?.ToString(),
+                                Image = doc["image"]?.ToString(),
+                                Conversation_Id = int.TryParse(doc["conversation_id"]?.ToString(), out int ecid) ? ecid : 0,
+                                User_Id = int.TryParse(doc["user_id"]?.ToString(), out int euid) ? euid : 0,
+                                Assistant_Text = doc["assistant_text"]?.ToString() ?? "Đây là ảnh đã chỉnh sửa của bạn:"
+                            };
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+                return Json(new { success = false, error = "Invalid body" });
 
             string webRootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
             var result = await _imageGenerationService.EditImageAsync(model, webRootPath);
@@ -93,9 +121,38 @@ namespace BtoanAiNet.Controllers
         [HttpPost]
         [Route("ai/api/generate_video.php")]
         [Route("Media/GenerateVideo")]
-        public async Task<IActionResult> GenerateVideo([FromBody] VideoGenerationRequestModel model)
+        public async Task<IActionResult> GenerateVideo([FromBody] VideoGenerationRequestModel? model)
         {
-            if (model == null) return Json(new { success = false, error = "Invalid body" });
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+            {
+                try
+                {
+                    Request.EnableBuffering();
+                    Request.Body.Position = 0;
+                    using var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8, leaveOpen: true);
+                    var raw = await reader.ReadToEndAsync();
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        var doc = System.Text.Json.Nodes.JsonNode.Parse(raw)?.AsObject();
+                        if (doc != null)
+                        {
+                            model = new VideoGenerationRequestModel
+                            {
+                                Prompt = doc["prompt"]?.ToString(),
+                                Conversation_Id = doc["conversation_id"]?.ToString() ?? "default",
+                                User_Id = doc["user_id"]?.ToString() ?? "unknown",
+                                Chat_Id = int.TryParse(doc["chat_id"]?.ToString(), out int vcid) ? vcid : 0,
+                                Image = doc["image"]?.ToString(),
+                                Duration = int.TryParse(doc["duration"]?.ToString(), out int vdur) ? vdur : 8
+                            };
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+                return Json(new { success = false, error = "Invalid body" });
 
             string contentRootPath = Directory.GetCurrentDirectory();
             var result = await _videoGenerationService.StartVideoJobAsync(model, contentRootPath);
@@ -121,9 +178,39 @@ namespace BtoanAiNet.Controllers
         [HttpPost]
         [Route("ai/api/generate_music.php")]
         [Route("Media/GenerateMusic")]
-        public async Task<IActionResult> GenerateMusic([FromBody] MusicGenerationRequestModel model)
+        public async Task<IActionResult> GenerateMusic([FromBody] MusicGenerationRequestModel? model)
         {
-            if (model == null) return Json(new { success = false, error = "Invalid body" });
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+            {
+                try
+                {
+                    Request.EnableBuffering();
+                    Request.Body.Position = 0;
+                    using var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8, leaveOpen: true);
+                    var raw = await reader.ReadToEndAsync();
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        var doc = System.Text.Json.Nodes.JsonNode.Parse(raw)?.AsObject();
+                        if (doc != null)
+                        {
+                            model = new MusicGenerationRequestModel
+                            {
+                                Prompt = doc["prompt"]?.ToString(),
+                                Conversation_Id = int.TryParse(doc["conversation_id"]?.ToString(), out int mcid) ? mcid : 0,
+                                User_Id = int.TryParse(doc["user_id"]?.ToString(), out int muid) ? muid : 0,
+                                Chat_Id = int.TryParse(doc["chat_id"]?.ToString(), out int mchat) ? mchat : 0,
+                                Duration = int.TryParse(doc["duration"]?.ToString(), out int mdur) ? mdur : 30
+                            };
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+                return Json(new { success = false, error = "Invalid body" });
+
+            Console.WriteLine($"[MUSIC] user_id={model.User_Id} conv={model.Conversation_Id} prompt={model.Prompt}");
 
             string webRootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
             var result = await _musicGenerationService.GenerateMusicAsync(model, webRootPath);
