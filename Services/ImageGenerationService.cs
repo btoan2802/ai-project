@@ -347,7 +347,23 @@ User request: " + cleaned;
                 }
                 catch { }
 
-                if (imgBytes == null || imgBytes.Length < 10000)
+                if (imgBytes == null || imgBytes.Length <= 1000)
+                {
+                    try
+                    {
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}");
+                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                        var res = await _httpClient.SendAsync(req);
+                        if (res.IsSuccessStatusCode)
+                        {
+                            var readBytes = await res.Content.ReadAsByteArrayAsync();
+                            if (readBytes != null && readBytes.Length > 1000) imgBytes = readBytes;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (imgBytes == null || imgBytes.Length <= 1000)
                 {
                     try
                     {
@@ -357,22 +373,7 @@ User request: " + cleaned;
                         if (res.IsSuccessStatusCode)
                         {
                             var readBytes = await res.Content.ReadAsByteArrayAsync();
-                            if (readBytes != null && readBytes.Length > 10000) imgBytes = readBytes;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (imgBytes == null || imgBytes.Length < 10000)
-                {
-                    try
-                    {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://source.unsplash.com/1024x1024/?{Uri.EscapeDataString(searchPrompt)}");
-                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                        var res = await _httpClient.SendAsync(req);
-                        if (res.IsSuccessStatusCode)
-                        {
-                            imgBytes = await res.Content.ReadAsByteArrayAsync();
+                            if (readBytes != null && readBytes.Length > 1000) imgBytes = readBytes;
                         }
                     }
                     catch { }
@@ -561,7 +562,23 @@ User request: " + cleaned;
                 }
                 catch { }
 
-                if (imgBytes == null || imgBytes.Length < 10000)
+                if (imgBytes == null || imgBytes.Length <= 1000)
+                {
+                    try
+                    {
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}");
+                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                        var res = await _httpClient.SendAsync(req);
+                        if (res.IsSuccessStatusCode)
+                        {
+                            var readBytes = await res.Content.ReadAsByteArrayAsync();
+                            if (readBytes != null && readBytes.Length > 1000) imgBytes = readBytes;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (imgBytes == null || imgBytes.Length <= 1000)
                 {
                     try
                     {
@@ -571,22 +588,7 @@ User request: " + cleaned;
                         if (res.IsSuccessStatusCode)
                         {
                             var readBytes = await res.Content.ReadAsByteArrayAsync();
-                            if (readBytes != null && readBytes.Length > 10000) imgBytes = readBytes;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (imgBytes == null || imgBytes.Length < 10000)
-                {
-                    try
-                    {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://source.unsplash.com/1024x1024/?{Uri.EscapeDataString(searchPrompt)}");
-                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                        var res = await _httpClient.SendAsync(req);
-                        if (res.IsSuccessStatusCode)
-                        {
-                            imgBytes = await res.Content.ReadAsByteArrayAsync();
+                            if (readBytes != null && readBytes.Length > 1000) imgBytes = readBytes;
                         }
                     }
                     catch { }
