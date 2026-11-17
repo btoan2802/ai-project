@@ -20,7 +20,8 @@ namespace BtoanAiNet.Services.VectorDb
             _logger = logger;
             _apiKey = configuration["Gemini:ApiKey"] 
                       ?? configuration["AiService:ApiKey"] 
-                      ?? "AIzaSyCj5togPa80e1bI9Vup74BFOl44D08sZLw";
+                      ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
+                      ?? "YOUR_GEMINI_API_KEY_HERE";
         }
 
         public async Task<float[]> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)

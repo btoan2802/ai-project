@@ -3,10 +3,19 @@ using System.Text.Json.Nodes;
 
 namespace BtoanAiNet.FunctionCalling.Services
 {
+    /// <summary>
+    /// Result payload of an executed AI function calling tool.
+    /// </summary>
     public record ToolExecutionResult(bool Success, string Output, string? Error);
 
+    /// <summary>
+    /// Dispatches and executes dynamic AI tool calls by resolving handlers from the ToolRegistry.
+    /// </summary>
     public interface IFunctionCallingDispatcher
     {
+        /// <summary>
+        /// Dispatches a named tool with JSON arguments and returns the execution result.
+        /// </summary>
         Task<ToolExecutionResult> DispatchAsync(string toolName, string argumentsJson, CancellationToken cancellationToken = default);
     }
 

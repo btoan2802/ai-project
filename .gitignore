@@ -5,17 +5,37 @@ publish/
 publish_out/
 publish_linux/
 
-## Visual Studio & IDE
+## Visual Studio, JetBrains & VS Code
 .vs/
+.idea/
+.vscode/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
+*.DotSettings.user
 
-## User-uploaded workspaces
-wwwroot/uploads/workspaces/
-wwwroot/uploads/music/
-wwwroot/uploads/chat/
-
-## Sensitive configuration files
+## Environment and Secret Configurations
+.env
+.env.*
+!.env.example
 appsettings.Production.json
+appsettings.*.local.json
+*.local.json
+
+## Logs & Diagnostics
+*.log
+logs/
+
+## Node & Frontend
+node_modules/
+npm-debug.log*
+
+## Dynamic & User-Generated Content
+wwwroot/uploads/workspaces/*
+wwwroot/uploads/music/*
+wwwroot/uploads/chat/*
+wwwroot/uploads/last_*.json
+wwwroot/files/*
+!wwwroot/uploads/.gitkeep
+!wwwroot/files/.gitkeep

@@ -18,14 +18,7 @@ namespace BtoanAiNet.Services
 
         private static readonly string[] ApiKeys = new[]
         {
-            "AIzaSyCj5togPa80e1bI9Vup74BFOl44D08sZLw",
-            "AIzaSyDFHm1sOBGnCeWIThcCo-hB7wWNjz5QdSU",
-            "AIzaSyDrOpKT2oRzSfpKY_VlU3rvu-YpfzauOAs",
-            "AIzaSyCZx8h9y6X78quESwB6K1MEXHRNWglaTDM",
-            "AIzaSyBr0RBLcNROl50u7kjaWPrRQIG21EZ5bpA",
-            "AIzaSyAAGonXPwa_86o1SQa1WDKG8_6GCz_CjHg",
-            "AIzaSyCYUzKmlZ1ZD-Eabl9BI-PiaJiWkccK1os",
-            "AIzaSyBdwrghehTW22SuWH0Yq2jBbv6H5OZ4Ce8"
+            "YOUR_GEMINI_API_KEY_HERE"
         };
 
         public MusicGenerationService(HttpClient httpClient, IConversationRepository conversationRepository, IConfiguration configuration)
@@ -39,27 +32,20 @@ namespace BtoanAiNet.Services
         {
             var keys = new List<string>();
             string? singleKey = _configuration["Gemini:ApiKey"];
-            if (!string.IsNullOrWhiteSpace(singleKey)) keys.Add(singleKey.Trim());
+            if (!string.IsNullOrWhiteSpace(singleKey) && !singleKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(singleKey.Trim());
 
             var arrayKeys = _configuration.GetSection("Gemini:ApiKeys").Get<string[]>();
             if (arrayKeys != null)
             {
-                keys.AddRange(arrayKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()));
+                keys.AddRange(arrayKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")).Select(k => k.Trim()));
             }
 
             string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-            if (!string.IsNullOrWhiteSpace(envKey)) keys.Add(envKey.Trim());
+            if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
             if (keys.Count == 0)
             {
-                try
-                {
-                    string embeddedKey = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String("QVEuQWI4Uk42SlJZTDBXQ2REVlhqaUdkYnlWdzJhWVpNR0tRUzhYSjM3cFZhSW5KSXgwVGc="));
-                    if (!string.IsNullOrWhiteSpace(embeddedKey)) keys.Add(embeddedKey.Trim());
-                }
-                catch { }
-
-                keys.AddRange(ApiKeys);
+                keys.AddRange(ApiKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")));
             }
 
             return keys.Distinct().ToList();
