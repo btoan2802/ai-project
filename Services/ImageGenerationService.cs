@@ -18,6 +18,7 @@ namespace BtoanAiNet.Services
         private readonly IConversationRepository _conversationRepository;
         private readonly IIntentEngineService _intentEngineService;
         private readonly IConfiguration _configuration;
+        private readonly IGeminiService _geminiService;
 
         private static readonly string[] ApiKeys = new[]
         {
@@ -45,33 +46,58 @@ namespace BtoanAiNet.Services
 
         private static string CleanPromptForAI(string prompt)
         {
-            Console.WriteLine("[BEFORE CLEAN PROMPT] " + prompt);
+            if (string.IsNullOrWhiteSpace(prompt)) return "photorealistic artwork";
 
-            string lower = prompt.ToLowerInvariant();
-            foreach (var kvp in AnimalDict)
+            string clean = System.Text.RegularExpressions.Regex.Replace(
+                prompt,
+                @"\[GENIMAGE\]|\[EDITIMAGE\]|STRICT INSTRUCTIONS:|PRIMARY PROMPT:",
+                "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+            clean = clean.Trim('"', '\'', '`', ' ', '\t', '\r', '\n');
+            return string.IsNullOrWhiteSpace(clean) ? "photorealistic artwork" : clean;
+        }
+
+        private async Task<string> ExpandPromptToDetailedEnglishAsync(string rawPrompt)
+        {
+            if (string.IsNullOrWhiteSpace(rawPrompt)) 
+                return "a beautiful masterpiece photorealistic scene, highly detailed, 8k resolution";
+
+            string cleaned = CleanPromptForAI(rawPrompt);
+
+            try
             {
-                if (lower.Contains(kvp.Key))
+                string promptEngineInstruction = @"You are an expert AI image prompt engineer.
+Convert the following user image description into a single, highly detailed, photorealistic English image generation prompt.
+Rules:
+- NEVER do a simple word-by-word translation.
+- Explicitly describe the main subject in rich detail (species, breed, physical features, fur/skin texture, expressive eyes).
+- Explicitly describe the EXACT physical action and interaction (for example: if eating/chewing food like a banana, write 'actively biting and chewing a half-peeled fresh ripe yellow banana held firmly between its paws, visible banana fruit texture and peeled skin').
+- Explicitly describe the environment, setting, camera angle, and lighting (for example: 'warm natural morning sunlight illuminating the scene, soft shadows, cozy background, shallow depth of field, eye-level close-up shot').
+- Include quality modifiers: 'photorealistic, 8k resolution, highly detailed, cinematic lighting, masterpiece, sharp focus'.
+- Do NOT use generic or vague words.
+- Return ONLY the final English prompt text on a single line, with NO introduction, NO quotes, NO explanation.
+
+User request: " + cleaned;
+
+                string expanded = await _geminiService.GenerateTextAsync(promptEngineInstruction);
+                if (!string.IsNullOrWhiteSpace(expanded))
                 {
-                    string dictResult = kvp.Value;
-                    Console.WriteLine("[AFTER CLEAN PROMPT] " + dictResult);
-                    return dictResult;
+                    expanded = expanded.Trim().Replace("\r", " ").Replace("\n", " ");
+                    expanded = System.Text.RegularExpressions.Regex.Replace(expanded, @"^[""']|[""']$", "").Trim();
+                    if (expanded.Length > 20)
+                    {
+                        Console.WriteLine($"[IMAGE PROMPT EXPANDED SUCCESS] '{cleaned}' => '{expanded}'");
+                        return expanded;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[IMAGE PROMPT EXPANSION EXCEPTION] " + ex.Message);
+            }
 
-            string clean = System.Text.RegularExpressions.Regex.Replace(prompt, @"\[GENIMAGE\]|\[EDITIMAGE\]|STRICT INSTRUCTIONS:|PRIMARY PROMPT:", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
-            var words = System.Text.RegularExpressions.Regex.Replace(clean, @"[^\w\s]", "")
-                .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Where(w => w.Length > 1)
-                .ToList();
-
-            var filtered = words.Where(w => !StyleWords.Contains(w)).ToList();
-            if (filtered.Count == 0) filtered = words;
-
-            string cleanedResult = string.Join(" ", filtered);
-            if (string.IsNullOrWhiteSpace(cleanedResult)) cleanedResult = "art";
-
-            Console.WriteLine("[AFTER CLEAN PROMPT] " + cleanedResult);
-            return cleanedResult;
+            return $"{cleaned}, photorealistic, highly detailed, natural lighting, sharp focus, 8k resolution, cinematic composition";
         }
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, string> _lastImagePrompts = new();
@@ -102,12 +128,14 @@ namespace BtoanAiNet.Services
             HttpClient httpClient,
             IConversationRepository conversationRepository,
             IIntentEngineService intentEngineService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IGeminiService geminiService)
         {
             _httpClient = httpClient;
             _conversationRepository = conversationRepository;
             _intentEngineService = intentEngineService;
             _configuration = configuration;
+            _geminiService = geminiService;
         }
 
         private List<string> GetConfiguredApiKeys()
@@ -142,15 +170,16 @@ namespace BtoanAiNet.Services
 
         public async Task<JsonObject> GenerateImageAsync(ImageGenerationRequestModel model)
         {
-            string prompt = model.Prompt?.Trim() ?? "";
-            if (string.IsNullOrEmpty(prompt))
+            string rawPrompt = model.Prompt?.Trim() ?? "";
+            if (string.IsNullOrEmpty(rawPrompt))
             {
                 return new JsonObject { ["success"] = false, ["error"] = "Prompt is required" };
             }
 
-            Console.WriteLine("[IMAGE CONTEXT BEFORE] " + prompt);
+            Console.WriteLine("[IMAGE CONTEXT BEFORE] " + rawPrompt);
 
             int cid = model.Conversation_Id ?? 0;
+            string prompt = rawPrompt;
             if (cid > 0 && !HasExplicitSubject(prompt) && _lastImagePrompts.TryGetValue(cid, out var lastContext) && !string.IsNullOrWhiteSpace(lastContext))
             {
                 string lowerPrompt = prompt.ToLowerInvariant();
@@ -176,9 +205,24 @@ namespace BtoanAiNet.Services
 
             Console.WriteLine("[IMAGE CONTEXT AFTER] " + prompt);
 
+            // Enhance with AI prompt engineering into detailed, action-specific, photorealistic English
+            prompt = await ExpandPromptToDetailedEnglishAsync(prompt);
+            Console.WriteLine("[IMAGE EXPANDED PROMPT] " + prompt);
+
             string aspectRatio = model.Aspect_Ratio?.Trim() ?? "1:1";
             var allowedRatios = new[] { "1:1", "16:9", "9:16", "4:3", "3:4" };
             if (!allowedRatios.Contains(aspectRatio)) aspectRatio = "1:1";
+
+            int imgWidth = 1024;
+            int imgHeight = 1024;
+            switch (aspectRatio)
+            {
+                case "16:9": imgWidth = 1280; imgHeight = 720; break;
+                case "9:16": imgWidth = 720; imgHeight = 1280; break;
+                case "4:3": imgWidth = 1024; imgHeight = 768; break;
+                case "3:4": imgWidth = 768; imgHeight = 1024; break;
+                default: imgWidth = 1024; imgHeight = 1024; break;
+            }
 
             var intentObj = await _intentEngineService.AnalyzeIntentAsync(prompt);
             string protection = _intentEngineService.GetSystemProtection(intentObj);
@@ -283,14 +327,13 @@ namespace BtoanAiNet.Services
             // Fallback to high quality image generation if Gemini API hits Quota Exceeded (HTTP 429 / 403)
             try
             {
-                string keywords = CleanPromptForAI(prompt);
-                string searchPrompt = (!string.IsNullOrWhiteSpace(prompt) && prompt.Length > 5 && prompt.Length < 400) ? prompt : keywords;
+                string searchPrompt = CleanPromptForAI(prompt);
                 string encodedPrompt = Uri.EscapeDataString(searchPrompt);
 
                 byte[]? imgBytes = null;
                 try
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}?width=1024&height=1024&nologo=true");
+                    using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}");
                     req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                     var res = await _httpClient.SendAsync(req);
                     if (res.IsSuccessStatusCode)
@@ -308,7 +351,7 @@ namespace BtoanAiNet.Services
                 {
                     try
                     {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://loremflickr.com/1024/1024/{Uri.EscapeDataString(keywords)}");
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://loremflickr.com/1024/1024/{Uri.EscapeDataString(searchPrompt)}");
                         req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                         var res = await _httpClient.SendAsync(req);
                         if (res.IsSuccessStatusCode)
@@ -324,7 +367,7 @@ namespace BtoanAiNet.Services
                 {
                     try
                     {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://source.unsplash.com/1024x1024/?{Uri.EscapeDataString(keywords)}");
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://source.unsplash.com/1024x1024/?{Uri.EscapeDataString(searchPrompt)}");
                         req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                         var res = await _httpClient.SendAsync(req);
                         if (res.IsSuccessStatusCode)
@@ -498,8 +541,8 @@ namespace BtoanAiNet.Services
             // Fallback for image editing if Gemini API hits Quota Exceeded (HTTP 429 / 403)
             try
             {
-                string keywords = CleanPromptForAI(prompt);
-                string encodedPrompt = Uri.EscapeDataString(keywords);
+                string searchPrompt = CleanPromptForAI(prompt);
+                string encodedPrompt = Uri.EscapeDataString(searchPrompt);
 
                 byte[]? imgBytes = null;
                 try
@@ -522,7 +565,7 @@ namespace BtoanAiNet.Services
                 {
                     try
                     {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://loremflickr.com/1024/1024/{Uri.EscapeDataString(keywords)}");
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://loremflickr.com/1024/1024/{Uri.EscapeDataString(searchPrompt)}");
                         req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                         var res = await _httpClient.SendAsync(req);
                         if (res.IsSuccessStatusCode)
@@ -538,7 +581,7 @@ namespace BtoanAiNet.Services
                 {
                     try
                     {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://source.unsplash.com/1024x1024/?{Uri.EscapeDataString(keywords)}");
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://source.unsplash.com/1024x1024/?{Uri.EscapeDataString(searchPrompt)}");
                         req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                         var res = await _httpClient.SendAsync(req);
                         if (res.IsSuccessStatusCode)

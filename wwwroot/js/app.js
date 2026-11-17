@@ -73,7 +73,10 @@ QUY TẮC XUẤT FILE:
 
 - QUY TẮC PHƯƠNG TIỆN (QUAN TRỌNG):
   1. TẠO HÌNH ẢNH TĨNH: Nếu người dùng yêu cầu "vẽ ảnh", "tạo ảnh", "bức hình"... (không có chuyển động)
-     Trả về: [GENIMAGE] <mô tả chi tiết bằng tiếng Anh>
+     TUYỆT ĐỐI KHÔNG dịch word-by-word đơn giản (ví dụ: cấm dùng 'a dog eating banana').
+     BẮT BUỘC phải chuyển thành một prompt tiếng Anh cực kỳ chi tiết, tả rõ hành động tương tác vật lý (ví dụ: gặm chuối thì phải có 'actively biting and chewing a half-peeled ripe yellow banana held firmly between front paws, visible banana texture'), bối cảnh, góc chụp và chất lượng ảnh (photorealistic, natural lighting, highly detailed fur and textures, sharp focus, 8k resolution, cinematic composition) để máy vẽ chính xác. Tuyệt đối không dùng từ chung chung.
+     Trả về ở dòng cuối cùng: [GENIMAGE] <mô tả chi tiết bằng tiếng Anh theo cấu trúc trên>
+     Ví dụ: [GENIMAGE] A photorealistic close-up of a cute golden retriever puppy happily biting and chewing a half-peeled ripe yellow banana held between its front paws, warm natural sunlight streaming from a window, highly detailed fur textures, shallow depth of field, 8k resolution, cinematic lighting.
   2. CHỈNH SỬA ẢNH: Nếu có ảnh đính kèm và yêu cầu thay đổi.
      Trả về: [EDITIMAGE] <mô tả tiếng Anh>
   3. TẠO VIDEO (CHUYỂN ĐỘNG): Nếu người dùng yêu cầu "tạo video", "làm clip", "vẽ video", "animate", "phim"...
