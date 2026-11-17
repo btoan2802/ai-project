@@ -169,9 +169,9 @@ namespace BtoanAiNet.Services
                     ["success"] = true,
                     ["music_url"] = fallbackUrl,
                     ["music_prompt"] = model.Prompt,
-                    ["music_duration"] = 8,
+                    ["music_duration"] = 27,
                     ["conversation_id"] = model.Conversation_Id,
-                    ["message"] = "🎵 Giai điệu đã được tạo thành công (Chế độ hòa âm tự động do Lyria API bận)"
+                    ["message"] = "🎸 Bản hòa âm Acoustic (27s). Bấm 'Đọc lời hát' để nghe giọng ca hoặc 'Tạo trên Suno AI' để nghe bản thu âm hoàn chỉnh."
                 };
             }
             catch (Exception ex)
@@ -191,35 +191,60 @@ namespace BtoanAiNet.Services
             string savePath = Path.Combine(musicDir, filename);
 
             int sampleRate = 22050;
-            double bpm = 112.0;
-            double beatDuration = 60.0 / bpm;
-            // Upbeat chord progression (C -> G -> Am -> F)
+            double bpm = 108.0;
+            double beatDuration = 60.0 / bpm; // ~0.555s per beat
+            // Uplifting chord progression: C -> G -> Am -> F
             double[][] chords = new double[][]
             {
-                new[] { 261.63, 329.63, 392.00, 523.25 }, // C major
-                new[] { 196.00, 246.94, 293.66, 392.00 }, // G major
-                new[] { 220.00, 261.63, 329.63, 440.00 }, // A minor
-                new[] { 174.61, 220.00, 261.63, 349.23 }  // F major
+                new[] { 261.63, 329.63, 392.00, 523.25 }, // C
+                new[] { 196.00, 246.94, 293.66, 392.00 }, // G
+                new[] { 220.00, 261.63, 329.63, 440.00 }, // Am
+                new[] { 174.61, 220.00, 261.63, 349.23 }  // F
             };
+            double[] bassNotes = new double[] { 130.81, 98.00, 110.00, 87.31 }; // C3, G2, A2, F2
 
-            int chordSamples = (int)(sampleRate * beatDuration * 2);
-            int totalSamples = chordSamples * chords.Length;
+            int beatsPerChord = 2;
+            int chordSamples = (int)(sampleRate * beatDuration * beatsPerChord);
+            int cycles = 6; // 6 loops of 4 chords = 24 chord measures = ~26.7 seconds
+            int totalSamples = chordSamples * chords.Length * cycles;
             short[] pcm = new short[totalSamples];
 
-            for (int c = 0; c < chords.Length; c++)
+            int globalIndex = 0;
+            for (int loop = 0; loop < cycles; loop++)
             {
-                var chord = chords[c];
-                int start = c * chordSamples;
-                for (int i = 0; i < chordSamples; i++)
+                for (int c = 0; c < chords.Length; c++)
                 {
-                    double t = (double)i / sampleRate;
-                    double env = Math.Exp(-1.8 * (i / (double)chordSamples)); // Pluck envelope
-                    double sum = 0;
-                    for (int n = 0; n < chord.Length; n++)
+                    var chord = chords[c];
+                    double bassFreq = bassNotes[c];
+
+                    for (int i = 0; i < chordSamples && globalIndex < totalSamples; i++)
                     {
-                        sum += Math.Sin(2.0 * Math.PI * chord[n] * t) * (1.0 / (n + 1));
+                        double t = (double)i / sampleRate;
+                        double totalT = (double)globalIndex / sampleRate;
+                        double totalDurationSec = (double)totalSamples / sampleRate;
+
+                        // Master Fade-In & Fade-Out
+                        double masterEnv = 1.0;
+                        if (totalT < 1.5) masterEnv = totalT / 1.5;
+                        else if (totalT > totalDurationSec - 2.5) masterEnv = Math.Max(0.0, (totalDurationSec - totalT) / 2.5);
+
+                        // 1. Arpeggiated guitar-style note picking
+                        double noteTime = t % (beatDuration / 2.0);
+                        int noteIdx = (int)((t / (beatDuration / 2.0))) % chord.Length;
+                        double noteFreq = chord[noteIdx];
+                        double noteEnv = Math.Exp(-4.0 * noteTime);
+                        double guitarNote = Math.Sin(2.0 * Math.PI * noteFreq * t) * noteEnv;
+
+                        // 2. Warm bass root tone
+                        double bassEnv = Math.Exp(-1.2 * (t / (beatDuration * 2.0)));
+                        double bassTone = Math.Sin(2.0 * Math.PI * bassFreq * t) * bassEnv * 0.45;
+
+                        // 3. Gentle harmonic shimmer
+                        double shimmer = Math.Sin(2.0 * Math.PI * chord[2] * 2.0 * t) * Math.Exp(-2.5 * noteTime) * 0.15;
+
+                        double mix = (guitarNote * 0.45 + bassTone + shimmer) * masterEnv;
+                        pcm[globalIndex++] = (short)(Math.Clamp(mix, -1.0, 1.0) * short.MaxValue * 0.75);
                     }
-                    pcm[start + i] = (short)(Math.Clamp(sum * 0.4 * env, -1.0, 1.0) * short.MaxValue * 0.7);
                 }
             }
 

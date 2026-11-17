@@ -922,28 +922,52 @@ async function send() {
             try {
                 const textToStore = fullText || "Mô tả ảnh:";
                 console.log("[IMAGE REQUEST FROM UI]", imagePrompt);
-                const imgRes = await fetch("/ai/api/generate_image.php", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        prompt: imagePrompt,
-                        conversation_id,
-                        user_id: Number(localStorage.getItem("user_id") || 0),
-                        assistant_text: textToStore
-                    })
-                });
 
-                const rawText = await imgRes.text();
+                let imageSrc = null;
+
+                // Priority 1: High quality unwatermarked generation via Puter.js (FLUX/SDXL, no logo)
+                if (window.puter && window.puter.ai && typeof window.puter.ai.txt2img === "function") {
+                    try {
+                        console.log("[IMAGE] Generating via Puter.js (FLUX/unwatermarked)...");
+                        const imgElem = await puter.ai.txt2img(imagePrompt);
+                        if (imgElem && imgElem.src) {
+                            imageSrc = imgElem.src;
+                            console.log("[IMAGE] Puter.js generated successfully without watermark!");
+                        }
+                    } catch (puterErr) {
+                        console.warn("[IMAGE] Puter.js failed, falling back to backend:", puterErr);
+                    }
+                }
+
+                // Priority 2: Backend API fallback (Pollinations with nologo / enhanced prompt)
+                if (!imageSrc) {
+                    const imgRes = await fetch("/ai/api/generate_image.php", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            prompt: imagePrompt,
+                            conversation_id,
+                            user_id: Number(localStorage.getItem("user_id") || 0),
+                            assistant_text: textToStore
+                        })
+                    });
+
+                    const rawText = await imgRes.text();
+                    let imgData = JSON.parse(rawText);
+                    console.log("[IMAGE FINAL RESPONSE]", imgData);
+
+                    if (imgRes.ok && imgData?.success) {
+                        const cleanMimeType = String(imgData.mimeType || "image/png").trim();
+                        const cleanBase64 = String(imgData.imageBase64 || "").replace(/\s+/g, "");
+                        imageSrc = `data:${cleanMimeType};base64,${cleanBase64}`;
+                    } else {
+                        throw new Error(imgData?.error || "Lỗi tạo ảnh");
+                    }
+                }
+
                 imgLoading.remove();
 
-                let imgData = JSON.parse(rawText);
-                console.log("[IMAGE FINAL RESPONSE]", imgData);
-
-                if (imgRes.ok && imgData?.success) {
-                    const cleanMimeType = String(imgData.mimeType || "image/png").trim();
-                    const cleanBase64 = String(imgData.imageBase64 || "").replace(/\s+/g, "");
-                    const imageSrc = `data:${cleanMimeType};base64,${cleanBase64}`;
-
+                if (imageSrc) {
                     const row = document.createElement("div");
                     row.className = "msgrow bot";
                     row.innerHTML = `
@@ -957,12 +981,10 @@ async function send() {
                         </div>
                     `;
                     chatEl.appendChild(row);
-                } else {
-                    addBotBubble("❌ Lỗi vẽ ảnh: " + (imgData?.error || "Lỗi không xác định"));
                 }
             } catch (e) {
                 imgLoading.remove();
-                addBotBubble("❌ Lỗi kết nối khi vẽ ảnh: " + e.message);
+                addBotBubble("❌ Lỗi vẽ ảnh: " + e.message);
             }
 
             isSending = false;

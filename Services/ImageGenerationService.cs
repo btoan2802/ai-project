@@ -333,7 +333,7 @@ User request: " + cleaned;
                 byte[]? imgBytes = null;
                 try
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}");
+                    using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}&nologo=true");
                     req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                     var res = await _httpClient.SendAsync(req);
                     if (res.IsSuccessStatusCode)
