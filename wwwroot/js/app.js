@@ -2234,11 +2234,6 @@ async function exportDOCX(content) {
     scrollToBottom()
 }
 
-    row.appendChild(bubble)
-    chatEl.appendChild(row)
-    scrollToBottom()
-}
-
 async function exportPDF(content) {
 
     if (!content.trim()) {
