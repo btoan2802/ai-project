@@ -2161,11 +2161,16 @@ async function exportFile(content) {
 
     // 🔥 render link chuẩn
     addBotBubble(`
-    📄 File đã sẵn sàng:
-
-    👉 <a href="${data.url}" target="_blank">
-    Mở bằng trình duyệt
-    </a>
+    <div class="d-flex align-items-center gap-3 p-2 border rounded-3 bg-light">
+        <i class="bi bi-file-earmark-text text-primary fs-3"></i>
+        <div class="flex-grow-1">
+            <div class="fw-bold">Tài liệu văn bản đã sẵn sàng</div>
+            <small class="text-muted">Định dạng UTF-8 (.txt) tương thích mọi thiết bị</small>
+        </div>
+        <a href="${data.url}" download class="btn btn-primary btn-sm rounded-pill px-3">
+            <i class="bi bi-download me-1"></i> Tải về
+        </a>
+    </div>
     `)
 }
 async function exportDOCX(content) {
@@ -2212,12 +2217,22 @@ async function exportDOCX(content) {
 
     bubble.innerHTML = `
         <div class="message-content">
-            <div>📄 File DOCX đã sẵn sàng:</div>
-            <div class="mt-2">
-                <a href="${data.url}" target="_blank">👉 Tải file Word</a>
+            <div class="d-flex align-items-center gap-3 p-2 border rounded-3 bg-light">
+                <i class="bi bi-file-earmark-word text-primary fs-3"></i>
+                <div class="flex-grow-1">
+                    <div class="fw-bold">Tài liệu Word đã sẵn sàng</div>
+                    <small class="text-muted">Định dạng Microsoft Word (.doc) chuẩn layout</small>
+                </div>
+                <a href="${data.url}" download class="btn btn-primary btn-sm rounded-pill px-3">
+                    <i class="bi bi-download me-1"></i> Tải file Word
+                </a>
             </div>
         </div>
     `
+    row.appendChild(bubble)
+    chatEl.appendChild(row)
+    scrollToBottom()
+}
 
     row.appendChild(bubble)
     chatEl.appendChild(row)
@@ -3026,23 +3041,36 @@ async function triggerMusicGeneration(prompt, loadingBubble, chatId) {
 function addMusicBubble(data) {
     const row = document.createElement("div");
     row.className = "msgrow bot";
+    const promptText = (data.music_prompt || data.prompt || 'Giai điệu âm nhạc Btoan AI').replace(/"/g, '&quot;');
     row.innerHTML = `
-        <div class="bubble music-card assistant">
-            <div class="music-header">
-                <i class="bi bi-music-note-beamed"></i>
-                <span>Btoan AI Music</span>
+        <div class="bubble music-card assistant shadow-sm">
+            <div class="music-header d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-music-note-beamed text-primary fs-5"></i>
+                    <span class="fw-bold">Btoan AI Music Studio</span>
+                </div>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">Hòa âm AI</span>
             </div>
-            <div class="music-body">
-                <div class="music-prompt">"${data.music_prompt || data.prompt || 'Nhạc AI'}"</div>
-                <audio controls preload="metadata" src="${data.music_url || data.url}" class="w-100 mt-2"></audio>
+            <div class="music-body my-2">
+                <div class="music-prompt text-secondary small fst-italic">"${data.music_prompt || data.prompt || 'Nhạc AI'}"</div>
+                <audio controls preload="metadata" src="${data.music_url || data.url}" class="w-100 mt-2 rounded"></audio>
+                <div class="text-muted small mt-2" style="font-size: 11.5px;">
+                    <i class="bi bi-check-circle-fill text-success me-1"></i> ${data.message || 'Giai điệu mẫu đã được tạo thành công.'}
+                </div>
             </div>
-            <div class="music-footer">
-                <button class="music-action-btn" onclick="copyMusicLink('${data.music_url || data.url}', this)">
-                    <i class="bi bi-link-45deg"></i> <span>Copy link</span>
+            <div class="music-footer d-flex flex-wrap gap-2 pt-2 border-top mt-2">
+                <button class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="speakLyrics(this)" title="Nghe đọc diễn cảm lời bài hát bằng giọng AI">
+                    <i class="bi bi-volume-up me-1"></i> <span>Đọc lời hát</span>
                 </button>
-                <a href="${data.music_url || data.url}" download="btoan_music_${Date.now()}.mp3" class="music-action-btn">
-                    <i class="bi bi-download"></i> Tải về
+                <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="openSunoWithPrompt('${promptText}')" title="Phối thành bản thu âm hoàn chỉnh có ca sĩ hát trên Suno AI">
+                    <i class="bi bi-stars me-1"></i> <span>Tạo trên Suno AI</span>
+                </button>
+                <a href="${data.music_url || data.url}" download="btoan_melody.wav" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                    <i class="bi bi-download me-1"></i> Tải về
                 </a>
+                <button class="btn btn-light btn-sm rounded-pill px-2" onclick="copyMusicLink('${data.music_url || data.url}', this)">
+                    <i class="bi bi-link-45deg"></i>
+                </button>
             </div>
         </div>
     `;
@@ -3050,10 +3078,51 @@ function addMusicBubble(data) {
     scrollToBottom();
 }
 
+function openSunoWithPrompt(prompt) {
+    navigator.clipboard.writeText(prompt || "");
+    alert("Đã sao chép phong cách và lời bài hát! Đang mở Suno AI để bạn dán vào tạo bản thu âm hoàn chỉnh có ca sĩ hát...");
+    window.open("https://suno.com/create", "_blank");
+}
+
+function speakLyrics(btn) {
+    if (!('speechSynthesis' in window)) {
+        alert("Trình duyệt không hỗ trợ đọc giọng nói.");
+        return;
+    }
+    if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        btn.innerHTML = `<i class="bi bi-volume-up me-1"></i> <span>Đọc lời hát</span>`;
+        return;
+    }
+    const allMsgs = Array.from(document.querySelectorAll('.msgrow.bot .message-content')).reverse();
+    let textToSpeak = "";
+    for (const msg of allMsgs) {
+        const t = msg.innerText;
+        if (t.includes("Bài hát") || t.includes("Lời") || t.includes("Điệp khúc") || t.length > 50) {
+            textToSpeak = t;
+            break;
+        }
+    }
+    if (!textToSpeak) textToSpeak = "Giai điệu âm nhạc vui tươi từ Btoan AI!";
+    textToSpeak = textToSpeak.replace(/\[GENMUSIC\].*$/gis, "").replace(/\[.*?\]/g, "");
+    
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.lang = "vi-VN";
+    utterance.rate = 0.95;
+    utterance.pitch = 1.05;
+    
+    utterance.onend = () => {
+        btn.innerHTML = `<i class="bi bi-volume-up me-1"></i> <span>Đọc lời hát</span>`;
+    };
+    
+    btn.innerHTML = `<i class="bi bi-stop-circle text-danger me-1"></i> <span class="text-danger">Dừng đọc</span>`;
+    window.speechSynthesis.speak(utterance);
+}
+
 function copyMusicLink(url, btn) {
     navigator.clipboard.writeText(url);
     const originalText = btn.innerHTML;
-    btn.innerHTML = `<i class="bi bi-check2"></i> <span>Copied!</span>`;
+    btn.innerHTML = `<i class="bi bi-check2 text-success"></i>`;
     setTimeout(() => {
         btn.innerHTML = originalText;
     }, 2000);
