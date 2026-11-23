@@ -1398,8 +1398,12 @@ async function pasteIntoTerminal() {
     }
 }
 
+let lastPasteTimestamp = 0;
 function insertTextIntoTerminalBuffer(text) {
     if (!xtermInstance || !text) return;
+    const now = Date.now();
+    if (now - lastPasteTimestamp < 300) return; // Debounce to prevent double paste
+    lastPasteTimestamp = now;
     const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     if (cleanText.includes('\n')) {
         const lines = cleanText.split('\n');
