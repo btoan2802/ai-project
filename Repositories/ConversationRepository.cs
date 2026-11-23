@@ -35,11 +35,21 @@ namespace BtoanAiNet.Repositories
 
         public async Task<List<Conversation>> GetConversationsByUserIdAsync(int userId)
         {
-            return await _context.Conversations
+            var list = await _context.Conversations
                 .AsNoTracking()
                 .Where(c => c.UserId == userId)
                 .OrderByDescending(c => c.Id)
                 .ToListAsync();
+
+            foreach (var conv in list)
+            {
+                if (!string.IsNullOrEmpty(conv.Title) && (conv.Title.StartsWith("{") || conv.Title.StartsWith("[") || conv.Title.Contains("candidates")))
+                {
+                    conv.Title = "Cuộc trò chuyện";
+                }
+            }
+
+            return list;
         }
 
         public async Task UpdateConversationTitleAsync(int id, string title)

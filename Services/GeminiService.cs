@@ -128,7 +128,7 @@ namespace BtoanAiNet.Services
             var allKeys = GetConfiguredApiKeys();
             if (allKeys.Count == 0)
             {
-                return (false, null, null, "Gemini API key is not configured. Please set 'Gemini:ApiKey' in appsettings.Development.json or environment variables.");
+                return (false, null, null, "Lỗi cấu hình: Chưa nạp Gemini API Key trên server. Vui lòng kiểm tra 'Gemini:ApiKey' trong appsettings hoặc biến môi trường.");
             }
             var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
 
@@ -270,7 +270,12 @@ namespace BtoanAiNet.Services
             }
 
             var allKeys = GetConfiguredApiKeys();
-            if (allKeys.Count == 0) yield break;
+            if (allKeys.Count == 0)
+            {
+                Console.WriteLine("[GeminiService] Error: Gemini API key is not configured.");
+                yield return "❌ Lỗi cấu hình: Chưa nạp Gemini API Key trên server. Vui lòng kiểm tra 'Gemini:ApiKey' trong appsettings hoặc biến môi trường.";
+                yield break;
+            }
             var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
 
             if (payload.ContainsKey("system_instruction"))
@@ -281,6 +286,9 @@ namespace BtoanAiNet.Services
                 }
                 payload.Remove("system_instruction");
             }
+
+            string lastStreamError = "All API keys or candidate models failed.";
+            bool hasEmitted = false;
 
             foreach (var currentModel in candidateModels)
             {
@@ -317,13 +325,24 @@ namespace BtoanAiNet.Services
                     {
                         response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                     }
-                    catch
+                    catch (Exception exSend)
                     {
+                        lastStreamError = $"[{currentModel}] Network/Exception: {exSend.Message}";
+                        Console.WriteLine($"[GeminiService.Stream] SendAsync exception on {currentModel}: {exSend.Message}");
                         continue;
                     }
 
                     if (!response.IsSuccessStatusCode)
                     {
+                        string errSnippet = "";
+                        try
+                        {
+                            string rawErr = await response.Content.ReadAsStringAsync(cancellationToken);
+                            errSnippet = rawErr.Length > 200 ? rawErr.Substring(0, 200) : rawErr;
+                        }
+                        catch { }
+                        lastStreamError = $"[{currentModel}] HTTP {(int)response.StatusCode}: {errSnippet}";
+                        Console.WriteLine($"[GeminiService.Stream] HTTP {(int)response.StatusCode} on {currentModel}: {errSnippet}");
                         response.Dispose();
                         continue;
                     }
@@ -331,7 +350,6 @@ namespace BtoanAiNet.Services
                     using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                     using var reader = new StreamReader(stream, Encoding.UTF8);
 
-                    bool hasEmitted = false;
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         string? line = await reader.ReadLineAsync(cancellationToken);
@@ -373,6 +391,12 @@ namespace BtoanAiNet.Services
                     response.Dispose();
                     if (hasEmitted) yield break;
                 }
+            }
+
+            if (!hasEmitted)
+            {
+                Console.WriteLine($"[GeminiService.StreamContentAsync] Completed without output. Last error: {lastStreamError}");
+                yield return $"❌ Lỗi kết nối Gemini API: {lastStreamError}";
             }
         }
     }

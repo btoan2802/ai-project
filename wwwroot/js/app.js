@@ -926,17 +926,29 @@ async function streamGeminiChat(userText, images, files, onChunk) {
                             onChunk(parsed.chunk, accumulatedText);
                         }
                     }
+                    if (parsed.error) {
+                        throw new Error(parsed.error);
+                    }
                     if (parsed.done) {
                         finalDoneData = parsed;
                     }
-                } catch (e) { }
+                } catch (e) {
+                    if (e.message && (e.message.startsWith("❌") || e.message.startsWith("Lỗi") || e.message.startsWith("HTTP"))) {
+                        throw e;
+                    }
+                }
             }
         }
     }
 
+    const finalAnswer = (finalDoneData && finalDoneData.answer) ? finalDoneData.answer : accumulatedText;
+    if (!finalAnswer || finalAnswer.trim() === "") {
+        throw new Error("Luồng SSE trả về rỗng, chuyển sang fallback JSON");
+    }
+
     return {
         ok: true,
-        text: (finalDoneData && finalDoneData.answer) ? finalDoneData.answer : accumulatedText,
+        text: finalAnswer,
         chat_id: finalDoneData?.conversation_id || conversation_id,
         title: finalDoneData?.conversation_title,
         doneData: finalDoneData
@@ -1316,7 +1328,8 @@ async function send() {
 
         if (!geminiRes || !geminiRes.ok) {
             if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
-            addBotBubble("❌ " + (geminiRes?.text || "Lỗi phản hồi"));
+            const errDetail = geminiRes?.text || geminiRes?.error || "Lỗi phản hồi từ server";
+            addBotBubble(errDetail.startsWith("❌") || errDetail.startsWith("⚠️") ? errDetail : "❌ " + errDetail);
             isSending = false;
             return;
         }
@@ -1326,7 +1339,8 @@ async function send() {
 
         if (!reply || reply.trim() === "") {
             if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
-            addBotBubble("❌ Backend trả về rỗng, vui lòng kiểm tra log.");
+            const errDetail = geminiRes?.error || "Server không trả về nội dung (vui lòng kiểm tra Gemini API Key).";
+            addBotBubble(errDetail.startsWith("❌") || errDetail.startsWith("⚠️") ? errDetail : "❌ " + errDetail);
             isSending = false;
             return;
         }

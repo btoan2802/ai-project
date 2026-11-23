@@ -426,12 +426,13 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                     };
                 }
 
+                string errDetail = !string.IsNullOrWhiteSpace(errorMsg) ? errorMsg : "Không thể kết nối đến Gemini API";
                 return new JsonObject
                 {
                     ["ok"] = false,
-                    ["answer"] = "⚠️ Tất cả API Key Gemini mặc định đã bị Google thu hồi do rò rỉ trên GitHub trước đó.\n\n👉 **Cách kích hoạt:**\n1. Truy cập **https://aistudio.google.com/app/apikey** để tạo 1 API Key Gemini miễn phí (chỉ mất 10 giây).\n2. Mở file `appsettings.json`, dán key vào mục:\n```json\n\"Gemini\": {\n  \"ApiKey\": \"AIzaSy...\"\n}\n```\nSau khi lưu file, bạn có thể chat và hỏi đáp bình thường ngay lập tức!",
+                    ["answer"] = $"⚠️ Lỗi kết nối AI: {errDetail}\n\nVui lòng kiểm tra lại cấu hình Gemini API Key trên server hoặc quota tài khoản.",
                     ["images"] = new JsonArray(),
-                    ["error"] = errorMsg ?? "All API keys failed",
+                    ["error"] = errDetail,
                     ["conversation_id"] = conversationId
                 };
             }

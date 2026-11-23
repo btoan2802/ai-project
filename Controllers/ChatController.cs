@@ -129,6 +129,38 @@ namespace BtoanAiNet.Controllers
 
                 if (ttftMs == 0) ttftMs = swTotal.ElapsedMilliseconds;
 
+                if (sbFull.Length == 0)
+                {
+                    try
+                    {
+                        var jsonRes = await _chatService.ProcessChatAsync(model, webRootPath);
+                        string fallbackAnswer = jsonRes["answer"]?.ToString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(fallbackAnswer))
+                        {
+                            sbFull.Append(fallbackAnswer);
+                            var payload = System.Text.Json.JsonSerializer.Serialize(new { chunk = fallbackAnswer, ttft_ms = swTotal.ElapsedMilliseconds });
+                            await Response.WriteAsync($"data: {payload}\n\n", ct);
+                            await Response.Body.FlushAsync(ct);
+                        }
+                        else
+                        {
+                            string errMsg = jsonRes["error"]?.ToString() ?? "Không nhận được phản hồi từ AI";
+                            sbFull.Append($"❌ {errMsg}");
+                            var payload = System.Text.Json.JsonSerializer.Serialize(new { chunk = $"❌ {errMsg}", ttft_ms = swTotal.ElapsedMilliseconds });
+                            await Response.WriteAsync($"data: {payload}\n\n", ct);
+                            await Response.Body.FlushAsync(ct);
+                        }
+                    }
+                    catch (Exception exFall)
+                    {
+                        string errMsg = $"❌ Lỗi kết nối AI: {exFall.Message}";
+                        sbFull.Append(errMsg);
+                        var payload = System.Text.Json.JsonSerializer.Serialize(new { chunk = errMsg, ttft_ms = swTotal.ElapsedMilliseconds });
+                        await Response.WriteAsync($"data: {payload}\n\n", ct);
+                        await Response.Body.FlushAsync(ct);
+                    }
+                }
+
                 // Save to DB asynchronously upon stream completion
                 if (currentUid > 0 && conversationId > 0)
                 {
