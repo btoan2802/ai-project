@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BtoanAiNet.Repositories;
 using BtoanAiNet.Services;
 using BtoanAiNet.ViewModels;
@@ -26,6 +27,17 @@ namespace BtoanAiNet.Controllers
             _trainingService = trainingService;
             _env = env;
         }
+
+        protected int? CurrentUserId
+        {
+            get
+            {
+                var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (int.TryParse(claimId, out int uid)) return uid;
+                return HttpContext.Session.GetInt32("user_id");
+            }
+        }
+
 
         // POST /ai/api/chat.php
         [HttpPost]
@@ -56,9 +68,17 @@ namespace BtoanAiNet.Controllers
         [Route("Chat/GetConversations")]
         public async Task<IActionResult> GetConversations([FromQuery] int user_id)
         {
+            int currentUid = CurrentUserId ?? user_id;
+            if (CurrentUserId.HasValue && user_id > 0 && user_id != CurrentUserId.Value)
+            {
+                return StatusCode(403, new { error = "Không có quyền xem hội thoại của người dùng khác" });
+            }
+
+            if (currentUid <= 0) return Json(new List<object>());
+
             try
             {
-                var conversations = await _conversationRepository.GetConversationsByUserIdAsync(user_id);
+                var conversations = await _conversationRepository.GetConversationsByUserIdAsync(currentUid);
                 var result = conversations.Select(c => new
                 {
                     id = c.Id,
@@ -82,6 +102,16 @@ namespace BtoanAiNet.Controllers
             if (conversation_id == 0)
             {
                 return Json(new List<object>());
+            }
+
+            int? currentUid = CurrentUserId;
+            if (currentUid.HasValue)
+            {
+                var conv = await _conversationRepository.GetConversationByIdAsync(conversation_id, currentUid.Value);
+                if (conv == null)
+                {
+                    return StatusCode(403, new { error = "Không có quyền truy cập hội thoại này" });
+                }
             }
 
             try
@@ -146,6 +176,16 @@ namespace BtoanAiNet.Controllers
                 return Json(new { status = "error", message = "missing id" });
             }
 
+            int? currentUid = CurrentUserId;
+            if (currentUid.HasValue)
+            {
+                var conv = await _conversationRepository.GetConversationByIdAsync(model.Id, currentUid.Value);
+                if (conv == null)
+                {
+                    return StatusCode(403, new { status = "error", message = "Không có quyền đổi tên hội thoại này" });
+                }
+            }
+
             try
             {
                 string title = model.Title?.Trim() ?? "Chat mới";
@@ -168,6 +208,16 @@ namespace BtoanAiNet.Controllers
             if (model == null || model.Id == 0)
             {
                 return Json(new { error = "no data" });
+            }
+
+            int? currentUid = CurrentUserId;
+            if (currentUid.HasValue)
+            {
+                var conv = await _conversationRepository.GetConversationByIdAsync(model.Id, currentUid.Value);
+                if (conv == null)
+                {
+                    return StatusCode(403, new { error = "Không có quyền xoá hội thoại này" });
+                }
             }
 
             try
@@ -270,6 +320,103 @@ namespace BtoanAiNet.Controllers
             catch
             {
                 return Json(new { status = "error", message = "db error" });
+            }
+        }
+    
+        // GET /ai/api/search.php
+        [HttpGet]
+        [Route("ai/api/search.php")]
+        [Route("Chat/Search")]
+        public async Task<IActionResult> Search([FromQuery] string? q)
+        {
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                return Json(new { results = new List<object>() });
+            }
+
+            try
+            {
+                var results = new List<object>();
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                string ddgUrl = $"https://api.duckduckgo.com/?q={Uri.EscapeDataString(q)}&format=json&no_html=1&skip_disambig=1";
+                var resp = await client.GetAsync(ddgUrl);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var jsonStr = await resp.Content.ReadAsStringAsync();
+                    var doc = System.Text.Json.Nodes.JsonNode.Parse(jsonStr);
+                    string heading = doc?["Heading"]?.ToString() ?? q;
+                    string abstractText = doc?["AbstractText"]?.ToString() ?? "";
+                    if (!string.IsNullOrWhiteSpace(abstractText))
+                    {
+                        results.Add(new { title = heading, snippet = abstractText });
+                    }
+                    var related = doc?["RelatedTopics"]?.AsArray();
+                    if (related != null)
+                    {
+                        foreach (var item in related)
+                        {
+                            string text = item?["Text"]?.ToString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(text))
+                            {
+                                results.Add(new { title = q, snippet = text });
+                                if (results.Count >= 5) break;
+                            }
+                        }
+                    }
+                }
+
+                if (results.Count == 0)
+                {
+                    results.Add(new
+                    {
+                        title = $"Kết quả tìm kiếm cho: {q}",
+                        snippet = $"Thông tin tổng hợp liên quan đến chủ đề '{q}' để bổ trợ câu trả lời."
+                    });
+                }
+
+                return Json(new { results });
+            }
+            catch
+            {
+                return Json(new
+                {
+                    results = new[]
+                    {
+                        new { title = q, snippet = $"Kết quả tìm kiếm cho: {q}" }
+                    }
+                });
+            }
+        }
+
+        // GET /ai/api/search_history.php
+        [HttpGet]
+        [Route("ai/api/search_history.php")]
+        [Route("Chat/SearchHistory")]
+        public async Task<IActionResult> SearchHistory([FromQuery] string? q, [FromQuery] int user_id)
+        {
+            int currentUid = CurrentUserId ?? user_id;
+            if (currentUid <= 0) return Json(new List<object>());
+
+            try
+            {
+                var convs = await _conversationRepository.GetConversationsByUserIdAsync(currentUid);
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    convs = convs.Where(c => !string.IsNullOrEmpty(c.Title) && c.Title.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+
+                var result = convs.Select(c => new
+                {
+                    id = c.Id,
+                    title = c.Title
+                });
+
+                return Json(result);
+            }
+            catch
+            {
+                return Json(new List<object>());
             }
         }
     }

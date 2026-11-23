@@ -12,6 +12,11 @@ namespace BtoanAiNet.Services.VectorDb
 
     public class QdrantVectorDatabaseService : IVectorDatabaseService
     {
+        private static DateTime _lastFailureTime = DateTime.MinValue;
+        private static readonly TimeSpan _circuitBreakerDuration = TimeSpan.FromSeconds(60);
+        private static bool IsCircuitBroken() => (DateTime.UtcNow - _lastFailureTime) < _circuitBreakerDuration;
+        private static void RecordFailure() => _lastFailureTime = DateTime.UtcNow;
+
         private readonly HttpClient _http;
         private readonly ILogger<QdrantVectorDatabaseService> _logger;
 
@@ -28,10 +33,12 @@ namespace BtoanAiNet.Services.VectorDb
             {
                 _http.DefaultRequestHeaders.Add("api-key", opts.ApiKey);
             }
+            _http.Timeout = TimeSpan.FromSeconds(2);
         }
 
         public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default)
         {
+            if (IsCircuitBroken()) return false;
             try
             {
                 var res = await _http.GetAsync("healthz", cancellationToken);
@@ -65,6 +72,7 @@ namespace BtoanAiNet.Services.VectorDb
             }
             catch (Exception ex)
             {
+                RecordFailure();
                 _logger.LogWarning(ex, "Qdrant collection creation skipped or failed for {CollectionName}", collectionName);
             }
         }
@@ -99,6 +107,7 @@ namespace BtoanAiNet.Services.VectorDb
             float minScore = 0.60f, 
             CancellationToken cancellationToken = default)
         {
+            if (IsCircuitBroken()) return new List<VectorSearchResult>();
             try
             {
                 var body = new
@@ -144,6 +153,7 @@ namespace BtoanAiNet.Services.VectorDb
             }
             catch (Exception ex)
             {
+                RecordFailure();
                 _logger.LogWarning(ex, "Qdrant search error for collection {CollectionName}", collectionName);
                 return new List<VectorSearchResult>();
             }

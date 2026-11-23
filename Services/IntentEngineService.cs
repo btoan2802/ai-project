@@ -15,10 +15,7 @@ namespace BtoanAiNet.Services
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
 
-        private static readonly string[] ApiKeys = new[]
-        {
-            "YOUR_GEMINI_API_KEY_HERE"
-        };
+        
 
         public IntentEngineService(HttpClient httpClient, IConfiguration configuration)
         {
@@ -38,26 +35,53 @@ namespace BtoanAiNet.Services
                 keys.AddRange(arrayKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")).Select(k => k.Trim()));
             }
 
-            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") 
+                          ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
             if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
             if (keys.Count == 0)
             {
-                try
-                {
-                    string embeddedKey = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
-                    if (!string.IsNullOrWhiteSpace(embeddedKey)) keys.Add(embeddedKey.Trim());
-                }
-                catch { }
-
-                keys.AddRange(ApiKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")));
+                throw new InvalidOperationException("Gemini API key is not configured. Please set 'Gemini:ApiKey' in appsettings.json or 'Gemini__ApiKey' environment variable.");
             }
 
             return keys.Distinct().ToList();
         }
 
+                private static bool IsMediaOrCodeIntent(string msg)
+        {
+            if (string.IsNullOrWhiteSpace(msg)) return false;
+            var lower = msg.ToLowerInvariant();
+            return lower.Contains("ảnh") || lower.Contains("ve ") || lower.Contains("vẽ") ||
+                   lower.Contains("tranh") || lower.Contains("picture") || lower.Contains("image") ||
+                   lower.Contains("video") || lower.Contains("clip") || lower.Contains("phim") ||
+                   lower.Contains("nhạc") || lower.Contains("bài hát") || lower.Contains("song") ||
+                   lower.Contains("music") || lower.Contains("code") || lower.Contains("lập trình") ||
+                   lower.Contains("sửa") || lower.Contains("bug") || lower.Contains("lỗi") ||
+                   lower.Contains("export") || lower.Contains("xuất") || lower.Contains("tạo file");
+        }
+
         public async Task<JsonObject> AnalyzeIntentAsync(string userMessage, bool hasImages = false, bool hasFiles = false)
         {
+            if (string.IsNullOrWhiteSpace(userMessage) || 
+                (!hasImages && !hasFiles && (userMessage.Trim().Length < 15 || !IsMediaOrCodeIntent(userMessage))))
+            {
+                return new JsonObject
+                {
+                    ["task_type"] = "text_generation",
+                    ["user_goal"] = userMessage?.Trim() ?? "",
+                    ["hard_constraints"] = new JsonArray(),
+                    ["negative_constraints"] = new JsonArray(),
+                    ["must_preserve"] = new JsonArray(),
+                    ["allowed_changes"] = new JsonArray(),
+                    ["forbidden_changes"] = new JsonArray(),
+                    ["has_reference_files"] = hasFiles,
+                    ["has_reference_images"] = hasImages,
+                    ["needs_reference_image"] = false,
+                    ["risk_of_wrong_inference"] = new JsonArray(),
+                    ["final_interpretation"] = userMessage?.Trim() ?? ""
+                };
+            }
+
             var allKeys = GetConfiguredApiKeys();
             var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
             string prompt = $@"Analyze the following user message to identify their intent and constraints for an AI assistant.
@@ -97,7 +121,8 @@ The JSON object must have these fields:
                 },
                 ["generationConfig"] = new JsonObject
                 {
-                    ["response_mime_type"] = "application/json"
+                    ["response_mime_type"] = "application/json",
+                    ["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 }
                 }
             };
 

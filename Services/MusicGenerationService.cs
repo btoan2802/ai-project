@@ -16,10 +16,7 @@ namespace BtoanAiNet.Services
         private readonly IConversationRepository _conversationRepository;
         private readonly IConfiguration _configuration;
 
-        private static readonly string[] ApiKeys = new[]
-        {
-            "YOUR_GEMINI_API_KEY_HERE"
-        };
+        
 
         public MusicGenerationService(HttpClient httpClient, IConversationRepository conversationRepository, IConfiguration configuration)
         {
@@ -40,19 +37,13 @@ namespace BtoanAiNet.Services
                 keys.AddRange(arrayKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")).Select(k => k.Trim()));
             }
 
-            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") 
+                          ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
             if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
             if (keys.Count == 0)
             {
-                try
-                {
-                    string embeddedKey = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
-                    if (!string.IsNullOrWhiteSpace(embeddedKey)) keys.Add(embeddedKey.Trim());
-                }
-                catch { }
-
-                keys.AddRange(ApiKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")));
+                throw new InvalidOperationException("Gemini API key is not configured. Please set 'Gemini:ApiKey' in appsettings.json or 'Gemini__ApiKey' environment variable.");
             }
 
             return keys.Distinct().ToList();

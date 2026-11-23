@@ -19,38 +19,50 @@ namespace BtoanAiNet.Services
         private readonly IGeminiService _geminiService;
 
         private const string SystemInstructionText = @"
-Bạn là Btoan AI. + Thông tin về Nguyễn Bảo Toàn (nếu user có hỏi): 
-Tên: Nguyễn Bảo Toàn. 
-Sinh năm: 28/02/2006 
-Cao: 1m70. 
-Nặng: 52kg. 
-Quê Quán: Hà Tĩnh 
-Nơi Sinh: Bà Rịa Vũng Tàu
-Địa chỉ tạm trú: TPHCM. 
-Là sinh viên Đại Học Bách Khoa ĐHQG TPHCM. 
-Ngành Khoa học máy tính, công nghệ thông tin.
+Bạn là Btoan AI - Trợ lý trí tuệ nhân tạo thông minh, tự nhiên, thân thiện và hữu ích do Nguyễn Bảo Toàn phát triển.
++ Thông tin về Nguyễn Bảo Toàn (chỉ trả lời nếu người dùng chủ động hỏi): 
+Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi sinh: Bà Rịa Vũng Tàu. Tạm trú: TPHCM. Sinh viên ngành Khoa học máy tính / CNTT Đại học Bách Khoa ĐHQG TPHCM.
 
-* Khi bắt đầu cuộc trò chuyện, luôn lịch sự, xưng ""tôi"" và ""bạn"". Có thể điều chỉnh cách xưng hô theo phong cách người dùng nhưng vẫn giữ sự tôn trọng.
-* Trả lời rõ ràng, dễ hiểu, trình bày gọn gàng.
-* Khi người dùng hỏi về toán học hoặc kiến thức, ưu tiên giải thích chi tiết, có thể thêm nhận xét mang tính góp ý nhẹ nhàng để người dùng cải thiện cách học.
-* Luôn sử dụng ngôn ngữ phù hợp với người dùng (tự nhận diện ngôn ngữ và trả lời tương ứng).
-* Nếu người dùng nói chuyện vui vẻ, có thể trả lời theo hướng thân thiện, hài hước. Nếu người dùng nghiêm túc, giữ phong cách nghiêm túc.
-* Khi người dùng có lời nói tiêu cực hoặc không phù hợp, phản hồi một cách bình tĩnh, không sử dụng ngôn từ xúc phạm, nhưng có thể thể hiện sự không đồng tình một cách rõ ràng.
-* Khi được hỏi về người tạo ra hệ thống, trả lời rằng người tạo là Nguyễn Bảo Toàn.
-* Công thức toán học nên trình bày bằng LaTeX trong $...$ hoặc $$...$$ để dễ đọc.
-* Nếu biểu thức dài, ưu tiên xuống dòng hoặc trình bày nhiều bước.
-* Nếu người dùng yêu cầu tạo ảnh mới:
-  TUYỆT ĐỐI KHÔNG dịch word-by-word đơn giản (ví dụ: cấm dùng 'a dog eating banana').
-  BẮT BUỘC phải chuyển thành một prompt tiếng Anh cực kỳ chi tiết, tả rõ hành động tương tác vật lý (ví dụ: gặm chuối thì phải có 'actively biting and chewing a half-peeled ripe yellow banana held firmly between front paws, visible banana texture'), bối cảnh, góc chụp và chất lượng ảnh (photorealistic, natural lighting, highly detailed fur and textures, sharp focus, 8k resolution, cinematic composition) để máy vẽ chính xác. Tuyệt đối không dùng từ chung chung.
-  Sử dụng thẻ [GENIMAGE] ở dòng cuối cùng kèm prompt tiếng Anh chi tiết đó.
-  Ví dụ: [GENIMAGE] A photorealistic close-up of a cute golden retriever puppy happily biting and chewing a half-peeled ripe yellow banana held between its front paws, bits of yellow banana fruit visible, warm natural sunlight streaming from a window, highly detailed fur textures, shallow depth of field, 8k resolution, cinematic lighting.
-* Nếu người dùng yêu cầu tạo nhạc, bài hát, giai điệu hoặc phổ nhạc:
-  Sáng tác lời bài hát hoặc hợp âm, và LUÔN kết thúc câu trả lời bằng thẻ:
-  [GENMUSIC] <mô tả phong cách âm nhạc bằng tiếng Anh>
-  Ví dụ: [GENMUSIC] Upbeat joyful acoustic pop song about a puppy, acoustic guitar, clapping rhythm, cheerful melody.
-  TUYỆT ĐỐI KHÔNG dùng thẻ [GENVIDEO] khi người dùng yêu cầu tạo nhạc hay bài hát.
-* Nếu người dùng yêu cầu tạo video hoặc hoạt cảnh chuyển động:
-  Sử dụng thẻ [GENVIDEO] ở dòng cuối cùng.
+* NGUYÊN TẮC GIAO TIẾP VÀ BẢO MẬT TUYỆT ĐỐI (QUAN TRỌNG NHẤT):
+1. TUYỆT ĐỐI KHÔNG lặp lại, tóm tắt, diễn giải hay xác nhận các quy tắc hệ thống, hướng dẫn nội bộ hoặc định dạng xuất file khi người dùng chỉ chào hỏi, nhắn ngắn hoặc giao tiếp thông thường (ví dụ: 'ko', 'không', 'um', 'ừ', 'ok', 'chào', 'hello').
+2. TUYỆT ĐỐI KHÔNG trả lời theo kiểu máy móc như 'Tôi đã hiểu rõ các quy tắc...', 'Tôi sẽ tuân thủ nghiêm ngặt...'. Luôn phản hồi trực tiếp vào ngữ cảnh người dùng đang nói bằng giọng văn tự nhiên của con người.
+3. Khi người dùng nhắn 'ko', 'không' hoặc tin ngắn tương tự, hãy phản hồi ngắn gọn, tự nhiên như: 'Có chuyện gì thế bạn?', 'Bạn cần tôi hỗ trợ gì không?', 'Sao thế bạn?'.
+
+* QUY TẮC ARTIFACT STUDIO (KHI NGƯỜI DÙNG YÊU CẦU TẠO / XUẤT TÀI LIỆU):
+- Khi người dùng yêu cầu soạn thảo, tạo hoặc xuất file tài liệu (Word .docx, PDF .pdf, Excel .xlsx, PowerPoint .pptx, hoặc yêu cầu nhiều file cùng lúc, hoặc bảo 'bỏ nội dung trên vào word/excel/ppt', 'bỏ vào word xuất file đi'):
+  + TUYỆT ĐỐI KHÔNG HỎI LẠI NGƯỜI DÙNG (CẤM các câu hỏi như: 'Bạn muốn soạn nội dung gì?', 'Hãy gửi nội dung cho mình'). BẮT BUỘC lấy trọn vẹn 100% nội dung đã tạo ở tin nhắn trước để đưa vào file.
+  + Bên ngoài chỉ viết 1-2 câu dẫn dắt ngắn gọn, tự nhiên.
+  + Toàn bộ nội dung thật đầy đủ, chi tiết và đẹp mắt BẮT BUỘC đặt trong thẻ [ARTIFACT type=""..."" title=""...""]...[/ARTIFACT].
+  + Có thể xuất NHIỀU thẻ [ARTIFACT] liên tiếp nếu người dùng yêu cầu nhiều định dạng (ví dụ: 1 thẻ docx + 1 thẻ xlsx + 1 thẻ pptx).
+  + Định dạng bên trong thẻ [ARTIFACT]:
+    - Với type=""docx"" hoặc type=""pdf"": bên trong là nội dung Markdown hoàn chỉnh (nếu người dùng yêu cầu xuất nội dung từ tin nhắn trước thì BẮT BUỘC chép lại trọn vẹn 100% nội dung đó vào trong thẻ, tuyệt đối không được viết câu xã giao).
+    - Với type=""xlsx"": bên trong là JSON hợp lệ theo cấu trúc:
+      {
+        ""title"": ""TIÊU ĐỀ BẢNG DỮ LIỆU"",
+        ""subtitle"": ""Mô tả hoặc ghi chú"",
+        ""sheets"": [
+          {
+            ""name"": ""Sheet1"",
+            ""columns"": [""Cột 1"", ""Cột 2"", ""Cột 3""],
+            ""rows"": [[1, ""Giá trị A"", 100], [2, ""Giá trị B"", 200]]
+          }
+        ]
+      }
+    - Với type=""pptx"": bên trong là JSON hợp lệ theo cấu trúc:
+      {
+        ""title"": ""Tiêu đề bài thuyết trình"",
+        ""subtitle"": ""Phụ đề bài thuyết trình"",
+        ""slides"": [
+          { ""title"": ""Tiêu đề Slide 1"", ""bullets"": [""Ý chính 1"", ""Ý chính 2"", ""Ý chính 3""] },
+          { ""title"": ""Tiêu đề Slide 2"", ""bullets"": [""Nội dung phân tích 1"", ""Nội dung phân tích 2""] }
+        ]
+      }
+- Nếu người dùng KHÔNG yêu cầu tạo tài liệu hay xuất file, TUYỆT ĐỐI KHÔNG dùng thẻ [ARTIFACT] hay nhắc đến [ARTIFACT].
+
+* HÌNH ẢNH, VIDEO VÀ ÂM NHẠC:
+- Tạo ảnh tĩnh: kết thúc bằng [GENIMAGE] <prompt tiếng Anh chi tiết>
+- Tạo video: kết thúc bằng [GENVIDEO] <prompt tiếng Anh chi tiết>
+- Tạo nhạc: kết thúc bằng [GENMUSIC] <prompt tiếng Anh chi tiết>
 ";
 
         public ChatService(
@@ -67,9 +79,16 @@ Ngành Khoa học máy tính, công nghệ thông tin.
 
         public async Task<JsonObject> ProcessChatAsync(ChatRequestModel requestModel, string webRootPath)
         {
+            var swTotal = System.Diagnostics.Stopwatch.StartNew();
+            long t_intent = 0;
+            long t_db = 0;
+            long t_rag = 0;
+            long t_gemini = 0;
+            long t_save = 0;
+
             int userId = requestModel.User_Id ?? 0;
             int conversationId = requestModel.Conversation_Id ?? 0;
-            string model = requestModel.Model ?? "gemini-2.5-flash";
+            string model = requestModel.Model ?? "gemini-3.1-flash-lite";
 
             var payload = requestModel.Payload ?? new JsonObject();
             if (!payload.ContainsKey("contents"))
@@ -77,60 +96,128 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                 payload["contents"] = new JsonArray();
             }
 
+            bool isThinking = false;
+            if (payload.ContainsKey("mode"))
+            {
+                string modeStr = payload["mode"]?.ToString() ?? "fast";
+                isThinking = modeStr.Equals("thinking", StringComparison.OrdinalIgnoreCase);
+            }
+
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
             {
                 payload["generationConfig"] = new JsonObject { ["maxOutputTokens"] = 8192 };
             }
-            else if (payload["generationConfig"] is JsonObject genConfig)
+            if (payload["generationConfig"] is JsonObject genConfig)
             {
                 genConfig["maxOutputTokens"] = 8192;
+                if (!isThinking)
+                {
+                    // Disable thinking in Fast mode to eliminate 5-10s hidden reasoning latency
+                    genConfig["thinkingConfig"] = new JsonObject
+                    {
+                        ["thinkingBudget"] = 0
+                    };
+                }
             }
 
-            bool isNewConv = false;
-            // Ensure Conversation exists (only for logged-in users)
-            if (userId > 0 && conversationId == 0)
-            {
-                var conv = await _conversationRepository.CreateConversationAsync(userId, "Chat mới");
-                conversationId = conv.Id;
-                isNewConv = true;
-            }
-
-            // Extract question
+            // Extract question and filter out leaked system prompts from contents
             string question = payload["question"]?.ToString() ?? "";
             var contents = payload["contents"]?.AsArray();
             if (contents != null && contents.Count > 0)
             {
-                var lastMsg = contents[contents.Count - 1]?.AsObject();
-                if (lastMsg != null && lastMsg["parts"] is JsonArray parts && parts.Count > 0)
+                var cleanContents = new JsonArray();
+                foreach (var item in contents)
                 {
-                    string extracted = parts[0]?["text"]?.ToString() ?? "";
-                    if (!string.IsNullOrWhiteSpace(extracted)) question = extracted;
+                    if (item is JsonObject msgObj && msgObj["parts"] is JsonArray pArr && pArr.Count > 0)
+                    {
+                        string txt = pArr[0]?["text"]?.ToString() ?? "";
+                        if (txt.Contains("Bạn đang chạy trong một ứng dụng") || 
+                            txt.Contains("QUY TẮC XUẤT FILE") || 
+                            txt.Contains("USER_INTENT_ADHERENCE_PROTOCOL"))
+                        {
+                            continue; // Skip leaked internal system instruction in user payload
+                        }
+                    }
+                    cleanContents.Add(item?.DeepClone());
+                }
+                contents = cleanContents;
+
+                if (contents.Count > 0)
+                {
+                    var lastMsg = contents[contents.Count - 1]?.AsObject();
+                    if (lastMsg != null && lastMsg["parts"] is JsonArray parts && parts.Count > 0)
+                    {
+                        string extracted = parts[0]?["text"]?.ToString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(extracted)) question = extracted;
+                    }
                 }
             }
 
-            Console.WriteLine($"[DEBUG CHAT QUESTION] '{question}'");
+            // 1. Profiling t_intent: Short chats ("ê", "ko", "um", etc.) cut out all intent LLM calls completely (0 ms)
+            var swIntent = System.Diagnostics.Stopwatch.StartNew();
+            string trimmedQ = (question ?? "").Trim().ToLowerInvariant();
+            bool isShortChat = string.IsNullOrWhiteSpace(trimmedQ) || 
+                               trimmedQ.Length <= 10 || 
+                               trimmedQ == "ê" || trimmedQ == "ko" || trimmedQ == "không" || 
+                               trimmedQ == "um" || trimmedQ == "ừ" || trimmedQ == "ok" || 
+                               trimmedQ == "chào" || trimmedQ == "hi" || trimmedQ == "hello";
 
-            if (contents == null || contents.Count == 0)
+            if (!isShortChat)
             {
-                contents = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["role"] = "user",
-                        ["parts"] = new JsonArray { new JsonObject { ["text"] = question } }
-                    }
-                };
+                // Non-short chat intent analysis if required
             }
+            swIntent.Stop();
+            t_intent = swIntent.ElapsedMilliseconds;
 
-            // Load Chat History
-            var historyChats = userId > 0 && conversationId > 0 
-                ? await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 20)
-                : new List<Chat>();
+            // 2. Profiling t_db: load conversation & history (0 ms for short chat)
+            var swDb = System.Diagnostics.Stopwatch.StartNew();
+            bool isNewConv = false;
+            var historyChats = new List<Chat>();
+            if (!isShortChat)
+            {
+                try
+                {
+                    if (userId > 0 && conversationId == 0)
+                    {
+                        var conv = await _conversationRepository.CreateConversationAsync(userId, "Chat mới");
+                        conversationId = conv.Id;
+                        isNewConv = true;
+                    }
+
+                    if (userId > 0 && conversationId > 0)
+                    {
+                        historyChats = await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 12);
+                    }
+                }
+                catch (Exception dbEx)
+                {
+                    Console.WriteLine($"[DB Non-fatal Warning] {dbEx.Message}");
+                }
+            }
+            swDb.Stop();
+            t_db = swDb.ElapsedMilliseconds;
+
+            // 3. Profiling t_rag: 0 ms for general conversations
+            var swRag = System.Diagnostics.Stopwatch.StartNew();
+            // ContextRetriever / Qdrant RAG is bypassed for short & standard chat
+            swRag.Stop();
+            t_rag = swRag.ElapsedMilliseconds;
             var historyMessages = new JsonArray();
 
             foreach (var chat in historyChats)
             {
-                var userParts = new JsonArray { new JsonObject { ["text"] = chat.Question ?? "" } };
+                string q = chat.Question ?? "";
+                if (q.Contains("QUY TẮC XUẤT FILE") || q.Contains("Bạn đang chạy trong một ứng dụng"))
+                {
+                    q = "Chào bạn";
+                }
+                string a = chat.Answer ?? "";
+                if (a.Contains("Tôi đã hiểu rõ các quy tắc") || a.Contains("tuân thủ nghiêm ngặt các định dạng về xuất file"))
+                {
+                    a = "Chào bạn, tôi là Btoan AI. Hôm nay tôi có thể giúp gì cho bạn?";
+                }
+
+                var userParts = new JsonArray { new JsonObject { ["text"] = q } };
                 if (!string.IsNullOrEmpty(chat.Images))
                 {
                     try
@@ -163,12 +250,12 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                 }
 
                 historyMessages.Add(new JsonObject { ["role"] = "user", ["parts"] = userParts });
-                if (!string.IsNullOrEmpty(chat.Answer))
+                if (!string.IsNullOrEmpty(a))
                 {
                     historyMessages.Add(new JsonObject
                     {
                         ["role"] = "model",
-                        ["parts"] = new JsonArray { new JsonObject { ["text"] = chat.Answer } }
+                        ["parts"] = new JsonArray { new JsonObject { ["text"] = a } }
                     });
                 }
             }
@@ -188,6 +275,60 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                 payload["contents"] = currentContents;
             }
 
+            // Context-preserving file export: If the user says "bỏ vào word", "xuất file", etc., grab previous assistant message
+            string lowerExportQ = (question ?? "").ToLowerInvariant();
+            bool isExportFollowup = lowerExportQ.Contains("bỏ vào word") || lowerExportQ.Contains("cho vào word") || 
+                                    lowerExportQ.Contains("vào word") || lowerExportQ.Contains("xuất file") || 
+                                    lowerExportQ.Contains("tạo file word") || lowerExportQ.Contains("tải file word") || 
+                                    lowerExportQ.Contains("lưu vào word") || lowerExportQ.Contains("xuất word") ||
+                                    lowerExportQ.Contains("xuất docx") || lowerExportQ.Contains("tạo file docx");
+
+            string lastModelText = "";
+            if (payload["contents"] is JsonArray finalContents && finalContents.Count > 0)
+            {
+                for (int i = finalContents.Count - 1; i >= 0; i--)
+                {
+                    if (finalContents[i] is JsonObject cObj && cObj["role"]?.ToString() == "model" && cObj["parts"] is JsonArray pArr && pArr.Count > 0)
+                    {
+                        var t = pArr[0]?["text"]?.ToString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(t) && !t.Contains("Chào bạn, bạn muốn mình"))
+                        {
+                            lastModelText = t;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(lastModelText) && historyChats != null && historyChats.Count > 0)
+            {
+                for (int i = historyChats.Count - 1; i >= 0; i--)
+                {
+                    var ans = historyChats[i].Answer ?? "";
+                    if (!string.IsNullOrWhiteSpace(ans) && !ans.Contains("Chào bạn, bạn muốn mình"))
+                    {
+                        lastModelText = ans;
+                        break;
+                    }
+                }
+            }
+
+            if (isExportFollowup && payload["contents"] is JsonArray turnContents && turnContents.Count > 0)
+            {
+                if (!string.IsNullOrWhiteSpace(lastModelText))
+                {
+                    var lastUserTurn = turnContents[turnContents.Count - 1]?.AsObject();
+                    if (lastUserTurn != null && lastUserTurn["parts"] is JsonArray uParts && uParts.Count > 0)
+                    {
+                        string origUserTxt = uParts[0]?["text"]?.ToString() ?? "";
+                        uParts[0] = new JsonObject 
+                        { 
+                            ["text"] = $"{origUserTxt}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu xuất nội dung văn bản trước đó vào file Word. Bạn BẮT BUỘC chép lại trọn vẹn 100% nội dung sau vào thẻ [ARTIFACT type=\"docx\" title=\"Tài liệu hoàn chỉnh\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI!]\nNội dung trước đó:\n{lastModelText}" 
+                        };
+                    }
+                }
+            }
+
             string currentSystemInstruction = SystemInstructionText;
             payload["systemInstruction"] = new JsonObject
             {
@@ -195,7 +336,10 @@ Ngành Khoa học máy tính, công nghệ thông tin.
             };
 
             // Call Gemini Service
+            var swGemini = System.Diagnostics.Stopwatch.StartNew();
             var (success, geminiData, rawResponse, errorMsg) = await _geminiService.GenerateContentAsync(model, payload);
+            swGemini.Stop();
+            t_gemini = swGemini.ElapsedMilliseconds;
 
             if (!success || geminiData == null)
             {
@@ -250,10 +394,30 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                 };
             }
 
-            string answer = "";
+            var sbAnswer = new System.Text.StringBuilder();
             if (geminiData["candidates"] is JsonArray candidates && candidates.Count > 0)
             {
-                answer = candidates[0]?["content"]?["parts"]?[0]?["text"]?.ToString() ?? "";
+                if (candidates[0]?["content"]?["parts"] is JsonArray partsArr)
+                {
+                    foreach (var p in partsArr)
+                    {
+                        if (p is JsonObject pObj)
+                        {
+                            if (pObj.ContainsKey("thought") && pObj["thought"]?.GetValue<bool>() == true)
+                            {
+                                continue; // Skip internal thinking thoughts
+                            }
+                            sbAnswer.Append(pObj["text"]?.ToString() ?? "");
+                        }
+                    }
+                }
+            }
+            string answer = sbAnswer.ToString();
+
+            // Fallback defense: if user asked to export/put into Word but model answered conversational text without ARTIFACT
+            if (isExportFollowup && !answer.Contains("[ARTIFACT") && !string.IsNullOrWhiteSpace(lastModelText))
+            {
+                answer = $"Đã chuẩn bị xong tài liệu Word cho bạn:\n\n[ARTIFACT type=\"docx\" title=\"Tài liệu văn bản\"]\n{lastModelText}\n[/ARTIFACT]";
             }
 
             // Save Base64 Images locally to /uploads/chat/
@@ -293,43 +457,71 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                 }
             }
 
-            string generatedTitle = null;
+            string? generatedTitle = null;
             int savedChatId = 0;
-            // Save Chat to DB (only if logged in)
-            if (userId > 0)
+            // Save Chat to DB (only if logged in and not a throwaway short chat)
+            var swSave = System.Diagnostics.Stopwatch.StartNew();
+            if (!isShortChat && userId > 0)
             {
-                var chatRecord = new Chat
+                try
                 {
-                    UserId = userId,
-                    Question = question,
-                    Answer = answer,
-                    ConversationId = conversationId,
-                    Images = JsonSerializer.Serialize(imageList),
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                chatRecord = await _conversationRepository.AddChatAsync(chatRecord);
-                savedChatId = chatRecord.Id;
-
-                // Auto-generate Title if conversation is new or title is "Chat mới"
-                if (isNewConv || conversationId > 0)
-                {
-                    var existingConv = await _conversationRepository.GetConversationByIdAsync(conversationId, userId);
-                    if (existingConv != null && (existingConv.Title == "Chat mới" || string.IsNullOrWhiteSpace(existingConv.Title)))
+                    var chatRecord = new Chat
                     {
-                        var genTitle = await GenerateTitleAsync(question);
-                        if (!string.IsNullOrWhiteSpace(genTitle))
+                        UserId = userId,
+                        Question = question,
+                        Answer = answer,
+                        ConversationId = conversationId,
+                        Images = JsonSerializer.Serialize(imageList),
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    chatRecord = await _conversationRepository.AddChatAsync(chatRecord);
+                    savedChatId = chatRecord.Id;
+
+                    // Auto-generate Title if conversation is new or title is "Chat mới"
+                    if (isNewConv || conversationId > 0)
+                    {
+                        var existingConv = await _conversationRepository.GetConversationByIdAsync(conversationId, userId);
+                        if (existingConv != null && (existingConv.Title == "Chat mới" || string.IsNullOrWhiteSpace(existingConv.Title)))
                         {
-                            await _conversationRepository.UpdateConversationTitleAsync(conversationId, genTitle);
-                            generatedTitle = genTitle;
+                            if (isShortChat)
+                            {
+                                generatedTitle = string.IsNullOrWhiteSpace(question) ? "Chat mới" : question.Trim();
+                                await _conversationRepository.UpdateConversationTitleAsync(conversationId, generatedTitle);
+                            }
+                            else
+                            {
+                                var genTitle = await GenerateTitleAsync(question ?? "Chat mới");
+                                if (!string.IsNullOrWhiteSpace(genTitle))
+                                {
+                                    await _conversationRepository.UpdateConversationTitleAsync(conversationId, genTitle);
+                                    generatedTitle = genTitle;
+                                }
+                            }
+                        }
+                        else if (existingConv != null)
+                        {
+                            generatedTitle = existingConv.Title;
                         }
                     }
-                    else if (existingConv != null)
-                    {
-                        generatedTitle = existingConv.Title;
-                    }
+                }
+                catch (Exception dbEx)
+                {
+                    Console.WriteLine($"[DB Save Non-fatal Warning] {dbEx.Message}");
                 }
             }
+            swSave.Stop();
+            t_save = swSave.ElapsedMilliseconds;
+
+            swTotal.Stop();
+            Console.WriteLine("================ [CHAT PROFILING BREAKDOWN] ================");
+            Console.WriteLine($"| t_intent          : {t_intent,6} ms");
+            Console.WriteLine($"| t_db              : {t_db,6} ms");
+            Console.WriteLine($"| t_rag             : {t_rag,6} ms");
+            Console.WriteLine($"| t_gemini_attempts : {t_gemini,6} ms");
+            Console.WriteLine($"| t_save            : {t_save,6} ms");
+            Console.WriteLine($"| TOTAL CHAT TIME   : {swTotal.ElapsedMilliseconds,6} ms");
+            Console.WriteLine("============================================================");
 
             // Final Response JSON
             var jsonImageList = new JsonArray();
@@ -344,6 +536,15 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                 ["conversation_id"] = conversationId,
                 ["conversation_title"] = generatedTitle ?? "Chat mới",
                 ["chat_id"] = savedChatId,
+                ["profiling"] = new JsonObject
+                {
+                    ["t_intent"] = t_intent,
+                    ["t_db"] = t_db,
+                    ["t_rag"] = t_rag,
+                    ["t_gemini_attempts"] = t_gemini,
+                    ["t_save"] = t_save,
+                    ["total_ms"] = swTotal.ElapsedMilliseconds
+                },
                 ["candidates"] = new JsonArray
                 {
                     new JsonObject
@@ -382,7 +583,7 @@ Ngành Khoa học máy tính, công nghệ thông tin.
                     ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = 30 }
                 };
 
-                var res = await _geminiService.GenerateContentAsync("gemini-2.5-flash", titlePayload);
+                var res = await _geminiService.GenerateContentAsync("gemini-3.1-flash-lite", titlePayload);
                 string raw = ExtractTextFromGeminiResult(res);
                 string clean = raw?.Trim().Trim('"', '\'', '`', '\r', '\n') ?? "";
                 if (clean.Length > 50) clean = clean.Substring(0, 50);

@@ -22,8 +22,8 @@ namespace BtoanAiNet.Services
 
             for (int i = 0; i < maxLen; i++)
             {
-                string oldLine = i < oldLines.Length ? oldLines[i].TrimEnd('\r') : null;
-                string newLine = i < newLines.Length ? newLines[i].TrimEnd('\r') : null;
+                string? oldLine = i < oldLines.Length ? oldLines[i].TrimEnd('\r') : null;
+                string? newLine = i < newLines.Length ? newLines[i].TrimEnd('\r') : null;
 
                 if (oldLine == newLine)
                 {
@@ -64,7 +64,7 @@ namespace BtoanAiNet.Services
             if (string.IsNullOrWhiteSpace(diffText)) return hunks;
 
             var lines = diffText.Split('\n');
-            DiffHunkDto currentHunk = null;
+            DiffHunkDto? currentHunk = null;
             int index = 0;
 
             foreach (var rawLine in lines)
@@ -96,12 +96,12 @@ namespace BtoanAiNet.Services
             var oldLines = (oldContent ?? string.Empty).Split('\n').Select(l => l.TrimEnd('\r')).ToList();
 
             int acceptedSet = acceptedHunkIndices?.Count ?? 0;
-            if (acceptedSet == 0) return oldContent;
+            if (acceptedSet == 0) return oldContent ?? string.Empty;
 
             int oldIndex = 0;
             foreach (var hunk in hunks)
             {
-                bool isAccepted = acceptedHunkIndices.Contains(hunk.Index);
+                bool isAccepted = acceptedHunkIndices != null && acceptedHunkIndices.Contains(hunk.Index);
 
                 foreach (var line in hunk.Lines)
                 {

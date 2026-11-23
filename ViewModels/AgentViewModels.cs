@@ -92,4 +92,11 @@ namespace BtoanAiNet.ViewModels
         public int ProjectId { get; set; }
         public string Command { get; set; } = string.Empty;
     }
+
+    public class AgentToolLoopRequestModel
+    {
+        public int ProjectId { get; set; }
+        public string Prompt { get; set; } = string.Empty;
+        public int MaxTurns { get; set; } = 5;
+    }
 }

@@ -1,5 +1,19 @@
+
+function dataURLToBlob(dataurl) {
+    if (!dataurl) return new Blob([], { type: 'image/jpeg' });
+    const arr = dataurl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const bstr = atob(arr.length > 1 ? arr[1] : arr[0]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+}
 // ====== cấu hình ======
-const WORKER_URL = "/ai/api/chat.php";
+const WORKER_URL = "/api/chat";
 
 // 📱 MOBILE VIEWPORT HEIGHT FIX
 function setAppHeight() {
@@ -11,7 +25,7 @@ window.addEventListener('resize', setAppHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppHeight);
 setAppHeight();
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.1-flash-lite";
 const TEMPERATURE = 0.5;
 const MAX_OUTPUT_TOKENS = 20000;
 const REQUEST_TIMEOUT_MS = 600000;
@@ -138,15 +152,59 @@ function userWantsExport(text = "") {
         "xuất file",
         "tải file",
         "file word",
+        "bỏ vào word",
+        "cho vào word",
+        "vào word",
+        "bỏ vào excel",
+        "cho vào excel",
+        "vào excel",
+        "bỏ vào ppt",
+        "bỏ vào powerpoint",
+        "cho vào ppt",
+        "vào ppt",
         "docx",
         "pdf",
+        "xlsx",
+        "pptx",
         "txt",
         "lưu file",
         "tạo file",
         "download file",
         "xuất word",
-        "xuất docx"
+        "xuất docx",
+        "tạo tài liệu",
+        "xuất tài liệu"
     ].some(k => t.includes(k))
+}
+
+function detectExportType(text = "") {
+    const t = String(text || "").toLowerCase();
+    if (t.includes("excel") || t.includes("xlsx") || t.includes("bảng tính")) return "xlsx";
+    if (t.includes("powerpoint") || t.includes("pptx") || t.includes("slide") || t.includes("thuyết trình")) return "pptx";
+    if (t.includes("pdf")) return "pdf";
+    return "docx";
+}
+
+function getFallbackExportContent(currentReply) {
+    const cleaned = cleanBotText(currentReply);
+    if (isValidForExport(cleaned)) return cleaned;
+
+    if (isValidForExport(lastExportContent)) return lastExportContent;
+
+    if (Array.isArray(chatHistoryBuffer) && chatHistoryBuffer.length > 0) {
+        for (let idx = chatHistoryBuffer.length - 1; idx >= 0; idx--) {
+            const item = chatHistoryBuffer[idx];
+            if (item && item.role === "model" && Array.isArray(item.parts) && item.parts.length > 0) {
+                const t = cleanBotText(item.parts[0]?.text || "");
+                if (isValidForExport(t)) {
+                    return t;
+                }
+            }
+        }
+    }
+
+    if (isValidForExport(lastAIAnswer)) return lastAIAnswer;
+    return "";
 }
 
 document.addEventListener("touchend", (e) => {
@@ -307,6 +365,7 @@ function createMessageActions({ text, exportType = null, onExport = null }) {
 function cleanBotText(text) {
     if (!text) return "";
     return text
+        .replace(/\[ARTIFACT(?:\s+[^\]]*)?\][\s\S]*?\[\/ARTIFACT\]/gi, "")
         .replace(/\[GENIMAGE\].*?(\n|$)/gi, "")
         .replace(/\[GENVIDEO\].*?(\n|$)/gi, "")
         .replace(/\[GENMUSIC\].*?(\n|$)/gi, "")
@@ -317,26 +376,42 @@ function cleanBotText(text) {
 }
 
 function addBotBubble(text, exportType = null) {
-    if (!chatEl) return
+    if (!chatEl) return;
+
+    const artifacts = typeof extractArtifacts === "function" ? extractArtifacts(text) : [];
+    if (artifacts.length === 0 && (exportType || (typeof userWantsExport === "function" && (userWantsExport(lastUserMessage) || userWantsExport(text))))) {
+        const fallbackText = typeof getFallbackExportContent === "function" ? getFallbackExportContent(text) : (lastExportContent || lastAIAnswer || cleanBotText(text));
+        if (typeof isValidForExport === "function" && isValidForExport(fallbackText)) {
+            artifacts.push({
+                type: exportType || (typeof detectExportType === "function" ? detectExportType(lastUserMessage || text) : "docx"),
+                title: "Tài liệu hoàn chỉnh",
+                content: fallbackText
+            });
+        }
+    }
 
     const cleanedText = cleanBotText(text);
-    if (!cleanedText.trim() && !exportType) return; // 🔥 KHÔNG TẠO Ô CHAT NẾU CHỈ CÓ MEDIA
+    if (!cleanedText.trim() && !exportType && artifacts.length === 0) return; // 🔥 KHÔNG TẠO Ô CHAT NẾU CHỈ CÓ MEDIA
 
-    const row = document.createElement("div")
-    row.className = "msgrow bot"
+    const row = document.createElement("div");
+    row.className = "msgrow bot";
 
-    const bubble = document.createElement("div")
-    bubble.className = "bubble position-relative"
+    const bubble = document.createElement("div");
+    bubble.className = "bubble position-relative";
 
-    const content = document.createElement("div")
-    content.className = "message-content"
-    content.innerHTML = marked.parse(cleanedText || "")
-    bubble.appendChild(content)
+    const content = document.createElement("div");
+    content.className = "message-content";
+    content.innerHTML = marked.parse(cleanedText || (artifacts.length > 0 ? "Dưới đây là tài liệu bạn yêu cầu:" : ""));
+    bubble.appendChild(content);
 
-    bubble.appendChild(createMessageActions({ text: cleanedText || text, exportType }))
+    if (artifacts.length > 0 && typeof renderArtifactCards === "function") {
+        renderArtifactCards(bubble, artifacts);
+    } else {
+        bubble.appendChild(createMessageActions({ text: cleanedText || text, exportType }));
+    }
 
-    row.appendChild(bubble)
-    chatEl.appendChild(row)
+    row.appendChild(bubble);
+    chatEl.appendChild(row);
 
     /* highlight code */
     bubble.querySelectorAll("pre code").forEach(el => {
@@ -406,104 +481,132 @@ function normalizeMathText(text) {
 }
 
 function streamBot(text, exportType = null) {
+    const artifacts = typeof extractArtifacts === "function" ? extractArtifacts(text) : [];
+    if (artifacts.length === 0 && (exportType || (typeof userWantsExport === "function" && (userWantsExport(lastUserMessage) || userWantsExport(text))))) {
+        const fallbackText = typeof getFallbackExportContent === "function" ? getFallbackExportContent(text) : (lastExportContent || lastAIAnswer || cleanBotText(text));
+        if (typeof isValidForExport === "function" && isValidForExport(fallbackText)) {
+            artifacts.push({
+                type: exportType || (typeof detectExportType === "function" ? detectExportType(lastUserMessage || text) : "docx"),
+                title: "Tài liệu hoàn chỉnh",
+                content: fallbackText
+            });
+        }
+    }
+
     const cleanedFullText = cleanBotText(text);
-    if (!cleanedFullText.trim()) return;
+    if (!cleanedFullText.trim() && artifacts.length === 0) return;
 
     const normalizedText = normalizeMathText(text);
 
-    const row = document.createElement("div")
-    row.className = "msgrow bot"
+    const row = document.createElement("div");
+    row.className = "msgrow bot";
 
-    const bubble = document.createElement("div")
-    bubble.className = "bubble position-relative"
+    const bubble = document.createElement("div");
+    bubble.className = "bubble position-relative";
 
-    const content = document.createElement("div")
-    content.className = "message-content"
+    const content = document.createElement("div");
+    content.className = "message-content";
 
-    bubble.appendChild(content)
-    bubble.appendChild(createMessageActions({ text, exportType }))
+    bubble.appendChild(content);
 
-    row.appendChild(bubble)
-    chatEl.appendChild(row)
+    if (artifacts.length === 0) {
+        bubble.appendChild(createMessageActions({ text, exportType }));
+    }
 
-    console.log(performance.now(), "[STREAMBOT START]", "text.length =", text.length, "normalizedText.length =", normalizedText.length);
+    row.appendChild(bubble);
+    chatEl.appendChild(row);
 
-    let i = 0
+    // If artifacts exist, render conversational text immediately and attach Artifact Cards
+    if (artifacts.length > 0) {
+        const displayIntro = cleanedFullText.trim() || "Dưới đây là tài liệu bạn yêu cầu:";
+        try {
+            content.innerHTML = marked.parse(displayIntro);
+        } catch {
+            content.textContent = displayIntro;
+        }
+        if (typeof renderArtifactCards === "function") {
+            renderArtifactCards(bubble, artifacts);
+        }
+        chatEl.scrollTop = chatEl.scrollHeight;
+        isSending = false;
+        return;
+    }
+
+    let i = 0;
+    const totalLen = normalizedText.length;
+
+    // Phản hồi ngắn dưới 80 ký tự -> hiển thị ngay tức thì
+    if (totalLen < 80) {
+        const cleanedCurrent = cleanBotText(normalizedText);
+        try {
+            const escaped = typeof escapeUnsafeTags === "function" ? escapeUnsafeTags(cleanedCurrent) : cleanedCurrent;
+            const parsedHtml = marked.parse(escaped).replace(/language-j /g, "language-java");
+            content.innerHTML = parsedHtml;
+        } catch (markedErr) {
+            content.textContent = cleanedCurrent;
+        }
+        chatEl.scrollTop = chatEl.scrollHeight;
+        isSending = false;
+        return;
+    }
+
+    // Tăng tốc độ stream theo chunk mượt mà, tránh nghẽn luồng render
+    const step = Math.max(4, Math.ceil(totalLen / 45));
+
     const timer = setInterval(() => {
+        i += step;
+        if (i > totalLen) i = totalLen;
+
         const currentText = normalizedText.substring(0, i);
         const cleanedCurrent = cleanBotText(currentText);
-        
-        if (i % 200 === 0 || i === text.length - 1) {
-            console.log(performance.now(), "[STREAM]", i, "/", text.length);
-        }
 
         try {
-            const parsedHtml = marked.parse(cleanedCurrent)
-                .replace(/language-j\b/g, "language-java");
-            
+            const escaped = typeof escapeUnsafeTags === "function" ? escapeUnsafeTags(cleanedCurrent) : cleanedCurrent;
+            const parsedHtml = marked.parse(escaped)
+                .replace(/language-j/g, "language-java");
             content.innerHTML = parsedHtml;
-
-            if (i % 200 === 0 || i === text.length - 1) {
-                console.log(performance.now(), "[INNERHTML SET]", content.innerHTML.length);
-            }
         } catch (markedErr) {
-            console.error(performance.now(), "[MARKED PARSE EXCEPTION AT i=" + i + "]", markedErr.stack || markedErr);
+            content.textContent = cleanedCurrent;
         }
 
-        /* highlight realtime */
-        content.querySelectorAll("pre code").forEach(el => {
-            hljs.highlightElement(el)
-        })
+        chatEl.scrollTop = chatEl.scrollHeight;
 
-        chatEl.scrollTop = chatEl.scrollHeight
+        if (i >= totalLen) {
+            clearInterval(timer);
+            isSending = false;
 
-        i++
-
-        if (i >= text.length) {
-
-            clearInterval(timer)
-
-            console.log(performance.now(), "[STREAMBOT STOPPED]", i, "/", text.length);
-            console.log(performance.now(), "[INNERHTML FINAL]", content.innerHTML.length);
-
-            isSending = false
+            // Highlight syntax 1 lần duy nhất sau khi stream xong để tiết kiệm tài nguyên
             content.querySelectorAll("pre code").forEach(el => {
-                hljs.highlightElement(el)
-            })
+                try { hljs.highlightElement(el); } catch(e){}
+            });
 
             content.querySelectorAll("pre").forEach(block => {
-                if (block.querySelector(".copy-code-btn")) return
+                if (block.querySelector(".copy-code-btn")) return;
 
-                const btn = document.createElement("button")
-                btn.className = "copy-code-btn"
-                btn.innerHTML = `<i class="bi bi-copy"></i> Copy code`
+                const btn = document.createElement("button");
+                btn.className = "copy-code-btn";
+                btn.innerHTML = `<i class="bi bi-copy"></i> Copy code`;
 
                 btn.onclick = (e) => {
                     e.stopPropagation();
-                    const code = block.querySelector("code")?.innerText || block.innerText
-                    navigator.clipboard.writeText(code)
+                    const code = block.querySelector("code")?.innerText || block.innerText;
+                    navigator.clipboard.writeText(code);
 
-                    btn.innerHTML = `<i class="bi bi-check2"></i> Copied`
+                    btn.innerHTML = `<i class="bi bi-check2"></i> Copied`;
                     setTimeout(() => {
-                        btn.innerHTML = `<i class="bi bi-copy"></i> Copy code`
-                    }, 2000)
-                }
-                block.appendChild(btn)
-            })
+                        btn.innerHTML = `<i class="bi bi-copy"></i> Copy code`;
+                    }, 2000);
+                };
+                block.appendChild(btn);
+            });
 
-            /* math */
-            console.log(performance.now(), "[MATHJAX PROMISE BEFORE]");
             if (window.MathJax) {
-                MathJax.typesetPromise([bubble]).then(() => {
-                    console.log(performance.now(), "[MATHJAX PROMISE RESOLVED]");
-                }).catch(mjErr => {
-                    console.error(performance.now(), "[MATHJAX PROMISE REJECTED]", mjErr);
-                });
+                try {
+                    MathJax.typesetPromise([bubble]).catch(mjErr => {});
+                } catch(e){}
             }
-
         }
-
-    }, 5)
+    }, 16);
 }
 
 
@@ -529,35 +632,51 @@ async function callGemini(userText, images, files) {
         ? "\nBạn đang có dữ liệu từ internet. Trả lời luôn, KHÔNG được search nữa.\n"
         : "";
 
-    const payload = {
-        contents: [
-            {
-                role: "user",
-                parts: [
-                    { text: systemInstruction + thinkingPrompt + toolInstruction + (userText.toLowerCase().match(/video|clip|phim|animate|chuyển động/) ? "\nLƯU Ý: Người dùng đang yêu cầu VIDEO. Bạn phải dùng tag [GENVIDEO]. TUYỆT ĐỐI KHÔNG dùng [GENIMAGE] lúc này.\n" : "") }
-                ]
-            },
-
-            // KHÔNG gửi history từ client
-            {
-                role: "user",
-                parts: [
-                    { text: userText },
-
-                    ...files.map(f => ({
-                        text: "File " + f.name + ":\n" + f.content
-                    })),
-
-                    ...images.map(img => ({
-                        inline_data: {
-                            mime_type: img.startsWith("data:image/png") ? "image/png" : "image/jpeg",
-                            data: img.split(",")[1]
-                        }
-                    }))
-                ]
+    // Build multi-turn contents from chatHistoryBuffer + current turn
+    const allContents = [];
+    if (Array.isArray(chatHistoryBuffer) && chatHistoryBuffer.length > 0) {
+        // Gửi tối đa 10 tin nhắn gần nhất (5 lượt trao đổi) để giữ mạch hội thoại
+        const recentHistory = chatHistoryBuffer.slice(-10);
+        for (const item of recentHistory) {
+            if (item && item.role && Array.isArray(item.parts) && item.parts.length > 0) {
+                allContents.push({
+                    role: item.role,
+                    parts: item.parts.map(p => ({ ...p }))
+                });
             }
-        ],
+        }
+    }
 
+    // Context fallback: if history was empty but lastAIAnswer exists and user asks to export/save
+    const lowerUTxt = (userText || "").toLowerCase();
+    const isExportIntent = lowerUTxt.includes("word") || lowerUTxt.includes("xuất") || lowerUTxt.includes("file") || lowerUTxt.includes("pdf");
+    if (allContents.length === 0 && lastAIAnswer && isExportIntent) {
+        allContents.push({
+            role: "model",
+            parts: [{ text: lastAIAnswer }]
+        });
+    }
+
+    const currentTurnParts = [
+        { text: userText },
+        ...files.map(f => ({
+            text: "File " + f.name + ":\n" + f.content
+        })),
+        ...images.map(img => ({
+            inline_data: {
+                mime_type: img.startsWith("data:image/png") ? "image/png" : "image/jpeg",
+                data: img.split(",")[1]
+            }
+        }))
+    ];
+
+    allContents.push({
+        role: "user",
+        parts: currentTurnParts
+    });
+
+    const payload = {
+        contents: allContents,
         generationConfig: {
             temperature: isThinking ? 0.7 : 0.5,
             maxOutputTokens: isThinking ? 20000 : 8192
@@ -580,8 +699,11 @@ async function callGemini(userText, images, files) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: MODEL,
-                payload: payload,
+                model: mode === "thinking" ? "gemini-3.5-flash" : "gemini-3.1-flash-lite",
+                payload: {
+                    ...payload,
+                    mode: mode
+                },
                 user_id: localStorage.getItem("user_id"),
                 conversation_id: conversation_id,
                 intent: detectedIntent
@@ -835,21 +957,21 @@ async function send() {
         let exportType = null
         let rawReply = reply   // 🔥 giữ bản gốc
 
-        if (rawReply.includes("[EXPORT]")) {
-            const parts = rawReply.split("[EXPORT]")
-            reply = parts[0].trim()
-            exportType = parts[1].trim().toLowerCase()
+        const exportMatch = rawReply.match(/(?:^|\n)\[EXPORT\]\s*(docx|pdf|txt|html|xlsx)\s*$/i);
+        if (exportMatch) {
+            exportType = exportMatch[1].toLowerCase();
+            reply = rawReply.replace(/(?:^|\n)\[EXPORT\]\s*(docx|pdf|txt|html|xlsx)\s*$/i, "").trim();
 
             if (isValidForExport(reply)) {
-                lastExportContent = reply
-                localStorage.setItem("lastExportContent", reply)
+                lastExportContent = reply;
+                localStorage.setItem("lastExportContent", reply);
             }
         } else {
-            lastAIAnswer = reply
+            lastAIAnswer = reply;
 
             if (isValidForExport(reply)) {
-                lastExportContent = reply
-                localStorage.setItem("lastExportContent", reply)
+                lastExportContent = reply;
+                localStorage.setItem("lastExportContent", reply);
             }
         }
 
@@ -923,68 +1045,47 @@ async function send() {
                 const textToStore = fullText || "Mô tả ảnh:";
                 console.log("[IMAGE REQUEST FROM UI]", imagePrompt);
 
-                let imageSrc = null;
+                const imgRes = await fetch("/ai/api/generate_image.php", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        prompt: imagePrompt,
+                        conversation_id,
+                        user_id: Number(localStorage.getItem("user_id") || 0),
+                        assistant_text: textToStore
+                    })
+                });
 
-                // Priority 1: High quality unwatermarked generation via Puter.js (FLUX/SDXL, no logo)
-                if (window.puter && window.puter.ai && typeof window.puter.ai.txt2img === "function") {
-                    try {
-                        console.log("[IMAGE] Generating via Puter.js (FLUX/unwatermarked)...");
-                        const imgElem = await puter.ai.txt2img(imagePrompt);
-                        if (imgElem && imgElem.src) {
-                            imageSrc = imgElem.src;
-                            console.log("[IMAGE] Puter.js generated successfully without watermark!");
-                        }
-                    } catch (puterErr) {
-                        console.warn("[IMAGE] Puter.js failed, falling back to backend:", puterErr);
-                    }
-                }
-
-                // Priority 2: Backend API fallback (Pollinations with nologo / enhanced prompt)
-                if (!imageSrc) {
-                    const imgRes = await fetch("/ai/api/generate_image.php", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            prompt: imagePrompt,
-                            conversation_id,
-                            user_id: Number(localStorage.getItem("user_id") || 0),
-                            assistant_text: textToStore
-                        })
-                    });
-
-                    const rawText = await imgRes.text();
-                    let imgData = JSON.parse(rawText);
-                    console.log("[IMAGE FINAL RESPONSE]", imgData);
-
-                    if (imgRes.ok && imgData?.success) {
-                        const cleanMimeType = String(imgData.mimeType || "image/png").trim();
-                        const cleanBase64 = String(imgData.imageBase64 || "").replace(/\s+/g, "");
-                        imageSrc = `data:${cleanMimeType};base64,${cleanBase64}`;
-                    } else {
-                        throw new Error(imgData?.error || "Lỗi tạo ảnh");
-                    }
-                }
-
+                const rawText = await imgRes.text();
                 imgLoading.remove();
 
-                if (imageSrc) {
+                let imgData = JSON.parse(rawText);
+                console.log("[IMAGE FINAL RESPONSE]", imgData);
+
+                if (imgRes.ok && imgData?.success) {
+                    const cleanMimeType = String(imgData.mimeType || "image/png").trim();
+                    const cleanBase64 = String(imgData.imageBase64 || "").replace(/\s+/g, "");
+                    const imageSrc = `data:${cleanMimeType};base64,${cleanBase64}`;
+
                     const row = document.createElement("div");
                     row.className = "msgrow bot";
                     row.innerHTML = `
                         <div class="bubble image-bubble-premium">
                             <div class="image-wrapper-premium">
-                                <img src="${imageSrc}" alt="Generated image" onclick="viewImage('${imageSrc}')">
-                                <a href="${imageSrc}" download="btoan_ai_image.png" class="image-download-btn-premium" title="Tải ảnh">
+                                <img src="${imageSrc}" alt="Generated image" onclick="viewCleanImage('${imageSrc}')">
+                                <button onclick="downloadCleanImage('${imageSrc}', 'btoan_ai_image.png', event)" class="image-download-btn-premium border-0" title="Tải ảnh">
                                     <i class="bi bi-download"></i>
-                                </a>
+                                </button>
                             </div>
                         </div>
                     `;
                     chatEl.appendChild(row);
+                } else {
+                    addBotBubble("❌ Lỗi vẽ ảnh: " + (imgData?.error || "Lỗi không xác định"));
                 }
             } catch (e) {
                 imgLoading.remove();
-                addBotBubble("❌ Lỗi vẽ ảnh: " + e.message);
+                addBotBubble("❌ Lỗi kết nối khi vẽ ảnh: " + e.message);
             }
 
             isSending = false;
@@ -1343,7 +1444,8 @@ async function login() {
         newChat()
 
     } else {
-        document.getElementById("loginMsg").innerText = "Sai tài khoản hoặc mật khẩu";
+        const errorText = data.error || data.message || "Sai tài khoản hoặc mật khẩu";
+        document.getElementById("loginMsg").innerText = errorText;
     }
 
 }
@@ -1592,10 +1694,10 @@ async function loadConversation(id, updateUrl = true) {
                 } else {
                     let text = m.text
                     let exportType = null
-                    if (text.includes("[EXPORT]")) {
-                        const parts = text.split("[EXPORT]")
-                        text = parts[0].trim()
-                        exportType = parts[1].trim().toLowerCase()
+                    const expMatch = text.match(/(?:^|\n)\[EXPORT\]\s*(docx|doc|pdf|txt|md|html|xlsx)\s*$/i);
+                    if (expMatch) {
+                        exportType = expMatch[1].toLowerCase();
+                        text = text.replace(/(?:^|\n)\[EXPORT\]\s*(docx|doc|pdf|txt|md|html|xlsx)\s*$/i, "").trim();
                     }
                     if (
                         isValidForExport(text) &&
@@ -1970,8 +2072,7 @@ document.getElementById("pickCamera")?.addEventListener("click", async () => {
 
         if (base64) {
 
-            const res = await fetch(base64)
-            const blob = await res.blob()
+            const blob = dataURLToBlob(base64)
 
             const file = new File([blob], "camera.jpg", { type: "image/jpeg" })
 
@@ -2377,14 +2478,17 @@ function fixLatex(text) {
 
 }
 function isValidForExport(text) {
+    if (!text || typeof text !== "string") return false;
+    const trimmed = text.trim();
+    if (trimmed.length < 20) return false;
 
-    if (text.length < 50) return false
+    // Chỉ chặn nếu là câu chào hỏi, đồng ý ngắn cụt lủn
+    if (/^(ủa|ok|ừ|ờ|hello|hi|chào bạn|cảm ơn|dạ|vâng)[\s\.,!?]*$/i.test(trimmed)) return false;
 
-    if (/ủa|ok|ừ|ờ|hello|hi/i.test(text)) return false
+    // Chặn nếu là câu hỏi ngược lại người dùng muốn làm gì
+    if (trimmed.length < 150 && /bạn muốn.*(gì|nhỉ\?)/i.test(trimmed) && trimmed.includes("?")) return false;
 
-    if (text.includes("?")) return false
-
-    return true
+    return true;
 }
 function cleanExportContent(text) {
     return String(text || "")
@@ -2452,6 +2556,21 @@ async function checkProfile(user_id) {
         "linear-gradient(135deg,#ef4444,#dc2626)"
     ]
     avatarEl.style.background = colors[name.length % colors.length]
+
+    // Đồng bộ thông tin user vào Card dưới cùng của Sidebar
+    const sidebarNameEl = document.getElementById("sidebarUserName");
+    if (sidebarNameEl) sidebarNameEl.innerText = name;
+    const sidebarRoleEl = document.getElementById("sidebarUserRole");
+    if (sidebarRoleEl) sidebarRoleEl.innerText = data.role || "Developer / Member";
+    const sidebarAvatarEl = document.getElementById("sidebarUserAvatar");
+    if (sidebarAvatarEl) {
+        if (data.avatar) {
+            sidebarAvatarEl.innerHTML = `<img src="${data.avatar}?t=${Date.now()}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+        } else {
+            sidebarAvatarEl.innerText = name.charAt(0).toUpperCase();
+            sidebarAvatarEl.style.background = colors[name.length % colors.length];
+        }
+    }
 
     // 💾 lưu lại full_name để dùng sau
     if (fullName) {
@@ -2560,6 +2679,11 @@ async function saveProfile() {
         if (userName) userName.innerText = full_name
         if (avatar) avatar.innerText = full_name.charAt(0).toUpperCase()
 
+        const sidebarNameEl = document.getElementById("sidebarUserName");
+        if (sidebarNameEl) sidebarNameEl.innerText = full_name;
+        const sidebarAvatarEl = document.getElementById("sidebarUserAvatar");
+        if (sidebarAvatarEl) sidebarAvatarEl.innerText = full_name.charAt(0).toUpperCase();
+
         // ===== ĐÓNG MODAL =====
         const modal = document.getElementById("profileModal")
         if (modal) modal.style.display = "none"
@@ -2587,7 +2711,7 @@ document.addEventListener("focusin", (e) => {
 function handleGoogleLogin(response) {
     const id_token = response.credential;
 
-    fetch("ai/api/google-login.php", {
+    fetch("/ai/api/google-login.php", {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -2630,6 +2754,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const loginBox = document.getElementById("loginBox");
     if (loginBox) loginBox.style.display = "none";
 
+    // Đồng bộ tức thì thông tin từ localStorage vào Sidebar & Header để không bị nháy chữ 'User'
+    const cachedName = localStorage.getItem("full_name") || localStorage.getItem("username");
+    if (cachedName) {
+        const sName = document.getElementById("sidebarUserName");
+        if (sName) sName.innerText = cachedName;
+        const sAvatar = document.getElementById("sidebarUserAvatar");
+        if (sAvatar) sAvatar.innerText = cachedName.charAt(0).toUpperCase();
+        const uName = document.getElementById("userName");
+        if (uName) uName.innerText = cachedName;
+        const uAvatar = document.getElementById("userAvatar");
+        if (uAvatar) uAvatar.innerText = cachedName.charAt(0).toUpperCase();
+    }
+
     const uid = localStorage.getItem("user_id");
 
     // Check if URL has conversation ID path e.g. /c/30002
@@ -2655,6 +2792,10 @@ document.addEventListener("DOMContentLoaded", () => {
 function openLoginModal() {
     const box = document.getElementById("loginBox");
     if (box) box.style.display = "flex";
+}
+
+if (typeof window !== "undefined" && window.location.search.includes("login=1")) {
+    setTimeout(openLoginModal, 300);
 }
 
 function closeLoginModal() {

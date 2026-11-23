@@ -6,7 +6,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Visual Studio Code Web - Btoan Cloud IDE</title>
+    <title>BtoanAiNet - Antigravity IDE</title>
 
     <!-- Bootstrap 5 & Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -20,268 +20,808 @@
     </script>
 
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- xterm.js & FitAddon CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@xterm/xterm@@5.5.0/css/xterm.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/xterm@@5.5.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-fit@@0.10.0/lib/addon-fit.min.js"></script>
+
+    <!-- Microsoft SignalR CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.7/dist/browser/signalr.min.js"></script>
 
     <!-- Monaco Editor AMD Loader -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
-    <!-- VS Code Web Dark Theme CSS -->
-    <link rel="stylesheet" href="/css/agent_ide.css?v=20" />
+    <!-- Antigravity IDE Dark Modern CSS -->
+    <link rel="stylesheet" href="~/css/agent_ide.css" asp-append-version="true" />
 </head>
 <body class="agent-ide-body">
 
-    <!-- 1. TOP MENU BAR -->
+    <!-- 1. TOP MENU / TITLE BAR (Height 35px, #181818) -->
     <header class="vscode-top-bar">
-        <div class="d-flex align-items-center gap-2">
-            <!-- Back to Chat Button & Logo -->
-            <a href="/" class="d-flex align-items-center text-decoration-none text-info fs-6 me-1 py-1 px-2 rounded hover-bg-dark" title="Quay lại giao diện Chat">
-                <i class="bi bi-chevron-left me-1"></i> <span style="font-size: 11px; font-weight: 600;">Về Chat</span>
+        <!-- Left: Navigation, Menus & Navigation History -->
+        <div class="d-flex align-items-center gap-1">
+            <a href="/" class="top-nav-back-btn" title="Quay lại giao diện Chat">
+                <i class="bi bi-arrow-left me-1"></i> <span>Chat</span>
             </a>
-            <div class="d-flex align-items-center text-primary fs-6 me-1">
-                <i class="bi bi-microsoft"></i>
+            <div class="top-menu-brand me-1">
+                <i class="bi bi-stars text-info"></i>
             </div>
-            <!-- Menus -->
-            <div class="d-flex align-items-center gap-1">
-                <span class="top-bar-menu-item">File</span>
-                <span class="top-bar-menu-item">Edit</span>
-                <span class="top-bar-menu-item">Selection</span>
-                <span class="top-bar-menu-item">View</span>
-                <span class="top-bar-menu-item">Go</span>
-                <span class="top-bar-menu-item">Run</span>
-                <span class="top-bar-menu-item">...</span>
+            <!-- Menus with Interactive Dropdowns -->
+            <div class="top-bar-menus position-relative">
+                <!-- File Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('file', event)" onmouseenter="onMenuItemHover('file')">File</span>
+                    <div id="topMenuFile" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="openCreateFileModal(); closeAllTopMenus();">
+                            <span><i class="bi bi-file-earmark-plus me-2 text-primary"></i>New File...</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="openCreateFolderModal(); closeAllTopMenus();">
+                            <span><i class="bi bi-folder-plus me-2 text-warning"></i>New Folder...</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="triggerFolderUpload(); closeAllTopMenus();">
+                            <span><i class="bi bi-cloud-arrow-up me-2 text-info"></i>Upload Folder...</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="triggerFilesUpload(); closeAllTopMenus();">
+                            <span><i class="bi bi-file-earmark-arrow-up me-2 text-info"></i>Upload Files...</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="saveCurrentFile(); closeAllTopMenus();">
+                            <span><i class="bi bi-save me-2 text-success"></i>Save</span>
+                            <span class="dropdown-shortcut">Ctrl+S</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="saveAllDirtyFiles(); closeAllTopMenus();">
+                            <span><i class="bi bi-files me-2 text-info"></i>Save All</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+S</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="toggleAutoSave(); closeAllTopMenus();">
+                            <span><i id="autoSaveCheckIcon" class="bi bi-check2 me-2 text-success" style="visibility: hidden;"></i>Auto Save</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="downloadCurrentProjectZip(); closeAllTopMenus();">
+                            <span><i class="bi bi-file-earmark-zip me-2 text-warning"></i>Download Project (.zip)</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="closeCurrentTab(); closeAllTopMenus();">
+                            <span><i class="bi bi-x-circle me-2 text-secondary"></i>Close Editor</span>
+                            <span class="dropdown-shortcut">Ctrl+W</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Edit Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('edit', event)" onmouseenter="onMenuItemHover('edit')">Edit</span>
+                    <div id="topMenuEdit" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="editorUndo(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-counterclockwise me-2 text-info"></i>Undo</span>
+                            <span class="dropdown-shortcut">Ctrl+Z</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorRedo(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-clockwise me-2 text-info"></i>Redo</span>
+                            <span class="dropdown-shortcut">Ctrl+Y</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="editorCut(); closeAllTopMenus();">
+                            <span><i class="bi bi-scissors me-2 text-secondary"></i>Cut</span>
+                            <span class="dropdown-shortcut">Ctrl+X</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorCopy(); closeAllTopMenus();">
+                            <span><i class="bi bi-clipboard me-2 text-secondary"></i>Copy</span>
+                            <span class="dropdown-shortcut">Ctrl+C</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorPaste(); closeAllTopMenus();">
+                            <span><i class="bi bi-clipboard-check me-2 text-secondary"></i>Paste</span>
+                            <span class="dropdown-shortcut">Ctrl+V</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="editorFind(); closeAllTopMenus();">
+                            <span><i class="bi bi-search me-2 text-primary"></i>Find</span>
+                            <span class="dropdown-shortcut">Ctrl+F</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorReplace(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-repeat me-2 text-warning"></i>Replace</span>
+                            <span class="dropdown-shortcut">Ctrl+H</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="switchActivityTab('search'); closeAllTopMenus();">
+                            <span><i class="bi bi-search me-2 text-primary"></i>Find in Files</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+F</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selection Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('selection', event)" onmouseenter="onMenuItemHover('selection')">Selection</span>
+                    <div id="topMenuSelection" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="editorSelectAll(); closeAllTopMenus();">
+                            <span><i class="bi bi-check-all me-2 text-primary"></i>Select All</span>
+                            <span class="dropdown-shortcut">Ctrl+A</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorExpandSelection(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrows-angle-expand me-2 text-info"></i>Expand Selection</span>
+                            <span class="dropdown-shortcut">Shift+Alt+→</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorShrinkSelection(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrows-angle-contract me-2 text-info"></i>Shrink Selection</span>
+                            <span class="dropdown-shortcut">Shift+Alt+←</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="editorCopyLineUp(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-up-square me-2 text-secondary"></i>Copy Line Up</span>
+                            <span class="dropdown-shortcut">Shift+Alt+↑</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorCopyLineDown(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-down-square me-2 text-secondary"></i>Copy Line Down</span>
+                            <span class="dropdown-shortcut">Shift+Alt+↓</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorMoveLineUp(); closeAllTopMenus();">
+                            <span><i class="bi bi-chevron-up me-2 text-secondary"></i>Move Line Up</span>
+                            <span class="dropdown-shortcut">Alt+↑</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorMoveLineDown(); closeAllTopMenus();">
+                            <span><i class="bi bi-chevron-down me-2 text-secondary"></i>Move Line Down</span>
+                            <span class="dropdown-shortcut">Alt+↓</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="editorAddCursorAbove(); closeAllTopMenus();">
+                            <span><i class="bi bi-cursor-fill me-2 text-warning"></i>Add Cursor Above</span>
+                            <span class="dropdown-shortcut">Ctrl+Alt+↑</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorAddCursorBelow(); closeAllTopMenus();">
+                            <span><i class="bi bi-cursor me-2 text-warning"></i>Add Cursor Below</span>
+                            <span class="dropdown-shortcut">Ctrl+Alt+↓</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorSelectNextOccurrence(); closeAllTopMenus();">
+                            <span><i class="bi bi-list-check me-2 text-success"></i>Add Next Occurrence</span>
+                            <span class="dropdown-shortcut">Ctrl+D</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('view', event)" onmouseenter="onMenuItemHover('view')">View</span>
+                    <div id="topMenuView" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="openQuickOpenModal(); closeAllTopMenus();">
+                            <span><i class="bi bi-terminal me-2 text-primary"></i>Command Palette...</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+P</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="switchActivityTab('explorer'); closeAllTopMenus();">
+                            <span><i class="bi bi-files me-2 text-secondary"></i>Explorer</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+E</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="switchActivityTab('search'); closeAllTopMenus();">
+                            <span><i class="bi bi-search me-2 text-secondary"></i>Search</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+F</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="switchActivityTab('git'); closeAllTopMenus();">
+                            <span><i class="bi bi-git me-2 text-secondary"></i>Source Control</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+G</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="switchActivityTab('run'); closeAllTopMenus();">
+                            <span><i class="bi bi-play-circle me-2 text-secondary"></i>Run & Debug</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+D</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="toggleLeftSidebar(); closeAllTopMenus();">
+                            <span><i class="bi bi-layout-sidebar me-2 text-info"></i>Toggle Primary Sidebar</span>
+                            <span class="dropdown-shortcut">Ctrl+B</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="toggleBottomPanel(); closeAllTopMenus();">
+                            <span><i class="bi bi-layout-split me-2 text-info"></i>Toggle Panel</span>
+                            <span class="dropdown-shortcut">Ctrl+J</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="toggleRightAgentPanel(); closeAllTopMenus();">
+                            <span><i class="bi bi-stars me-2 text-info"></i>Toggle Antigravity Agent</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="toggleWordWrap(); closeAllTopMenus();">
+                            <span><i class="bi bi-text-wrap me-2 text-warning"></i>Toggle Word Wrap</span>
+                            <span class="dropdown-shortcut">Alt+Z</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="toggleMinimap(); closeAllTopMenus();">
+                            <span><i class="bi bi-map me-2 text-warning"></i>Toggle Minimap</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="zoomInEditor(); closeAllTopMenus();">
+                            <span><i class="bi bi-zoom-in me-2 text-light"></i>Zoom In</span>
+                            <span class="dropdown-shortcut">Ctrl+=</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="zoomOutEditor(); closeAllTopMenus();">
+                            <span><i class="bi bi-zoom-out me-2 text-light"></i>Zoom Out</span>
+                            <span class="dropdown-shortcut">Ctrl+-</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="resetZoomEditor(); closeAllTopMenus();">
+                            <span><i class="bi bi-aspect-ratio me-2 text-light"></i>Reset Zoom</span>
+                            <span class="dropdown-shortcut">Ctrl+0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Go Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('go', event)" onmouseenter="onMenuItemHover('go')">Go</span>
+                    <div id="topMenuGo" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="openQuickOpenModal(); closeAllTopMenus();">
+                            <span><i class="bi bi-file-earmark me-2 text-primary"></i>Go to File...</span>
+                            <span class="dropdown-shortcut">Ctrl+P</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorGotoLine(); closeAllTopMenus();">
+                            <span><i class="bi bi-list-ol me-2 text-info"></i>Go to Line/Column...</span>
+                            <span class="dropdown-shortcut">Ctrl+G</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="editorGotoSymbol(); closeAllTopMenus();">
+                            <span><i class="bi bi-braces me-2 text-warning"></i>Go to Symbol in Editor...</span>
+                            <span class="dropdown-shortcut">Ctrl+Shift+O</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="navigateTabBack(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-left me-2 text-secondary"></i>Back</span>
+                            <span class="dropdown-shortcut">Alt+←</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="navigateTabForward(); closeAllTopMenus();">
+                            <span><i class="bi bi-arrow-right me-2 text-secondary"></i>Forward</span>
+                            <span class="dropdown-shortcut">Alt+→</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Run Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('run', event)" onmouseenter="onMenuItemHover('run')">Run</span>
+                    <div id="topMenuRun" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="runBuildInTerminal(); closeAllTopMenus();">
+                            <span><i class="bi bi-play-fill me-2 text-success"></i>Build Project</span>
+                            <span class="dropdown-shortcut">dotnet build</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="runSmartAction(); closeAllTopMenus();">
+                            <span><i class="bi bi-lightning-charge me-2 text-warning"></i>Run Current File / App</span>
+                            <span class="dropdown-shortcut">F5</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="runTestInTerminal(); closeAllTopMenus();">
+                            <span><i class="bi bi-check2-circle me-2 text-info"></i>Run Tests</span>
+                            <span class="dropdown-shortcut">dotnet test</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="runCustomTerminalCmd('dotnet --version'); closeAllTopMenus();">
+                            <span><i class="bi bi-info-circle me-2 text-info"></i>Check .NET Version</span>
+                            <span class="dropdown-shortcut">dotnet --version</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="clearTerminalOutput(); closeAllTopMenus();">
+                            <span><i class="bi bi-trash me-2 text-secondary"></i>Clear Terminal</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terminal Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('terminal', event)" onmouseenter="onMenuItemHover('terminal')">Terminal</span>
+                    <div id="topMenuTerminal" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="switchBottomTab('terminal'); closeAllTopMenus();">
+                            <span><i class="bi bi-terminal me-2 text-info"></i>New Terminal</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="toggleBottomPanel(); closeAllTopMenus();">
+                            <span><i class="bi bi-layout-split me-2 text-secondary"></i>Toggle Terminal Panel</span>
+                            <span class="dropdown-shortcut">Ctrl+J</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="clearTerminalOutput(); closeAllTopMenus();">
+                            <span><i class="bi bi-trash me-2 text-secondary"></i>Clear Terminal</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Help Menu -->
+                <div class="top-bar-menu-wrapper">
+                    <span class="top-bar-menu-item" onclick="toggleTopMenu('help', event)" onmouseenter="onMenuItemHover('help')">Help</span>
+                    <div id="topMenuHelp" class="top-bar-dropdown-menu">
+                        <div class="top-bar-dropdown-item" onclick="showHelpQuickStart(); closeAllTopMenus();">
+                            <span><i class="bi bi-book me-2 text-primary"></i>Welcome & Quick Start</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="showHelpShortcuts(); closeAllTopMenus();">
+                            <span><i class="bi bi-keyboard me-2 text-info"></i>Keyboard Shortcuts Reference</span>
+                        </div>
+                        <div class="top-bar-dropdown-item" onclick="showHelpStatus(); closeAllTopMenus();">
+                            <span><i class="bi bi-activity me-2 text-success"></i>System & Workspace Status</span>
+                        </div>
+                        <div class="top-bar-dropdown-divider"></div>
+                        <div class="top-bar-dropdown-item" onclick="showHelpAbout(); closeAllTopMenus();">
+                            <span><i class="bi bi-info-circle me-2 text-warning"></i>About Antigravity IDE</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="d-flex align-items-center gap-1 ms-2 text-secondary">
-                <i class="bi bi-arrow-left top-bar-menu-item"></i>
-                <i class="bi bi-arrow-right top-bar-menu-item"></i>
+            <div class="d-flex align-items-center text-secondary ms-1">
+                <button class="btn-top-nav-icon" onclick="navigateTabBack()" title="Go Back (Alt+Left)"><i class="bi bi-chevron-left"></i></button>
+                <button class="btn-top-nav-icon" onclick="navigateTabForward()" title="Go Forward (Alt+Right)"><i class="bi bi-chevron-right"></i></button>
             </div>
         </div>
 
-        <!-- Center Workspace Selector Search Bar -->
-        <div class="d-flex align-items-center gap-2">
-            <div class="top-bar-search-box gap-2" onclick="openQuickOpenModal()">
-                <i class="bi bi-search text-secondary extra-small"></i>
-                <select id="projectSelect" onchange="onProjectChanged()" class="bg-transparent border-0 text-light extra-small outline-none" style="max-width: 220px; cursor: pointer;">
-                    <option value="0">Loading projects...</option>
+        <!-- Center: Dynamic IDE Document Title & Workspace Pill -->
+        <div class="d-flex align-items-center justify-content-center flex-grow-1 px-2">
+            <div class="top-bar-center-pill" onclick="openQuickOpenModal()">
+                <i class="bi bi-folder2-open text-primary me-1.5"></i>
+                <span id="topBarTitle">Antigravity IDE</span>
+                <select id="projectSelect" onchange="onProjectChanged()" class="top-bar-project-select ms-2" onclick="event.stopPropagation()">
+                    <option value="">-- Chưa có dự án --</option>
                 </select>
             </div>
         </div>
 
-        <!-- Right Side User & Layout Controls -->
-        <div class="d-flex align-items-center gap-2">
-            <button class="top-bar-menu-item border-0 bg-transparent text-secondary"><i class="bi bi-search"></i></button>
-            <button class="btn-sign-in" onclick="location.href='/'">Sign In</button>
-            <div class="d-flex align-items-center gap-1 text-secondary ms-1">
-                <i class="bi bi-layout-sidebar top-bar-menu-item" title="Toggle Primary Sidebar"></i>
-                <i class="bi bi-layout-split top-bar-menu-item" title="Toggle Secondary Panel"></i>
-                <i class="bi bi-layout-sidebar-reverse top-bar-menu-item" title="Toggle Right Panel"></i>
+        <!-- Right Side: User Controls, Layout Toggles & Window Controls -->
+        <div class="d-flex align-items-center gap-1">
+            <button class="btn-top-action" onclick="openQuickOpenModal()" title="Search Files (Ctrl+P)"><i class="bi bi-search"></i></button>
+            
+            <div id="topUserBadgeContainer">
+                <button class="btn-sign-in" onclick="location.href='/?login=1'"><i class="bi bi-person me-1"></i> Sign In</button>
             </div>
-            <div class="d-flex align-items-center gap-2 text-secondary ms-2">
-                <span class="top-bar-menu-item py-0">―</span>
-                <span class="top-bar-menu-item py-0">□</span>
-                <span class="top-bar-menu-item py-0 text-danger">✕</span>
+
+            <div class="top-bar-divider"></div>
+
+            <div class="d-flex align-items-center gap-0.5 text-secondary">
+                <button class="btn-top-action" onclick="toggleLeftSidebar()" title="Toggle Primary Sidebar (Ctrl+B)"><i class="bi bi-layout-sidebar"></i></button>
+                <button class="btn-top-action" onclick="toggleBottomPanel()" title="Toggle Bottom Panel (Ctrl+J)"><i class="bi bi-layout-split"></i></button>
+                <button class="btn-top-action" onclick="toggleRightAgentPanel()" title="Toggle Antigravity Agent"><i class="bi bi-layout-sidebar-reverse"></i></button>
+            </div>
+
+            <div class="top-bar-divider"></div>
+
+            <div class="window-controls d-flex align-items-center">
+                <span class="win-btn" title="Minimize">―</span>
+                <span class="win-btn" title="Maximize">□</span>
+                <span class="win-btn win-close" title="Close">✕</span>
             </div>
         </div>
     </header>
 
-    <!-- 2. RESTRICTED MODE BANNER -->
-    <div class="restricted-banner">
-        <i class="bi bi-shield-check text-info me-2 fs-6"></i>
-        <span>Restricted Mode is intended for safe code browsing. Trust this folder to enable all features.</span>
-        <a href="#" onclick="event.preventDefault(); alert('Trust folder enabled');">Manage</a>
-        <a href="#" onclick="event.preventDefault();">Learn More</a>
-    </div>
-
-    <!-- 3. MAIN 4-REGION IDE CONTAINER -->
+    <!-- 2. MAIN WORKSPACE CONTAINER (4 COLUMNS: ACTIVITY BAR | SIDEBAR | EDITOR | AGENT) -->
     <div class="vscode-main-container">
 
-        <!-- 3.1. ACTIVITY BAR (FAR-LEFT VERTICAL BAR) -->
+        <!-- 2.1. ACTIVITY BAR (FAR-LEFT VERTICAL BAR, 48px, #181818) -->
         <div class="activity-bar">
-            <div class="d-flex flex-column align-items-center gap-1">
+            <div class="activity-bar-top">
                 <button id="actBtnExplorer" onclick="switchActivityTab('explorer')" class="activity-btn active" title="Explorer (Ctrl+Shift+E)">
                     <i class="bi bi-files fs-5"></i>
                 </button>
-                <button id="actBtnSearch" onclick="openQuickOpenModal()" class="activity-btn" title="Search (Ctrl+Shift+F)">
+                <button id="actBtnSearch" onclick="switchActivityTab('search')" class="activity-btn" title="Search (Ctrl+Shift+F)">
                     <i class="bi bi-search fs-5"></i>
                 </button>
-                <button id="actBtnGit" onclick="openImportGitModal()" class="activity-btn" title="Source Control (Ctrl+Shift+G)">
+                <button id="actBtnGit" onclick="switchActivityTab('git')" class="activity-btn position-relative" title="Source Control (Ctrl+Shift+G)">
                     <i class="bi bi-git fs-5"></i>
+                    <span id="gitBadgeCount" class="activity-badge" style="display: none;">0</span>
                 </button>
-                <button id="actBtnRun" onclick="runBuildOnly()" class="activity-btn" title="Run & Debug (Ctrl+Shift+D)">
+                <button id="actBtnRun" onclick="switchActivityTab('run')" class="activity-btn" title="Run & Debug (Ctrl+Shift+D)">
                     <i class="bi bi-play-circle fs-5"></i>
                 </button>
-                <button id="actBtnExtensions" onclick="alert('Extensions Gallery')" class="activity-btn" title="Extensions">
+                <button id="actBtnExtensions" onclick="alert('Antigravity Extensions Marketplace')" class="activity-btn" title="Extensions">
                     <i class="bi bi-grid-fill fs-5"></i>
                 </button>
-                <button id="actBtnAgent" onclick="switchActivityTab('agent')" class="activity-btn" title="Cursor AI Agent (Ctrl+Shift+A)">
+                <button id="actBtnAgent" onclick="toggleRightAgentPanel()" class="activity-btn" title="Antigravity Agent (Ctrl+Shift+A)">
                     <i class="bi bi-stars fs-5 text-info"></i>
                 </button>
             </div>
-            <div class="d-flex flex-column align-items-center">
-                <button onclick="alert('Btoan Cloud IDE v2.5 - Visual Studio Code Web Engine')" class="activity-btn" title="Settings">
+            <div class="activity-bar-bottom">
+                <button onclick="location.href='/?login=1'" class="activity-btn" title="Accounts">
+                    <i class="bi bi-person-circle fs-5"></i>
+                </button>
+                <button onclick="alert('Antigravity IDE v2.5 - Powered by Monaco & Gemini 2.5 Flash')" class="activity-btn" title="Settings">
                     <i class="bi bi-gear fs-5"></i>
                 </button>
             </div>
         </div>
 
-        <!-- 3.2. LEFT SIDEBAR: EXPLORER (#252526) -->
-        <aside id="leftExplorerPanel" class="left-explorer-panel">
-            <div class="explorer-header">
-                <span>EXPLORER</span>
-                <div class="d-flex align-items-center gap-1">
-                    <button onclick="openCreateFileModal()" class="btn-icon" title="New File"><i class="bi bi-file-earmark-plus"></i></button>
-                    <button onclick="openCreateFolderModal()" class="btn-icon" title="New Folder"><i class="bi bi-folder-plus"></i></button>
-                    <button onclick="refreshFileTree()" class="btn-icon" title="Refresh Explorer"><i class="bi bi-arrow-clockwise"></i></button>
-                    <button onclick="openCreateProjectModal()" class="btn-icon" title="+ Create Project"><i class="bi bi-plus-lg"></i></button>
-                </div>
-            </div>
+        <!-- 2.2. PRIMARY LEFT SIDEBAR (#181818) -->
+        <aside id="primarySidebar" class="left-explorer-panel">
             
-            <div id="workspaceTreeContainer" class="flex-grow-1 overflow-y-auto p-1">
-                <div class="text-center text-muted p-3 extra-small">
-                    <div class="spinner-border spinner-border-sm me-1"></div> Loading workspace tree...
+            <!-- PANEL A: EXPLORER TAB -->
+            <div id="leftExplorerPanel" class="sidebar-tab-content">
+                <div class="explorer-header">
+                    <span class="panel-section-title">EXPLORER</span>
+                    <div class="d-flex align-items-center gap-1">
+                        <button onclick="openCreateFileModal()" class="btn-icon" title="New File"><i class="bi bi-file-earmark-plus"></i></button>
+                        <button onclick="openCreateFolderModal()" class="btn-icon" title="New Folder"><i class="bi bi-folder-plus"></i></button>
+                        <button onclick="refreshFileTree()" class="btn-icon" title="Refresh Explorer"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button onclick="openCreateProjectModal()" class="btn-icon" title="+ Create Project"><i class="bi bi-plus-lg"></i></button>
+                    </div>
+                </div>
+                
+                <div id="workspaceRootHeader" class="workspace-root-title">
+                    <i class="bi bi-chevron-down me-1.5 text-secondary"></i>
+                    <i class="bi bi-folder2-open text-warning me-1.5"></i>
+                    <span id="workspaceRootName" class="fw-semibold text-light">Chưa có dự án</span>
+                </div>
+
+                <div id="workspaceTreeContainer" class="flex-grow-1 overflow-y-auto px-1 py-1">
+                    <div class="text-center text-secondary p-3 extra-small">
+                        <div class="spinner-border spinner-border-sm me-1 text-info"></div> Loading workspace tree...
+                    </div>
+                </div>
+
+                <!-- Bottom Accordion Sections -->
+                <div class="accordion-section-header" onclick="toggleAccordion('outline')">
+                    <i class="bi bi-chevron-right me-1 text-secondary"></i> OUTLINE
+                </div>
+                <div id="accordionOutline" class="accordion-section-body" style="display: none;">
+                    <div class="text-secondary extra-small p-2">No symbols in active file.</div>
+                </div>
+
+                <div class="accordion-section-header" onclick="toggleAccordion('timeline')">
+                    <i class="bi bi-chevron-right me-1 text-secondary"></i> TIMELINE
+                </div>
+                <div id="accordionTimeline" class="accordion-section-body" style="display: none;">
+                    <div class="text-secondary extra-small p-2">No recent file history.</div>
                 </div>
             </div>
 
-            <!-- Bottom Accordion Sections -->
-            <div class="accordion-section-header">
-                <i class="bi bi-chevron-right me-1"></i> OUTLINE
+            <!-- PANEL B: SEARCH TAB (Ctrl+Shift+F) -->
+            <div id="leftSearchPanel" class="sidebar-tab-content" style="display: none;">
+                <div class="explorer-header">
+                    <span class="panel-section-title">SEARCH</span>
+                    <div class="d-flex align-items-center gap-1">
+                        <button onclick="executeProjectSearch()" class="btn-icon" title="Refresh Search"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button onclick="clearProjectSearch()" class="btn-icon" title="Clear Search"><i class="bi bi-x-circle"></i></button>
+                    </div>
+                </div>
+                <div class="p-2 d-flex flex-column gap-2">
+                    <div class="search-input-box">
+                        <input type="text" id="ideSearchQuery" class="ide-search-field" placeholder="Search (Enter to search)" onkeydown="if(event.key==='Enter') executeProjectSearch()">
+                        <button class="btn-search-opt active" title="Match Case">Aa</button>
+                    </div>
+                    <div class="search-input-box">
+                        <input type="text" id="ideReplaceQuery" class="ide-search-field" placeholder="Replace">
+                        <button class="btn-search-opt" onclick="alert('Replace All')" title="Replace All"><i class="bi bi-arrow-repeat"></i></button>
+                    </div>
+                    <div id="searchResultsSummary" class="extra-small text-secondary px-1">Press Enter to search workspace</div>
+                </div>
+                <div id="searchResultsContainer" class="flex-grow-1 overflow-y-auto px-1 py-1">
+                    <!-- Results populated by agent_ide.js -->
+                </div>
             </div>
-            <div class="accordion-section-header">
-                <i class="bi bi-chevron-right me-1"></i> TIMELINE
+
+            <!-- PANEL C: SOURCE CONTROL TAB (Git Status & Diff) -->
+            <div id="leftGitPanel" class="sidebar-tab-content" style="display: none;">
+                <div class="explorer-header">
+                    <span class="panel-section-title">SOURCE CONTROL</span>
+                    <div class="d-flex align-items-center gap-1">
+                        <button onclick="loadGitStatus()" class="btn-icon" title="Refresh Git Status"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button onclick="openImportGitModal()" class="btn-icon" title="Clone / Import Git"><i class="bi bi-cloud-arrow-down"></i></button>
+                    </div>
+                </div>
+                <div class="p-2">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="extra-small text-secondary fw-semibold">CHANGES</span>
+                        <span id="gitChangesCountBadge" class="badge bg-secondary extra-small">0</span>
+                    </div>
+                    <div id="gitChangesList" class="d-flex flex-column gap-1 overflow-y-auto">
+                        <div class="text-secondary extra-small p-2">Working tree clean.</div>
+                    </div>
+                </div>
             </div>
+
+            <!-- PANEL D: RUN & DEBUG TAB -->
+            <div id="leftRunPanel" class="sidebar-tab-content" style="display: none;">
+                <div class="explorer-header">
+                    <span class="panel-section-title">RUN & BUILD</span>
+                </div>
+                <div class="p-2 d-flex flex-column gap-2">
+                    <button onclick="runBuildInTerminal()" class="btn-run-action">
+                        <i class="bi bi-play-fill text-success fs-5"></i>
+                        <div class="text-start">
+                            <div class="fw-semibold">dotnet build</div>
+                            <div class="extra-small text-secondary">Build active project</div>
+                        </div>
+                    </button>
+                    <button onclick="runTestInTerminal()" class="btn-run-action">
+                        <i class="bi bi-check2-circle text-info fs-5"></i>
+                        <div class="text-start">
+                            <div class="fw-semibold">dotnet test</div>
+                            <div class="extra-small text-secondary">Run unit tests</div>
+                        </div>
+                    </button>
+                    <button onclick="runCustomTerminalCmd('dotnet run')" class="btn-run-action">
+                        <i class="bi bi-lightning-charge text-warning fs-5"></i>
+                        <div class="text-start">
+                            <div class="fw-semibold">dotnet run</div>
+                            <div class="extra-small text-secondary">Start application</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
         </aside>
 
-        <!-- 3.3. CENTER PANEL: MONACO EDITOR, MULTI-TABS (#1e1e1e) -->
+        <!-- Vertical Resizer: Explorer | Center Editor -->
+        <div id="resizerExplorer" class="vscode-resizer-v" title="Kéo để chỉnh kích thước Explorer"></div>
+
+        <!-- 2.3. CENTER PANEL: MULTI-TABS, ACTIONS, MONACO EDITOR & TERMINAL (#1f1f1f) -->
         <main class="center-editor-panel">
-            <!-- Multi-Tab Bar -->
-            <div id="editorTabBar" class="editor-tab-bar">
-                <div class="vscode-tab active">
-                    <i class="bi bi-filetype-php text-primary"></i>
-                    <span>db.php</span>
-                    <span class="tab-close-icon">&times;</span>
+            
+            <!-- Top Multi-Tab Bar (#181818) -->
+            <div class="editor-tab-bar-container">
+                <div id="editorTabBar" class="editor-tab-bar">
+                    <!-- Dynamically populated by agent_ide.js -->
+                </div>
+                <div class="editor-tab-actions">
+                    <button id="tabBtnPreview" onclick="openLivePreview()" class="tab-action-btn text-info" title="Xem trước Web tĩnh (Live Preview)"><i class="bi bi-globe me-1"></i><span class="d-none d-md-inline extra-small">Preview</span></button>
+                    <button id="tabBtnDownloadZip" onclick="downloadCurrentProjectZip()" class="tab-action-btn text-warning" title="Tải toàn bộ dự án về máy (.zip)"><i class="bi bi-file-earmark-zip me-1"></i><span class="d-none d-md-inline extra-small">Zip</span></button>
+                    <button onclick="runSmartAction()" class="tab-action-btn text-success" title="Run Current File / Build (F5)"><i class="bi bi-play-fill fs-5"></i></button>
+                    <button onclick="toggleDiffSideBySide()" class="tab-action-btn" title="Toggle Side-by-Side Diff"><i class="bi bi-layout-split"></i></button>
+                    <button onclick="openQuickOpenModal()" class="tab-action-btn" title="Find File (Ctrl+P)"><i class="bi bi-search"></i></button>
                 </div>
             </div>
 
-            <!-- Breadcrumb Navigation Bar -->
+            <!-- Breadcrumb Navigation Bar (#1f1f1f) -->
             <div id="editorBreadcrumb" class="editor-breadcrumb-bar">
-                <span id="breadcrumbPath">asset &gt; lib &gt; db.php</span>
+                <i class="bi bi-folder2 text-secondary me-1.5 extra-small"></i>
+                <span id="breadcrumbPath">Select a file from Explorer</span>
             </div>
 
-            <!-- Monaco Code & Diff Editor Container -->
-            <div class="flex-grow-1 position-relative overflow-hidden">
+            <!-- Monaco Code & Diff Editor Container (#1f1f1f) -->
+            <div class="flex-grow-1 position-relative overflow-hidden d-flex flex-column editor-viewport">
+                <!-- Diff View Banner (Only visible during diff review) -->
+                <div id="diffViewBanner" class="diff-view-banner" style="display: none;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary extra-small">DIFF PREVIEW</span>
+                        <span id="diffFileName" class="text-white fw-semibold extra-small">File Preview</span>
+                        <span class="text-secondary extra-small">(Red = Original | Green = Proposed)</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button onclick="acceptCurrentDiff()" class="btn btn-sm btn-success extra-small py-0.5 px-2.5 fw-semibold"><i class="bi bi-check-lg me-1"></i> Accept Change</button>
+                        <button onclick="rejectCurrentDiff()" class="btn btn-sm btn-outline-danger extra-small py-0.5 px-2"><i class="bi bi-x-lg me-1"></i> Reject</button>
+                        <button onclick="closeDiffView()" class="btn btn-sm btn-dark extra-small py-0.5 px-2 border-secondary"><i class="bi bi-eye-slash me-1"></i> Exit Diff</button>
+                    </div>
+                </div>
+
+                <!-- Empty Workspace State (Shown when 0 projects or 0 files open) -->
+                <div id="ideEmptyState" class="ide-empty-state-container" style="display: none;">
+                    <div class="ide-empty-state-card">
+                        <div class="ide-empty-logo mb-3">
+                            <i class="bi bi-stars text-info fs-1"></i>
+                        </div>
+                        <h4 class="fw-bold text-white mb-2">Btoan Antigravity Web IDE</h4>
+                        <p class="text-secondary small mb-4">Chào mừng bạn đến với Cloud IDE. Hãy bắt đầu bằng cách tạo dự án mới, tải lên mã nguồn có sẵn hoặc để Antigravity Agent xây dựng nguyên một dự án cho bạn.</p>
+                        
+                        <div class="d-flex flex-column gap-2.5 ide-empty-btn-group">
+                            <button onclick="openCreateProjectModal()" class="btn btn-primary btn-sm d-flex align-items-center justify-content-center gap-2 py-2">
+                                <i class="bi bi-folder-plus fs-6"></i>
+                                <span>+ Tạo Project mới</span>
+                            </button>
+                            <button onclick="triggerFolderUpload()" class="btn btn-outline-info btn-sm d-flex align-items-center justify-content-center gap-2 py-2">
+                                <i class="bi bi-cloud-arrow-up fs-6"></i>
+                                <span>📁 Tải lên thư mục (Upload Folder)</span>
+                            </button>
+                            <button onclick="triggerFilesUpload()" class="btn btn-outline-secondary btn-sm d-flex align-items-center justify-content-center gap-2 py-2 text-light">
+                                <i class="bi bi-file-earmark-arrow-up fs-6"></i>
+                                <span>📄 Tải lên tệp tin (Upload Files)</span>
+                            </button>
+                            <button onclick="focusAgentScaffolding()" class="btn btn-outline-warning btn-sm d-flex align-items-center justify-content-center gap-2 py-2">
+                                <i class="bi bi-magic fs-6"></i>
+                                <span>✨ Tạo nguyên Project bằng AI Agent</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
                 <div id="monacoContainer" style="width: 100%; height: 100%;"></div>
                 <div id="monacoDiffContainer" style="width: 100%; height: 100%; display: none;"></div>
             </div>
 
-            <!-- Bottom Terminal / Output Panel -->
-            <div id="bottomPanel" class="vscode-bottom-panel border-top d-flex flex-column" style="height: 140px;">
-                <div class="d-flex align-items-center justify-content-between px-2 py-1 bg-dark border-bottom border-secondary">
+            <!-- Horizontal Resizer: Editor / Terminal Panel -->
+            <div id="resizerTerminal" class="vscode-resizer-h" title="Kéo để chỉnh độ cao Terminal"></div>
+
+            <!-- Bottom Terminal / Output / Problems Panel (#181818) -->
+            <div id="bottomPanel" class="vscode-bottom-panel border-top" style="height: 220px; min-height: 0; overflow: hidden;">
+                <div class="bottom-panel-header flex-shrink-0">
                     <div class="d-flex align-items-center gap-1">
-                        <button id="bottomTabBtnTerminal" onclick="switchBottomTab('terminal')" class="panel-tab-btn active">Terminal</button>
-                        <button id="bottomTabBtnProblems" onclick="switchBottomTab('problems')" class="panel-tab-btn">Problems (0)</button>
+                        <button id="bottomTabBtnProblems" onclick="switchBottomTab('problems')" class="panel-tab-btn">
+                            Problems <span id="problemsBadge" class="panel-badge-circle">0</span>
+                        </button>
                         <button id="bottomTabBtnOutput" onclick="switchBottomTab('output')" class="panel-tab-btn">Output</button>
+                        <button id="bottomTabBtnTerminal" onclick="switchBottomTab('terminal')" class="panel-tab-btn active">Terminal</button>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <button onclick="clearTerminalOutput()" class="btn-icon text-secondary" title="Clear Console"><i class="bi bi-eraser"></i></button>
-                        <button onclick="toggleBottomPanel()" class="btn-icon text-secondary" title="Minimize Panel"><i class="bi bi-dash-lg"></i></button>
+                        <div class="d-flex align-items-center text-secondary extra-small me-1">
+                            <i class="bi bi-terminal text-info me-1"></i>
+                            <span class="text-secondary extra-small font-mono">&gt;_ powershell</span>
+                        </div>
+                        <button onclick="resetTerminalSession()" class="btn-icon text-secondary" title="New / Reset Terminal Session"><i class="bi bi-plus-lg"></i></button>
+                        <button onclick="clearTerminalOutput()" class="btn-icon text-secondary" title="Clear Console (cls)"><i class="bi bi-trash"></i></button>
+                        <button onclick="toggleBottomPanelHeight()" class="btn-icon text-secondary" title="Maximize/Restore Height"><i class="bi bi-chevron-up"></i></button>
+                        <button onclick="closeBottomPanel()" class="btn-icon text-secondary" title="Close Panel"><i class="bi bi-x-lg"></i></button>
                     </div>
                 </div>
 
-                <div id="bottomTabTerminalBody" class="p-2 font-mono extra-small flex-grow-1 d-flex flex-column">
-                    <div id="terminalOutputLog" class="terminal-output-log flex-grow-1 overflow-y-auto">
-                        <div class="text-muted">[Terminal ready. Execute commands inside workspace directory]</div>
+                <!-- Tab 1: Terminal Body (xterm.js Interactive Shell) -->
+                <div id="bottomTabTerminalBody" class="flex-grow-1 d-flex flex-column terminal-body-bg" style="min-height: 0; height: calc(100% - 28px); overflow: hidden; background: #181818; padding: 2px;">
+                    <div id="xtermTerminalContainer" style="width: 100%; height: 100%; min-height: 0; flex: 1 1 auto; overflow: hidden;"></div>
+                </div>
+
+                <!-- Tab 2: Problems Body -->
+                <div id="bottomTabProblemsBody" class="p-2 font-mono extra-small flex-grow-1 overflow-y-auto terminal-body-bg" style="display: none; min-height: 0;">
+                    <div id="problemsList" class="d-flex flex-column gap-1">
+                        <div class="text-secondary">No problems detected in workspace.</div>
                     </div>
-                    <div class="d-flex align-items-center gap-2 mt-1">
-                        <span class="text-success font-mono extra-small fw-bold">></span>
-                        <input type="text" id="terminalCommandInput" class="form-control bg-dark text-light font-mono extra-small py-0 px-2 border-secondary" placeholder="Type command (e.g. 'dotnet build', 'npm install')...">
-                        <button onclick="executeTerminalInput()" class="btn btn-vscode btn-sm extra-small py-0 px-3 font-mono">Run</button>
-                    </div>
+                </div>
+
+                <!-- Tab 3: Output Body -->
+                <div id="bottomTabOutputBody" class="p-2 font-mono extra-small flex-grow-1 overflow-y-auto terminal-body-bg text-light" style="display: none; min-height: 0;">
+                    <div id="outputLog">[Output channel ready]</div>
                 </div>
             </div>
         </main>
 
-        <!-- 3.4. RIGHT SIDEBAR: COPILOT / AGENT AI CHAT PANEL (#181818) -->
+        <!-- Vertical Resizer: Editor | Right Agent Panel -->
+        <div id="resizerAgent" class="vscode-resizer-v" title="Kéo để chỉnh kích thước Agent Panel"></div>
+
+        <!-- 2.4. RIGHT SIDEBAR: ANTIGRAVITY AGENT PANEL (#181818) -->
         <aside id="rightAgentPanel" class="right-chat-panel">
             <!-- Header -->
-            <div class="chat-header">
-                <span>CHAT</span>
-                <div class="d-flex align-items-center gap-2 text-secondary">
-                    <i class="bi bi-plus-lg top-bar-menu-item" title="New Chat"></i>
-                    <i class="bi bi-chevron-down top-bar-menu-item"></i>
-                    <i class="bi bi-gear top-bar-menu-item"></i>
-                    <i class="bi bi-three-dots top-bar-menu-item"></i>
-                    <i class="bi bi-layout-sidebar-reverse top-bar-menu-item"></i>
-                    <i class="bi bi-x-lg top-bar-menu-item"></i>
+            <div class="agent-panel-header">
+                <div class="d-flex align-items-center gap-1.5">
+                    <i class="bi bi-stars text-info fs-6"></i>
+                    <span class="agent-header-title">ANTIGRAVITY AGENT</span>
+                </div>
+                <div class="d-flex align-items-center gap-1 text-secondary">
+                    <button class="btn-top-action" onclick="resetAgentChat()" title="New Task / Reset Chat"><i class="bi bi-plus-lg"></i></button>
+                    <button class="btn-top-action" onclick="toggleRightAgentPanel()" title="Close Agent Panel"><i class="bi bi-x-lg"></i></button>
                 </div>
             </div>
 
-            <!-- Copilot Splash Area -->
+            <!-- Agent Splash / Hero Area (Visible when empty) -->
             <div id="chatSplashArea" class="chat-splash-area">
                 <div class="copilot-sparkle-icon">
                     <i class="bi bi-stars"></i>
                 </div>
-                <div class="chat-splash-title">Build with Agent</div>
-                <div class="chat-splash-sub">AI responses may be inaccurate</div>
-                <a href="#" onclick="event.preventDefault();" class="chat-splash-link">
-                    Generate Agent Instructions to onboard AI onto your codebase.
-                </a>
-            </div>
-
-            <!-- Agent Chat Messages Container (if active messages exist) -->
-            <div id="agentMessagesContainer" class="d-flex flex-column gap-2 p-2 overflow-y-auto" style="display: none; max-height: 240px;"></div>
-
-            <!-- Bottom Floating Prompt Box -->
-            <div class="chat-prompt-card">
-                <!-- Context Pill -->
-                <div class="chat-context-pill">
-                    <i class="bi bi-plus-lg"></i>
-                    <i class="bi bi-filetype-php text-primary"></i>
-                    <span id="activeContextPill">db.php</span>
-                </div>
-
-                <!-- Textarea -->
-                <textarea id="agentTaskInput" class="chat-textarea" placeholder="Describe what to build"></textarea>
-
-                <!-- Toolbar -->
-                <div class="chat-prompt-toolbar">
-                    <div class="d-flex align-items-center gap-2 text-secondary extra-small">
-                        <i class="bi bi-plus-lg top-bar-menu-item"></i>
-                        <span class="top-bar-menu-item d-flex align-items-center gap-1"><i class="bi bi-record-circle text-info"></i> Agent</span>
-                        <span class="top-bar-menu-item">Models</span>
-                        <i class="bi bi-sliders top-bar-menu-item"></i>
-                    </div>
-                    <button id="btnSendAgentTask" onclick="sendAgentTask()" class="btn-send-arrow">
-                        <i class="bi bi-arrow-up-short fs-5"></i>
+                <div class="chat-splash-title">Antigravity Coding Agent</div>
+                <div class="chat-splash-sub">Yêu cầu tạo nguyên dự án, sinh mã nguồn, tự tạo hình ảnh minh họa cho Web/App</div>
+                
+                <div class="d-flex flex-column gap-2 mt-3 w-100 px-2">
+                    <button type="button" onclick="quickAgentPrompt('Tạo web shop bán hàng mini có ảnh sản phẩm thật, danh mục, giỏ hàng tính tiền & responsive bằng HTML5, CSS3 và JS')" class="btn-prompt-suggestion">
+                        <i class="bi bi-bag-check-fill text-warning me-2"></i>🛍️ Tạo web shop bán hàng có ảnh sản phẩm & giỏ hàng
+                    </button>
+                    <button type="button" onclick="quickAgentPrompt('Tạo trang web tỏ tình lãng mạn có hiệu ứng pháo hoa, trái tim bay, ảnh kỷ niệm đẹp và nhạc nền du dương bằng HTML5, CSS3 và JS')" class="btn-prompt-suggestion">
+                        <i class="bi bi-heart-fill text-danger me-2"></i>💖 Tạo web tỏ tình lãng mạn có hiệu ứng & nhạc/ảnh đẹp
+                    </button>
+                    <button type="button" onclick="quickAgentPrompt('Tạo trang Dashboard quản lý công việc và tài chính hiện đại có biểu đồ, bảng số liệu và ảnh avatar bằng HTML5, CSS3 và JS')" class="btn-prompt-suggestion">
+                        <i class="bi bi-speedometer2 text-info me-2"></i>📊 Tạo trang Dashboard quản lý công việc hiện đại
                     </button>
                 </div>
             </div>
+
+            <!-- Agent Messages / Timeline / Change Cards Container -->
+            <div id="agentMessagesContainer" class="agent-messages-container" style="display: none;"></div>
+
+            <!-- Bottom Antigravity Prompt Box -->
+            <div class="agent-prompt-wrapper">
+                
+                <!-- Autocomplete Popup for '@@' Files Mention -->
+                <div id="mentionPopup" class="agent-autocomplete-popup" style="display: none;">
+                    <div class="autocomplete-header">WORKSPACE FILES</div>
+                    <div id="mentionFileList" class="autocomplete-list"></div>
+                </div>
+
+                <!-- Autocomplete Popup for '/' Slash Commands -->
+                <div id="commandPopup" class="agent-autocomplete-popup" style="display: none;">
+                    <div class="autocomplete-header">COMMANDS</div>
+                    <div class="autocomplete-item" onclick="insertSlashCommand('/fix')"><span class="cmd-badge">/fix</span> Sửa lỗi trong code hiện tại</div>
+                    <div class="autocomplete-item" onclick="insertSlashCommand('/explain')"><span class="cmd-badge">/explain</span> Giải thích chi tiết khối code</div>
+                    <div class="autocomplete-item" onclick="insertSlashCommand('/refactor')"><span class="cmd-badge">/refactor</span> Tối ưu cấu trúc & hiệu năng</div>
+                    <div class="autocomplete-item" onclick="insertSlashCommand('/test')"><span class="cmd-badge">/test</span> Viết unit test cho code</div>
+                    <div class="autocomplete-item" onclick="insertSlashCommand('/build')"><span class="cmd-badge">/build</span> Build kiểm tra lỗi toàn bộ dự án</div>
+                </div>
+
+                <!-- Prompt Box Container -->
+                <div class="agent-prompt-box">
+                    <!-- Context File Chips Row -->
+                    <div id="promptChipsRow" class="prompt-chips-row">
+                        <div class="context-file-chip" id="activeFileChip" style="display: none;">
+                            <i class="bi bi-file-earmark-code text-info"></i>
+                            <span id="activeChipText"></span>
+                            <i class="bi bi-x ms-1 cursor-pointer" onclick="removeContextChip()"></i>
+                        </div>
+                    </div>
+
+                    <!-- Textarea -->
+                    <textarea id="agentTaskInput" class="agent-textarea" placeholder="Ask anything, @@ to mention, / for commands..." oninput="onPromptInput(event)" onkeydown="onPromptKeyDown(event)"></textarea>
+
+                    <!-- Bottom Controls Inside Box (Image 3 1:1 Match) -->
+                    <div class="prompt-bottom-bar">
+                        <div class="d-flex align-items-center gap-1.5">
+                            <button class="btn-prompt-pill" type="button" onclick="openFileMentionPicker()" title="Add Context File (@@)">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                            <div class="position-relative">
+                                <div id="agentModelPill" class="agent-model-pill" onclick="toggleModelDropdown(event)" title="Choose Model">
+                                    <span id="currentModelLabel">Gemini 2.5 Flash</span>
+                                    <i class="bi bi-chevron-down text-secondary" style="font-size: 10px;"></i>
+                                </div>
+                                <div id="agentModelDropdown" class="agent-model-dropdown" style="display: none;">
+                                    <div class="agent-model-dropdown-item active" data-model="gemini-2.5-flash" onclick="selectAgentModel('gemini-2.5-flash', 'Gemini 2.5 Flash')">Gemini 2.5 Flash</div>
+                                    <div class="agent-model-dropdown-item" data-model="gemini-2.5-pro" onclick="selectAgentModel('gemini-2.5-pro', 'Gemini 2.5 Pro')">Gemini 2.5 Pro</div>
+                                </div>
+                                <input type="hidden" id="agentModelSelect" value="gemini-2.5-flash">
+                                <input type="hidden" id="agentModeSelect" value="fast">
+                            </div>
+                        </div>
+                        <button id="btnSendAgentTask" onclick="sendAgentTask()" class="btn-send-circle" title="Send (Enter)">
+                            <i class="bi bi-arrow-up"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </aside>
 
     </div>
 
-    <!-- 4. BOTTOM STATUS BAR (#007acc) -->
+    <!-- 3. BOTTOM STATUS BAR (Height 22px, #181818, Border-top #2b2b2b) -->
     <footer class="vscode-status-bar">
+        <!-- Left: Blue Square with Remote >< icon, Git Branch, Problems -->
         <div class="d-flex align-items-center">
-            <div class="status-bar-item">
-                <i class="bi bi-shield-check me-1"></i> Restricted Mode
+            <div class="status-bar-remote-corner" title="Remote: WSL / Local Workspace">
+                <i class="bi bi-arrow-left-right"></i>
             </div>
-            <div class="status-bar-item ms-2">
-                <i class="bi bi-x-circle me-1"></i> 0
+            <div class="status-bar-item" title="Git Branch: main">
+                <i class="bi bi-git me-1"></i> <span id="statusGitBranch">main*</span>
+            </div>
+            <div class="status-bar-item" title="Sync Git Changes" onclick="loadGitStatus()">
+                <i class="bi bi-arrow-repeat"></i>
+            </div>
+            <div class="status-bar-item" onclick="switchBottomTab('problems')" title="Problems">
+                <i class="bi bi-x-circle me-1"></i> <span id="statusProblemCount">0</span>
                 <i class="bi bi-exclamation-triangle ms-1 me-1"></i> 0
             </div>
         </div>
 
+        <!-- Right: Line/Col, Spaces, Encoding, CRLF, Language Tag, Antigravity -->
         <div class="d-flex align-items-center">
-            <div id="statusLnCol" class="status-bar-item">Ln 6, Col 28</div>
+            <div id="statusLnCol" class="status-bar-item">Ln 1, Col 1</div>
             <div class="status-bar-item">Spaces: 4</div>
             <div class="status-bar-item">UTF-8</div>
             <div class="status-bar-item">CRLF</div>
-            <div class="status-bar-item font-mono">{ }</div>
-            <div id="statusLanguage" class="status-bar-item">PHP</div>
+            <div class="status-bar-item">
+                <span class="text-secondary me-1">{ }</span> <span id="statusLanguage">C#</span>
+            </div>
+            <div class="status-bar-item text-info fw-semibold" title="Powered by Google Antigravity">
+                Antigravity
+            </div>
             <div class="status-bar-item"><i class="bi bi-bell"></i></div>
         </div>
     </footer>
 
     <!-- MODALS SECTION -->
+    <!-- 0. MODAL RESTRICTED LOGIN PROMPT (VS CODE DARK THEME) -->
+    <div id="restrictedLoginModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+            <div class="modal-content bg-dark text-light border-secondary shadow-lg" style="border-radius: 8px; border: 1px solid #3c3c3c !important;">
+                <div class="modal-header border-secondary py-2.5 px-3" style="background-color: #252526;">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock-fill text-warning fs-5"></i>
+                        <span class="fw-bold small text-white">Chế độ xem an toàn (Restricted Mode)</span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white extra-small" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="mb-2 text-light small" id="restrictedModalMessage">
+                        Chức năng lưu file và thực thi lệnh Terminal chỉ khả dụng khi bạn đăng nhập tài khoản.
+                    </p>
+                    <div class="p-2.5 rounded bg-dark-subtle border border-secondary extra-small text-secondary mb-2">
+                        <i class="bi bi-info-circle me-1 text-info"></i>
+                        Bạn vẫn có thể duyệt file, dùng Monaco Editor, chat với AI Agent và xem Monaco Diff View bình thường mà không cần đăng nhập.
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary py-2 px-3 d-flex justify-content-between" style="background-color: #252526;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary extra-small" data-bs-dismiss="modal">Để sau</button>
+                    <a href="/?login=1" class="btn btn-sm btn-primary extra-small fw-semibold px-3"><i class="bi bi-box-arrow-in-right me-1"></i> Đăng nhập ngay</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 1. MODAL CREATE PROJECT -->
     <div id="createProjectModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
@@ -316,33 +856,7 @@
         </div>
     </div>
 
-    <!-- 2. MODAL UPLOAD ZIP -->
-    <div id="uploadZipModal" class="modal fade" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-light border-secondary">
-                <div class="modal-header border-secondary">
-                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-file-earmark-zip text-warning me-2"></i> Upload Workspace Tệp ZIP</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label extra-small fw-semibold">Tên dự án:</label>
-                        <input type="text" id="zipProjectName" class="form-control bg-dark-subtle text-light border-secondary extra-small" placeholder="Ví dụ: ImportedZipApp">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label extra-small fw-semibold">Chọn tệp ZIP archive:</label>
-                        <input type="file" id="zipFileInput" accept=".zip" class="form-control bg-dark-subtle text-light border-secondary extra-small">
-                    </div>
-                </div>
-                <div class="modal-footer border-secondary">
-                    <button type="button" class="btn btn-secondary btn-sm extra-small" data-bs-dismiss="modal">Hủy</button>
-                    <button type="button" onclick="submitUploadZip()" class="btn btn-warning btn-sm extra-small fw-semibold">Upload & Giải Nén</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. MODAL IMPORT GIT -->
+    <!-- 2. MODAL IMPORT GIT -->
     <div id="importGitModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content bg-dark text-light border-secondary">
@@ -368,7 +882,7 @@
         </div>
     </div>
 
-    <!-- 4. MODAL CREATE FILE (NO BROWSER PROMPT) -->
+    <!-- 3. MODAL CREATE FILE -->
     <div id="createFileModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content bg-dark text-light border-secondary">
@@ -387,7 +901,7 @@
         </div>
     </div>
 
-    <!-- 5. MODAL CREATE FOLDER (NO BROWSER PROMPT) -->
+    <!-- 4. MODAL CREATE FOLDER -->
     <div id="createFolderModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content bg-dark text-light border-secondary">
@@ -406,46 +920,230 @@
         </div>
     </div>
 
-    <!-- 6. MODAL RENAME ITEM (NO BROWSER PROMPT) -->
+    <!-- 5. MODAL LIVE PREVIEW (WEB TĨNH HTML/CSS/JS) -->
+    <div id="previewModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-xl" style="height: 85vh;">
+            <div class="modal-content bg-dark text-light border-secondary h-100 d-flex flex-column">
+                <div class="modal-header border-secondary py-2 px-3 d-flex align-items-center justify-content-between" style="background-color: #252526;">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-globe text-info fs-5"></i>
+                        <span class="fw-bold small text-white" id="previewModalTitle">Live Web Preview</span>
+                        <span id="previewModalUrlBadge" class="badge bg-secondary extra-small">/api/ide/preview/...</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button onclick="refreshPreviewIframe()" class="btn btn-sm btn-outline-secondary extra-small py-1 px-2" title="Reload Preview"><i class="bi bi-arrow-clockwise"></i></button>
+                        <a id="previewOpenTabBtn" href="#" target="_blank" class="btn btn-sm btn-outline-info extra-small py-1 px-2" title="Open in New Tab"><i class="bi bi-box-arrow-up-right me-1"></i> New Tab</a>
+                        <button type="button" class="btn-close btn-close-white extra-small" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0 flex-grow-1 position-relative bg-white" style="overflow: hidden;">
+                    <iframe id="previewIframe" src="about:blank" style="width: 100%; height: 100%; border: none;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. MODAL KEYBOARD SHORTCUTS -->
+    <div id="helpShortcutsModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content bg-dark text-light border-secondary">
+                <div class="modal-header border-secondary py-2.5 px-3" style="background-color: #252526;">
+                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-keyboard text-info me-2"></i> Keyboard Shortcuts Reference</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3 extra-small">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="p-2 border border-secondary rounded mb-2">
+                                <div class="fw-bold text-info mb-1">Navigation & Files</div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Command Palette</span><kbd>Ctrl + Shift + P / F1</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Quick Open File</span><kbd>Ctrl + P</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Save File</span><kbd>Ctrl + S</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Save All Files</span><kbd>Ctrl + Shift + S</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Close Editor Tab</span><kbd>Ctrl + W / Alt + W</kbd></div>
+                                <div class="d-flex justify-content-between py-1"><span>Go to Line</span><kbd>Ctrl + G</kbd></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border border-secondary rounded mb-2">
+                                <div class="fw-bold text-success mb-1">Panels & Editor Actions</div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Toggle Terminal</span><kbd>Ctrl + ` / Ctrl + J</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Focus AI Agent</span><kbd>Ctrl + L / Ctrl + I</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Toggle Sidebar</span><kbd>Ctrl + B</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Format Document</span><kbd>Shift + Alt + F</kbd></div>
+                                <div class="d-flex justify-content-between py-1 border-bottom border-dark-subtle"><span>Toggle Word Wrap</span><kbd>Alt + Z</kbd></div>
+                                <div class="d-flex justify-content-between py-1"><span>Split Editor</span><kbd>Ctrl + \</kbd></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. MODAL QUICK START -->
+    <div id="helpQuickStartModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light border-secondary">
+                <div class="modal-header border-secondary py-2.5 px-3" style="background-color: #252526;">
+                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-book text-primary me-2"></i> Chào mừng đến với Btoan Antigravity IDE</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3 small">
+                    <p class="text-light mb-2">Môi trường phát triển trực tuyến đám mây kết hợp Trí tuệ Nhân tạo Antigravity Agent:</p>
+                    <ul class="text-secondary mb-3 extra-small">
+                        <li class="mb-1"><b class="text-white">Workspace riêng biệt:</b> Dữ liệu dự án của mỗi tài khoản được cô lập an toàn trong thư mục riêng.</li>
+                        <li class="mb-1"><b class="text-white">Full-Project Scaffolding:</b> Ra lệnh cho Agent tạo nguyên dự án với nhiều file và thư mục cùng lúc.</li>
+                        <li class="mb-1"><b class="text-white">Live Web Preview:</b> Nhấn nút Preview để xem trực tiếp các dự án HTML5/CSS3/JS.</li>
+                        <li class="mb-1"><b class="text-white">Terminal Sandboxed:</b> Chạy lệnh `dotnet build`, `dotnet test`, v.v. trực tiếp trong project.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. MODAL STATUS -->
+    <div id="helpStatusModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light border-secondary">
+                <div class="modal-header border-secondary py-2.5 px-3" style="background-color: #252526;">
+                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-activity text-success me-2"></i> System & Workspace Status</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3 extra-small">
+                    <div class="d-flex justify-content-between py-1.5 border-bottom border-dark-subtle">
+                        <span class="text-secondary">Core Runtime:</span>
+                        <span class="text-white fw-semibold">.NET 10.0 / ASP.NET Core</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1.5 border-bottom border-dark-subtle">
+                        <span class="text-secondary">Editor Engine:</span>
+                        <span class="text-white fw-semibold">Monaco Editor v0.52.0</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1.5 border-bottom border-dark-subtle">
+                        <span class="text-secondary">AI Agent Model:</span>
+                        <span class="text-info fw-semibold">Gemini 2.5 Flash / Pro</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1.5">
+                        <span class="text-secondary">Active Workspace:</span>
+                        <span id="helpStatusActiveProj" class="text-warning fw-semibold">None</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. MODAL ABOUT -->
+    <div id="helpAboutModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content bg-dark text-light border-secondary text-center p-3">
+                <div class="my-2"><i class="bi bi-stars text-info fs-1"></i></div>
+                <h5 class="fw-bold text-white mb-1">Btoan Antigravity IDE</h5>
+                <div class="extra-small text-secondary mb-3">Phiên bản 2.5.0 (Dark Modern)</div>
+                <p class="extra-small text-secondary mb-3">Xây dựng trên nền tảng .NET 10, Monaco Editor và Google Gemini Agent.</p>
+                <button type="button" class="btn btn-sm btn-outline-secondary extra-small w-100" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 10. MODAL COMMAND PALETTE (Ctrl+Shift+P / F1) -->
+    <div id="commandPaletteModal" class="modal fade" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 620px; align-items: flex-start; margin-top: 50px;">
+            <div class="modal-content bg-dark text-light border-secondary shadow-lg" style="border: 1px solid #3c3c3c !important; border-radius: 8px;">
+                <div class="p-2 border-bottom border-secondary" style="background-color: #252526;">
+                    <div class="d-flex align-items-center gap-2 px-2">
+                        <i class="bi bi-terminal text-primary"></i>
+                        <input type="text" id="commandPaletteInput" class="form-control bg-transparent border-0 text-light extra-small outline-none shadow-none" placeholder="> Type a command to run..." oninput="onCommandPaletteInput(event)" onkeydown="onCommandPaletteKeyDown(event)">
+                    </div>
+                </div>
+                <div id="commandPaletteList" class="p-1 overflow-y-auto" style="max-height: 380px;">
+                    <!-- Commands populated dynamically by agent_ide.js -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 11. MODAL RENAME ITEM -->
     <div id="renameItemModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content bg-dark text-light border-secondary">
                 <div class="modal-header border-secondary py-2">
-                    <h6 class="modal-title extra-small fw-bold"><i class="bi bi-pencil text-warning me-2"></i> Rename Item</h6>
+                    <h6 class="modal-title extra-small fw-bold"><i class="bi bi-pencil text-warning me-2"></i> Rename</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">
-                    <input type="hidden" id="renameOldPath">
-                    <input type="text" id="renameNewPath" class="form-control bg-dark-subtle text-light border-secondary extra-small">
+                    <input type="text" id="renameItemInput" class="form-control bg-dark-subtle text-light border-secondary extra-small">
+                    <input type="hidden" id="renameItemOldPath">
                 </div>
                 <div class="modal-footer border-secondary py-1">
                     <button type="button" class="btn btn-secondary btn-sm extra-small" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" onclick="submitRenameModal()" class="btn btn-warning btn-sm extra-small">Rename</button>
+                    <button type="button" onclick="submitRenameItemModal()" class="btn btn-warning btn-sm extra-small">Rename</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 7. MODAL DELETE ITEM (NO BROWSER CONFIRM) -->
-    <div id="deleteItemModal" class="modal fade" tabindex="-1">
+    <!-- 12. EXPLORER CONTEXT MENU (Antigravity Dark Modern) -->
+    <div id="explorerContextMenu" class="explorer-context-menu" style="display: none;">
+        <!-- Folder / Container Items -->
+        <div id="ctxFolderItems">
+            <div class="context-menu-item" onclick="contextMenuInlineNewFile()"><i class="bi bi-file-earmark-plus text-primary me-2"></i>New File...</div>
+            <div class="context-menu-item" onclick="contextMenuInlineNewFolder()"><i class="bi bi-folder-plus text-warning me-2"></i>New Folder...</div>
+            <div class="context-menu-item" onclick="contextMenuOpenTerminal()"><i class="bi bi-terminal text-info me-2"></i>Open in Integrated Terminal</div>
+            <div class="context-menu-item" onclick="contextMenuFindInFolder()"><i class="bi bi-search text-secondary me-2"></i>Find in Folder... <span class="menu-shortcut">Shift+Alt+F</span></div>
+        </div>
+
+        <!-- File Items -->
+        <div id="ctxFileItems" style="display: none;">
+            <div class="context-menu-item" onclick="contextMenuOpenFile()"><i class="bi bi-file-earmark text-primary me-2"></i>Open</div>
+            <div class="context-menu-item" onclick="contextMenuAddToAgent()"><i class="bi bi-stars text-info me-2"></i>Add to Agent Chat (@@file)</div>
+            <div class="context-menu-item" onclick="contextMenuDownloadFile()"><i class="bi bi-download text-success me-2"></i>Download File</div>
+        </div>
+
+        <div class="context-menu-divider"></div>
+
+        <!-- Clipboard Operations -->
+        <div class="context-menu-item" onclick="contextMenuCut()"><i class="bi bi-scissors text-secondary me-2"></i>Cut <span class="menu-shortcut">Ctrl+X</span></div>
+        <div class="context-menu-item" onclick="contextMenuCopy()"><i class="bi bi-copy text-secondary me-2"></i>Copy <span class="menu-shortcut">Ctrl+C</span></div>
+        <div id="ctxItemPaste" class="context-menu-item disabled" onclick="contextMenuPaste()"><i class="bi bi-clipboard text-secondary me-2"></i>Paste <span class="menu-shortcut">Ctrl+V</span></div>
+
+        <div class="context-menu-divider"></div>
+
+        <!-- Path Copying -->
+        <div class="context-menu-item" onclick="contextMenuCopyFullPath()"><i class="bi bi-link-45deg text-secondary me-2"></i>Copy Path <span class="menu-shortcut">Shift+Alt+C</span></div>
+        <div class="context-menu-item" onclick="contextMenuCopyRelativePath()"><i class="bi bi-clipboard-check text-secondary me-2"></i>Copy Relative Path <span class="menu-shortcut">Ctrl+K Ctrl+C</span></div>
+
+        <div class="context-menu-divider"></div>
+
+        <!-- Modifications -->
+        <div class="context-menu-item" onclick="contextMenuInlineRename()"><i class="bi bi-pencil text-info me-2"></i>Rename... <span class="menu-shortcut">F2</span></div>
+        <div class="context-menu-item text-danger" onclick="contextMenuDeletePermanently()"><i class="bi bi-trash3 text-danger me-2"></i>Delete Permanently <span class="menu-shortcut">Delete</span></div>
+    </div>
+
+    <!-- 13. MODAL CONFIRM DELETE -->
+    <div id="deleteConfirmModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content bg-dark text-light border-secondary">
                 <div class="modal-header border-secondary py-2">
-                    <h6 class="modal-title extra-small fw-bold text-danger"><i class="bi bi-trash me-2"></i> Confirm Delete</h6>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <h6 class="modal-title extra-small text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1.5"></i> Delete Permanently</h6>
+                    <button type="button" class="btn-close btn-close-white extra-small" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body py-2 text-light extra-small">
-                    Are you sure you want to delete <span id="deleteTargetPath" class="font-mono text-warning"></span>?
+                <div class="modal-body extra-small py-3">
+                    Are you sure you want to delete <strong id="deleteTargetName" class="text-warning"></strong>?<br>
+                    <span class="text-secondary extra-small">This action cannot be undone.</span>
                 </div>
                 <div class="modal-footer border-secondary py-1">
                     <button type="button" class="btn btn-secondary btn-sm extra-small" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" onclick="submitDeleteModal()" class="btn btn-danger btn-sm extra-small">Delete</button>
+                    <button type="button" onclick="confirmDeleteTargetItem()" class="btn btn-danger btn-sm extra-small">Delete</button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Hidden File Inputs for Folder & Files Upload -->
+    <input type="file" id="folderUploadInput" webkitdirectory directory multiple style="display:none;" onchange="handleFolderSelected(event)">
+    <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
+
     <!-- Scripts -->
-    <script src="/js/agent_ide.js?v=20"></script>
+    <script src="~/js/agent_ide.js" asp-append-version="true"></script>
 </body>
 </html>

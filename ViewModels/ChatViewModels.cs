@@ -4,7 +4,7 @@ namespace BtoanAiNet.ViewModels
 {
     public class ChatRequestModel
     {
-        public string? Model { get; set; } = "gemini-2.5-flash";
+        public string? Model { get; set; } = "gemini-3.5-flash";
         public JsonObject? Payload { get; set; }
         public int? User_Id { get; set; }
         public int? Conversation_Id { get; set; }

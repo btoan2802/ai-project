@@ -93,7 +93,7 @@ let isAiReady = false;
 // Initialize Face-API
 async function initFaceAI() {
   try {
-    const MODEL_URL = "facelib/models";
+    const MODEL_URL = "/facelib/models";
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -109,16 +109,11 @@ async function initFaceAI() {
 // Start loading models immediately
 initFaceAI();
 
-async function stopAllCameras() {
-  try {
-    const streams = await navigator.mediaDevices.enumerateDevices();
-    const tracks = window.localStream ? window.localStream.getTracks() : [];
-    // brute force stop all tracks we can find
-    const devices = await navigator.mediaDevices.getUserMedia({video: true}).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
-  } catch(e) {}
-}
+
 
 let isFaceLoginActive = false;
+let faceLoginInterval = null;
+let isVerifying = false;
 let faceStream = null;
 let capturedFaceImage = "";
 let autoCaptureInterval = null;
@@ -313,7 +308,7 @@ async function saveFaceImage() {
     formData.append("image", capturedFaceImage);
     formData.append("descriptor", capturedDescriptor); // 🔒 Biometric reference
 
-    const response = await fetch("ai/api/save_face.php", {
+    const response = await fetch("/ai/api/save_face.php", {
       method: "POST",
       body: formData
     });
@@ -339,6 +334,12 @@ async function saveFaceImage() {
 
 function closeFaceEnrollModal() {
   stopAutoCaptureCheck();
+  if (faceLoginInterval) {
+    clearInterval(faceLoginInterval);
+    faceLoginInterval = null;
+  }
+  isFaceLoginActive = false;
+  isVerifying = false;
   const modal = document.getElementById("face-enroll-modal");
   const video = document.getElementById("face-video");
   if (faceStream) {
@@ -399,7 +400,7 @@ async function loginWithFace() {
             formData.append("descriptor", JSON.stringify(Array.from(liveDetection.descriptor)));
 
             try {
-                const loginRes = await fetch("ai/api/login_face.php", { method: "POST", body: formData });
+                const loginRes = await fetch("/ai/api/login_face.php", { method: "POST", body: formData });
                 const loginData = await loginRes.json();
 
                 if (loginData.success) {

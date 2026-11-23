@@ -1,3 +1,4 @@
+using BtoanAiNet.Data;
 using BtoanAiNet.Services;
 using BtoanAiNet.ViewModels;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,8 @@ namespace BtoanAiNet.Controllers
         private readonly IAgentWorkflowService _workflowService;
         private readonly IWorkspaceEditService _editService;
         private readonly IWebHostEnvironment _env;
+        private readonly AppDbContext _context;
+        private readonly IAgentToolLoopOrchestrator _toolLoopOrchestrator;
 
         public AgentController(
             IAgentService agentService,
@@ -23,7 +26,9 @@ namespace BtoanAiNet.Controllers
             ITerminalExecutionService terminalService,
             IAgentWorkflowService workflowService,
             IWorkspaceEditService editService,
-            IWebHostEnvironment env)
+            IWebHostEnvironment env,
+            AppDbContext context,
+            IAgentToolLoopOrchestrator toolLoopOrchestrator)
         {
             _agentService = agentService;
             _scannerService = scannerService;
@@ -33,7 +38,20 @@ namespace BtoanAiNet.Controllers
             _workflowService = workflowService;
             _editService = editService;
             _env = env;
+            _context = context;
+            _toolLoopOrchestrator = toolLoopOrchestrator;
         }
+
+        protected int? CurrentUserId
+        {
+            get
+            {
+                var claimId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (int.TryParse(claimId, out int uid)) return uid;
+                return HttpContext.Session.GetInt32("user_id");
+            }
+        }
+
 
         // GET /agent
         [HttpGet("agent")]
@@ -350,6 +368,20 @@ namespace BtoanAiNet.Controllers
         {
             try
             {
+                int currentUid = CurrentUserId ?? userId;
+                int projectId = 0;
+                var version = await _context.FileVersions.FindAsync(model.VersionId);
+                if (version != null)
+                {
+                    var pFile = await _context.ProjectFiles.FindAsync(version.ProjectFileId);
+                    if (pFile != null) projectId = pFile.ProjectId;
+                }
+
+                if (projectId > 0 && !await _workspaceService.ValidateProjectOwnershipAsync(projectId, currentUid))
+                {
+                    return StatusCode(403, new { ok = false, error = "Không có quyền thao tác trên dự án này" });
+                }
+
                 string webRoot = GetWebRoot();
                 bool success = await _workspaceService.RollbackFileVersionAsync(model.VersionId, webRoot);
                 return Json(new { ok = success });
@@ -357,6 +389,34 @@ namespace BtoanAiNet.Controllers
             catch (Exception ex)
             {
                 return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // POST /api/agent/tool-loop & /ai/api/agent/tool-loop
+        [HttpPost]
+        [Route("api/agent/tool-loop")]
+        [Route("ai/api/agent/tool-loop")]
+        public async Task<IActionResult> ExecuteToolLoop([FromBody] AgentToolLoopRequestModel model, [FromQuery] int userId = 0)
+        {
+            if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
+            {
+                return BadRequest(new { ok = false, error = "Prompt is required" });
+            }
+
+            int currentUid = CurrentUserId ?? userId;
+            if (model.ProjectId > 0 && !await _workspaceService.ValidateProjectOwnershipAsync(model.ProjectId, currentUid))
+            {
+                return StatusCode(403, new { ok = false, error = "Không có quyền thao tác trên dự án này" });
+            }
+
+            try
+            {
+                string finalResult = await _toolLoopOrchestrator.ExecutePromptWithToolsAsync(model.Prompt, model.MaxTurns <= 0 ? 5 : model.MaxTurns);
+                return Json(new { ok = true, result = finalResult });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { ok = false, error = ex.Message });
             }
         }
 

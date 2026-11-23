@@ -87,8 +87,8 @@ namespace BtoanAiNet.Services
             int max = Math.Max(origLines.Length, newLines.Length);
             for (int i = 0; i < max; i++)
             {
-                string origLine = i < origLines.Length ? origLines[i].TrimEnd('\r') : null;
-                string newLine = i < newLines.Length ? newLines[i].TrimEnd('\r') : null;
+                string? origLine = i < origLines.Length ? origLines[i].TrimEnd('\r') : null;
+                string? newLine = i < newLines.Length ? newLines[i].TrimEnd('\r') : null;
 
                 if (origLine == newLine)
                 {

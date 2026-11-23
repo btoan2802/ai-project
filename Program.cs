@@ -1,3 +1,6 @@
+using QuestPDF.Infrastructure;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Security.Claims;
 using BtoanAiNet.Data;
 using BtoanAiNet.Repositories;
 using BtoanAiNet.Services;
@@ -8,6 +11,7 @@ using BtoanAiNet.FunctionCalling.Tools;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
+QuestPDF.Settings.License = LicenseType.Community;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -27,7 +31,7 @@ if (!string.IsNullOrEmpty(connectionString))
     if (dbProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) || connectionString.Contains("FS-TOANNB21") || connectionString.Contains("Trusted_Connection") || connectionString.Contains("(local)"))
     {
         builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options.UseSqlServer(connectionString, sqlOptions => sqlOptions.CommandTimeout(3)));
     }
     else
     {
@@ -56,12 +60,12 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IImageGenerationService, ImageGenerationService>();
 builder.Services.AddScoped<IVideoGenerationService, VideoGenerationService>();
 builder.Services.AddScoped<IMusicGenerationService, MusicGenerationService>();
-builder.Services.AddScoped<IStorageService, StorageService>();
+builder.Services.AddHttpClient<IStorageService, StorageService>();
+builder.Services.AddScoped<IArtifactGeneratorService, ArtifactGeneratorService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ICodeAnalysisService, CodeAnalysisService>();
 builder.Services.AddScoped<IProjectScannerService, ProjectScannerService>();
 builder.Services.AddScoped<IFileEditorService, FileEditorService>();
-builder.Services.AddScoped<ICodeDiffService, CodeDiffService>();
 builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
 builder.Services.AddScoped<IWorkspaceIndexingService, WorkspaceIndexingService>();
 builder.Services.AddScoped<ITerminalExecutionService, TerminalExecutionService>();
@@ -126,6 +130,17 @@ builder.Services.AddScoped<IAgentToolLoopOrchestrator, AgentToolLoopOrchestrator
 
 builder.Services.AddSignalR();
 
+// Authentication & Session
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "BtoanAi.Auth";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.LoginPath = "/";
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+    });
+
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -147,26 +162,73 @@ using (var scope = app.Services.CreateScope())
         try
         {
             dbContext.Database.EnsureCreated();
+
+            // Seed default Admin user if not exists
+            if (!dbContext.Users.Any(u => u.Username == "admin"))
+            {
+                string adminSeedPassword = builder.Configuration["AdminSeed:Password"] 
+                    ?? Environment.GetEnvironmentVariable("ADMIN_SEED_PASSWORD") 
+                    ?? "AdminPassword123!";
+
+                dbContext.Users.Add(new BtoanAiNet.Models.User
+                {
+                    Username = "admin",
+                    Password = adminSeedPassword,
+                    Email = "admin@btoan.com",
+                    FullName = "Btoan Admin",
+                    CreatedAt = DateTime.UtcNow
+                });
+                dbContext.SaveChanges();
+                Console.WriteLine("[SEED] Created default admin account: admin");
+            }
         }
         catch (Exception initEx)
         {
-            Console.WriteLine($"DB EnsureCreated Warning: {initEx.Message}");
+            Console.WriteLine($"DB EnsureCreated / Seed Warning: {initEx.Message}");
         }
 
         string sql = @"
-IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Projects]') AND name = 'UserId')
+-- Tables preserved safely with IF NOT EXISTS
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND type in (N'U'))
 BEGIN
-    DROP TABLE [dbo].[Projects];
+    CREATE TABLE [dbo].[users] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [username] NVARCHAR(50) NULL,
+        [full_name] NVARCHAR(255) NULL,
+        [password] NVARCHAR(255) NULL,
+        [created_at] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        [dob] DATE NULL,
+        [email] NVARCHAR(255) NULL,
+        [google_id] NVARCHAR(255) NULL,
+        [avatar] NVARCHAR(MAX) NULL,
+        [face_enabled] INT NULL,
+        [face_image_url] NVARCHAR(MAX) NULL,
+        [face_descriptor] NVARCHAR(MAX) NULL,
+        [face_updated_at] DATETIME2 NULL
+    );
+    CREATE UNIQUE INDEX [IX_users_username] ON [dbo].[users] ([username]) WHERE [username] IS NOT NULL;
 END
 
-IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[ProjectFiles]') AND name = 'ProjectId')
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[conversations]') AND type in (N'U'))
 BEGIN
-    DROP TABLE [dbo].[ProjectFiles];
+    CREATE TABLE [dbo].[conversations] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NULL,
+        [title] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
 END
 
-IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[FileVersions]') AND name = 'ProjectFileId')
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[messages]') AND type in (N'U'))
 BEGIN
-    DROP TABLE [dbo].[FileVersions];
+    CREATE TABLE [dbo].[messages] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [conversation_id] INT NULL,
+        [role] NVARCHAR(20) NULL,
+        [text] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
 END
 
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[projects]') AND type in (N'U'))
@@ -437,6 +499,15 @@ END
 }
 
 // Configure the HTTP request pipeline.
+// 1. Configure ForwardedHeaders for Cloudflare Tunnel / Reverse Proxy (ai.btoan.com)
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+};
+forwardedHeadersOptions.KnownIPNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -445,21 +516,26 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Enable serving face-api model shard files (files without extension)
-app.UseStaticFiles(new StaticFileOptions
-{
-    ServeUnknownFileTypes = true
-});
+// 2. Standard Static Files for wwwroot
+app.UseStaticFiles();
 
-app.Use((context, next) =>
+// 3. Dedicated StaticFileOptions for face-api models to serve extensionless shards
+var modelsPath = Path.Combine(app.Environment.WebRootPath, "facelib", "models");
+if (Directory.Exists(modelsPath))
 {
-    context.Request.EnableBuffering();
-    return next();
-});
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(modelsPath),
+        RequestPath = "/facelib/models",
+        ServeUnknownFileTypes = true,
+        DefaultContentType = "application/octet-stream"
+    });
+}
 
 app.UseRouting();
 
 app.UseSession();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
@@ -473,5 +549,72 @@ app.MapControllerRoute(
 
 app.MapHub<BtoanAiNet.Hubs.TerminalHub>("/hubs/terminal");
 app.MapHub<BtoanAiNet.Hubs.WorkspaceHub>("/ws/workspace");
+
+
+// GET /health Endpoint for self-hosted infrastructure monitoring
+app.MapGet("/health", async (
+    AppDbContext db,
+    BtoanAiNet.Services.VectorDb.IVectorDatabaseService vectorDb,
+    IConfiguration config,
+    IWebHostEnvironment env) =>
+{
+    var status = new Dictionary<string, object>();
+    bool overallHealthy = true;
+    bool isDegraded = false;
+
+    // 1. Database check (fast timeout)
+    try
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        bool dbOk = await db.Database.CanConnectAsync(cts.Token);
+        status["database"] = dbOk ? "Healthy" : "Degraded (Unavailable)";
+        if (!dbOk) isDegraded = true;
+    }
+    catch (Exception ex)
+    {
+        status["database"] = $"Degraded: {ex.Message}";
+        isDegraded = true;
+    }
+
+    // 2. Qdrant Vector DB check (optional, if down => degraded)
+    try
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        bool qdrantOk = await vectorDb.IsHealthyAsync(cts.Token);
+        status["qdrant"] = qdrantOk ? "Healthy" : "Unavailable (Degraded)";
+        if (!qdrantOk) isDegraded = true;
+    }
+    catch
+    {
+        status["qdrant"] = "Unavailable (Degraded)";
+        isDegraded = true;
+    }
+
+    // 3. MessageBus check
+    string rabbitMqHost = config["RabbitMQ:Host"] ?? "";
+    status["messageBus"] = !string.IsNullOrEmpty(rabbitMqHost) ? $"RabbitMQ ({rabbitMqHost})" : "In-Memory / Direct";
+
+    // 4. Storage directory write check
+    try
+    {
+        string filesDir = Path.Combine(env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "files");
+        if (!Directory.Exists(filesDir)) Directory.CreateDirectory(filesDir);
+        string testFile = Path.Combine(filesDir, $".health_check_{Guid.NewGuid():N}.tmp");
+        await File.WriteAllTextAsync(testFile, "health");
+        File.Delete(testFile);
+        status["storageDir"] = "Healthy (Writable)";
+    }
+    catch (Exception ex)
+    {
+        status["storageDir"] = $"Unwritable: {ex.Message}";
+        overallHealthy = false;
+    }
+
+    status["status"] = !overallHealthy ? "Unhealthy" : (isDegraded ? "Degraded" : "Healthy");
+    status["timestamp"] = DateTime.UtcNow.ToString("o");
+
+    int statusCode = !overallHealthy ? 503 : 200;
+    return Results.Json(status, statusCode: statusCode);
+});
 
 app.Run();

@@ -20,10 +20,7 @@ namespace BtoanAiNet.Services
         private readonly IConfiguration _configuration;
         private readonly IGeminiService _geminiService;
 
-        private static readonly string[] ApiKeys = new[]
-        {
-            "YOUR_GEMINI_API_KEY_HERE"
-        };
+        
 
         private static readonly Dictionary<string, string> AnimalDict = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -61,34 +58,57 @@ namespace BtoanAiNet.Services
         private async Task<string> ExpandPromptToDetailedEnglishAsync(string rawPrompt)
         {
             if (string.IsNullOrWhiteSpace(rawPrompt)) 
-                return "a beautiful masterpiece photorealistic scene, highly detailed, 8k resolution";
+                return "a photorealistic masterpiece scene, highly detailed, 8k resolution, cinematic lighting";
 
             string cleaned = CleanPromptForAI(rawPrompt);
 
             try
             {
                 string promptEngineInstruction = @"You are an expert AI image prompt engineer.
-Convert the following user image description into a single, highly detailed, photorealistic English image generation prompt.
+Convert the user image description (Vietnamese or English) into a single, highly detailed, photorealistic English image generation prompt.
 Rules:
-- NEVER do a simple word-by-word translation.
 - Explicitly describe the main subject in rich detail (species, breed, physical features, fur/skin texture, expressive eyes).
-- Explicitly describe the EXACT physical action and interaction (for example: if eating/chewing food like a banana, write 'actively biting and chewing a half-peeled fresh ripe yellow banana held firmly between its paws, visible banana fruit texture and peeled skin').
-- Explicitly describe the environment, setting, camera angle, and lighting (for example: 'warm natural morning sunlight illuminating the scene, soft shadows, cozy background, shallow depth of field, eye-level close-up shot').
+- Explicitly describe the EXACT physical action and interaction (e.g. if eating/chewing an apple, write: 'actively biting and chewing a fresh crisp red apple held firmly between its paws, visible apple bite mark with juicy texture').
+- Explicitly describe the environment, setting, camera angle, and lighting (e.g.: 'warm natural morning sunlight illuminating the scene, soft shadows, cozy background with soft bokeh, shallow depth of field, sharp focus').
 - Include quality modifiers: 'photorealistic, 8k resolution, highly detailed, cinematic lighting, masterpiece, sharp focus'.
 - Do NOT use generic or vague words.
-- Return ONLY the final English prompt text on a single line, with NO introduction, NO quotes, NO explanation.
+- Return ONLY the final English prompt text on a single line, with NO introduction, NO quotes, NO explanation.";
 
-User request: " + cleaned;
-
-                string expanded = await _geminiService.GenerateTextAsync(promptEngineInstruction);
-                if (!string.IsNullOrWhiteSpace(expanded))
+                var payload = new JsonObject
                 {
-                    expanded = expanded.Trim().Replace("\r", " ").Replace("\n", " ");
-                    expanded = System.Text.RegularExpressions.Regex.Replace(expanded, @"^[""']|[""']$", "").Trim();
-                    if (expanded.Length > 20)
+                    ["systemInstruction"] = new JsonObject
                     {
-                        Console.WriteLine($"[IMAGE PROMPT EXPANDED SUCCESS] '{cleaned}' => '{expanded}'");
-                        return expanded;
+                        ["parts"] = new JsonArray { new JsonObject { ["text"] = promptEngineInstruction } }
+                    },
+                    ["contents"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["role"] = "user",
+                            ["parts"] = new JsonArray { new JsonObject { ["text"] = cleaned } }
+                        }
+                    },
+                    ["generationConfig"] = new JsonObject
+                    {
+                        ["maxOutputTokens"] = 300,
+                        ["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 }
+                    }
+                };
+
+                var (success, resData, _, _) = await _geminiService.GenerateContentAsync("gemini-3.1-flash-lite", payload);
+                if (success && resData != null)
+                {
+                    string expanded = resData["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]?.ToString() ?? "";
+                    if (!string.IsNullOrWhiteSpace(expanded))
+                    {
+                        expanded = expanded.Trim().Replace("\r", " ").Replace("\n", " ");
+                        expanded = System.Text.RegularExpressions.Regex.Replace(expanded, @"^[""']|[""']$", "").Trim();
+                        expanded = expanded.TrimEnd('.', '?', '!', ' ', '\t');
+                        if (expanded.Length > 20)
+                        {
+                            Console.WriteLine($"[IMAGE PROMPT EXPANDED SUCCESS] '{cleaned}' => '{expanded}'");
+                            return expanded;
+                        }
                     }
                 }
             }
@@ -97,7 +117,7 @@ User request: " + cleaned;
                 Console.WriteLine("[IMAGE PROMPT EXPANSION EXCEPTION] " + ex.Message);
             }
 
-            return $"{cleaned}, photorealistic, highly detailed, natural lighting, sharp focus, 8k resolution, cinematic composition";
+            return $"{cleaned}, cute fluffy, photorealistic, actively eating a fresh red apple, natural lighting, sharp focus, 8k resolution, cinematic composition";
         }
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, string> _lastImagePrompts = new();
@@ -124,18 +144,43 @@ User request: " + cleaned;
             return false;
         }
 
+        private readonly IWebHostEnvironment _env;
+
         public ImageGenerationService(
             HttpClient httpClient,
             IConversationRepository conversationRepository,
             IIntentEngineService intentEngineService,
             IConfiguration configuration,
-            IGeminiService geminiService)
+            IGeminiService geminiService,
+            IWebHostEnvironment env)
         {
             _httpClient = httpClient;
             _conversationRepository = conversationRepository;
             _intentEngineService = intentEngineService;
             _configuration = configuration;
             _geminiService = geminiService;
+            _env = env;
+        }
+
+        private async Task<string> SaveImageLocallyAsync(byte[] imageBytes, string mimeType)
+        {
+            try
+            {
+                string webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                string uploadDir = Path.Combine(webRoot, "uploads", "images");
+                if (!Directory.Exists(uploadDir)) Directory.CreateDirectory(uploadDir);
+
+                string ext = mimeType.Contains("png") ? "png" : "jpg";
+                string filename = $"img_{Guid.NewGuid():N}.{ext}";
+                string filePath = Path.Combine(uploadDir, filename);
+                await File.WriteAllBytesAsync(filePath, imageBytes);
+                return $"/uploads/images/{filename}";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[SAVE IMAGE LOCALLY ERROR] " + ex.Message);
+                return string.Empty;
+            }
         }
 
         private List<string> GetConfiguredApiKeys()
@@ -150,19 +195,13 @@ User request: " + cleaned;
                 keys.AddRange(arrayKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")).Select(k => k.Trim()));
             }
 
-            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+            string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") 
+                          ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
             if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
             if (keys.Count == 0)
             {
-                try
-                {
-                    string embeddedKey = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
-                    if (!string.IsNullOrWhiteSpace(embeddedKey)) keys.Add(embeddedKey.Trim());
-                }
-                catch { }
-
-                keys.AddRange(ApiKeys.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_GEMINI_API_KEY")));
+                throw new InvalidOperationException("Gemini API key is not configured. Please set 'Gemini:ApiKey' in appsettings.json or 'Gemini__ApiKey' environment variable.");
             }
 
             return keys.Distinct().ToList();
@@ -224,176 +263,265 @@ User request: " + cleaned;
                 default: imgWidth = 1024; imgHeight = 1024; break;
             }
 
-            var intentObj = await _intentEngineService.AnalyzeIntentAsync(prompt);
-            string protection = _intentEngineService.GetSystemProtection(intentObj);
-
-            string refinedPrompt = $"STRICT INSTRUCTIONS: {protection}\n\nPRIMARY PROMPT: {prompt}";
-            Console.WriteLine("[IMAGE API PROMPT] " + refinedPrompt);
-            Console.WriteLine("[IMAGE API FALLBACK KEYWORD] " + CleanPromptForAI(prompt));
-
             var allKeys = GetConfiguredApiKeys();
             var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
-            string modelName = "gemini-2.5-flash-image";
-            string lastError = "Unknown Gemini API error";
 
-            foreach (var key in keys)
+            // =========================================================================
+            // ƯU TIÊN 1: Google Gemini Native Image Generation
+            // =========================================================================
+            var geminiImageModels = new[]
             {
-                try
+                "gemini-2.5-flash-image",
+                "gemini-3.1-flash-image",
+                "gemini-3.1-flash-image-preview",
+                "gemini-3.1-flash-lite-image",
+                "gemini-2.0-flash-exp-image-generation",
+                "gemini-3-pro-image"
+            };
+
+            foreach (var geminiModel in geminiImageModels)
+            {
+                foreach (var key in keys)
                 {
-                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={Uri.EscapeDataString(key)}";
-
-                    var payload = new JsonObject
+                    try
                     {
-                        ["contents"] = new JsonArray
+                        string url = $"https://generativelanguage.googleapis.com/v1beta/models/{geminiModel}:generateContent?key={Uri.EscapeDataString(key)}";
+                        var payload = new JsonObject
                         {
-                            new JsonObject
+                            ["contents"] = new JsonArray
                             {
-                                ["parts"] = new JsonArray { new JsonObject { ["text"] = refinedPrompt } }
-                            }
-                        },
-                        ["generationConfig"] = new JsonObject
-                        {
-                            ["imageConfig"] = new JsonObject
-                            {
-                                ["aspectRatio"] = aspectRatio
-                            }
-                        }
-                    };
-
-                    var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
-                    var response = await _httpClient.PostAsync(url, content);
-                    string rawResponse = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine("[IMAGE API RESPONSE] Status: " + (int)response.StatusCode + " Body: " + (rawResponse.Length > 200 ? rawResponse.Substring(0, 200) + "..." : rawResponse));
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        lastError = $"API Error (HTTP {(int)response.StatusCode}): {rawResponse}";
-                        continue;
-                    }
-
-                    using var doc = JsonDocument.Parse(rawResponse);
-                    var root = doc.RootElement;
-
-                    string? imageBase64 = null;
-                    string mimeType = "image/png";
-
-                    if (root.TryGetProperty("candidates", out var candidates))
-                    {
-                        foreach (var candidate in candidates.EnumerateArray())
-                        {
-                            if (candidate.TryGetProperty("content", out var contentElem) &&
-                                contentElem.TryGetProperty("parts", out var parts))
-                            {
-                                foreach (var part in parts.EnumerateArray())
+                                new JsonObject
                                 {
-                                    if (part.TryGetProperty("inlineData", out var inlineData))
-                                    {
-                                        imageBase64 = inlineData.GetProperty("data").GetString();
-                                        mimeType = inlineData.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "image/png" : "image/png";
-                                        break;
-                                    }
-                                    if (part.TryGetProperty("inline_data", out var inlineDataUnderscore))
-                                    {
-                                        imageBase64 = inlineDataUnderscore.GetProperty("data").GetString();
-                                        mimeType = inlineDataUnderscore.TryGetProperty("mime_type", out var m) ? m.GetString() ?? "image/png" : "image/png";
-                                        break;
-                                    }
+                                    ["parts"] = new JsonArray { new JsonObject { ["text"] = prompt } }
+                                }
+                            },
+                            ["generationConfig"] = new JsonObject
+                            {
+                                ["responseModalities"] = new JsonArray { "TEXT", "IMAGE" },
+                                ["imageConfig"] = new JsonObject
+                                {
+                                    ["aspectRatio"] = aspectRatio
                                 }
                             }
-                            if (imageBase64 != null) break;
+                        };
+
+                        var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+                        var response = await _httpClient.PostAsync(url, content);
+                        string rawResponse = await response.Content.ReadAsStringAsync();
+
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            string snippet = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) : rawResponse;
+                            Console.WriteLine($"[GEMINI IMAGE ATTEMPT FAILED] Model: {geminiModel,-32} | HTTP {(int)response.StatusCode} | Body: {snippet}");
+                            continue;
+                        }
+
+                        using var doc = JsonDocument.Parse(rawResponse);
+                        var root = doc.RootElement;
+                        string? imageBase64 = null;
+                        string mimeType = "image/png";
+
+                        if (root.TryGetProperty("candidates", out var candidates))
+                        {
+                            foreach (var candidate in candidates.EnumerateArray())
+                            {
+                                if (candidate.TryGetProperty("content", out var contentElem) &&
+                                    contentElem.TryGetProperty("parts", out var parts))
+                                {
+                                    foreach (var part in parts.EnumerateArray())
+                                    {
+                                        if (part.TryGetProperty("inlineData", out var inlineData))
+                                        {
+                                            imageBase64 = inlineData.GetProperty("data").GetString();
+                                            mimeType = inlineData.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "image/png" : "image/png";
+                                            break;
+                                        }
+                                        if (part.TryGetProperty("inline_data", out var inlineDataUnderscore))
+                                        {
+                                            imageBase64 = inlineDataUnderscore.GetProperty("data").GetString();
+                                            mimeType = inlineDataUnderscore.TryGetProperty("mime_type", out var m) ? m.GetString() ?? "image/png" : "image/png";
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (imageBase64 != null) break;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(imageBase64))
+                        {
+                            byte[] imgBytes = Convert.FromBase64String(imageBase64);
+                            string publicUrl = await SaveImageLocallyAsync(imgBytes, mimeType);
+                            Console.WriteLine($"[IMAGE SUCCESS: Gemini Native Image] Model: {geminiModel} | Saved to: {publicUrl}");
+
+                            if (cid > 0) _lastImagePrompts[cid] = CleanPromptForAI(prompt);
+
+                            return new JsonObject
+                            {
+                                ["success"] = true,
+                                ["mimeType"] = mimeType,
+                                ["imageBase64"] = imageBase64,
+                                ["imageUrl"] = publicUrl,
+                                ["model"] = geminiModel
+                            };
                         }
                     }
-
-                    if (imageBase64 != null)
+                    catch (Exception ex)
                     {
-                        if (cid > 0)
+                        Console.WriteLine($"[GEMINI IMAGE EXCEPTION] Model: {geminiModel}: {ex.Message}");
+                    }
+                }
+            }
+
+            // =========================================================================
+            // ƯU TIÊN 2: Google Imagen (:predict endpoint)
+            // =========================================================================
+            var imagenModels = new[]
+            {
+                "imagen-3.0-generate-002",
+                "imagen-4.0-generate-001"
+            };
+
+            foreach (var imagenModel in imagenModels)
+            {
+                foreach (var key in keys)
+                {
+                    try
+                    {
+                        string url = $"https://generativelanguage.googleapis.com/v1beta/models/{imagenModel}:predict?key={Uri.EscapeDataString(key)}";
+                        var payload = new JsonObject
                         {
-                            _lastImagePrompts[cid] = CleanPromptForAI(prompt);
+                            ["instances"] = new JsonArray
+                            {
+                                new JsonObject { ["prompt"] = prompt }
+                            },
+                            ["parameters"] = new JsonObject
+                            {
+                                ["sampleCount"] = 1,
+                                ["aspectRatio"] = aspectRatio
+                            }
+                        };
+
+                        var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+                        var response = await _httpClient.PostAsync(url, content);
+                        string rawResponse = await response.Content.ReadAsStringAsync();
+
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            string snippet = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) : rawResponse;
+                            Console.WriteLine($"[IMAGEN ATTEMPT FAILED] Model: {imagenModel,-32} | HTTP {(int)response.StatusCode} | Body: {snippet}");
+                            continue;
                         }
+
+                        using var doc = JsonDocument.Parse(rawResponse);
+                        if (doc.RootElement.TryGetProperty("predictions", out var preds) && preds.GetArrayLength() > 0)
+                        {
+                            var firstPred = preds[0];
+                            if (firstPred.TryGetProperty("bytesBase64Encoded", out var b64Elem))
+                            {
+                                string? imageBase64 = b64Elem.GetString();
+                                if (!string.IsNullOrEmpty(imageBase64))
+                                {
+                                    byte[] imgBytes = Convert.FromBase64String(imageBase64);
+                                    string publicUrl = await SaveImageLocallyAsync(imgBytes, "image/jpeg");
+                                    Console.WriteLine($"[IMAGE SUCCESS: Google Imagen] Model: {imagenModel} | Saved to: {publicUrl}");
+
+                                    if (cid > 0) _lastImagePrompts[cid] = CleanPromptForAI(prompt);
+
+                                    return new JsonObject
+                                    {
+                                        ["success"] = true,
+                                        ["mimeType"] = "image/jpeg",
+                                        ["imageBase64"] = imageBase64,
+                                        ["imageUrl"] = publicUrl,
+                                        ["model"] = imagenModel
+                                    };
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[IMAGEN EXCEPTION] Model: {imagenModel}: {ex.Message}");
+                    }
+                }
+            }
+
+            // =========================================================================
+            // FALLBACK CUỐI CÙNG: Pollinations.ai FLUX (High-Definition, No Watermark)
+            // =========================================================================
+            Console.WriteLine("[IMAGE FALLBACK] Google Gemini Image and Imagen models failed. Falling back to Pollinations FLUX (model=flux, width=" + imgWidth + ", height=" + imgHeight + ", nologo=true)...");
+            try
+            {
+                string encodedPrompt = Uri.EscapeDataString(prompt);
+                string fluxUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?model=flux&width={imgWidth}&height={imgHeight}&nologo=true";
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, fluxUrl);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+                var res = await _httpClient.SendAsync(req);
+                if ((int)res.StatusCode == 402)
+                {
+                    int waitSec = 22;
+                    if (res.Headers.TryGetValues("Retry-After", out var vals))
+                    {
+                        var firstVal = vals.FirstOrDefault();
+                        if (int.TryParse(firstVal, out int parsed)) waitSec = Math.Min(parsed + 1, 45);
+                    }
+                    Console.WriteLine($"[POLLINATIONS FLUX 402] Rate limit cooldown (1 image per 45s). Waiting {waitSec}s before auto-retry...");
+                    await Task.Delay(waitSec * 1000);
+                    using var retryReq = new HttpRequestMessage(HttpMethod.Get, fluxUrl);
+                    retryReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    res = await _httpClient.SendAsync(retryReq);
+                }
+
+                if (!res.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[POLLINATIONS FLUX FAILED] HTTP {(int)res.StatusCode}. Retrying with turbo model...");
+                    string turboUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?model=turbo&width={imgWidth}&height={imgHeight}&nologo=true";
+                    using var turboReq = new HttpRequestMessage(HttpMethod.Get, turboUrl);
+                    turboReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    res = await _httpClient.SendAsync(turboReq);
+                }
+
+                if (!res.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[POLLINATIONS TURBO FAILED] HTTP {(int)res.StatusCode}. Retrying with default model...");
+                    string defaultUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}&nologo=true";
+                    using var defReq = new HttpRequestMessage(HttpMethod.Get, defaultUrl);
+                    defReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    res = await _httpClient.SendAsync(defReq);
+                }
+
+                if (res.IsSuccessStatusCode)
+                {
+                    byte[]? imgBytes = await res.Content.ReadAsByteArrayAsync();
+                    if (imgBytes != null && imgBytes.Length > 1000)
+                    {
+                        string publicUrl = await SaveImageLocallyAsync(imgBytes, "image/jpeg");
+                        Console.WriteLine($"[IMAGE SUCCESS: Pollinations FLUX/Fallback] High-definition watermark-free image saved to: {publicUrl} ({imgBytes.Length} bytes)");
+
+                        if (cid > 0) _lastImagePrompts[cid] = CleanPromptForAI(prompt);
+
                         return new JsonObject
                         {
                             ["success"] = true,
-                            ["mimeType"] = mimeType,
-                            ["imageBase64"] = imageBase64
+                            ["mimeType"] = "image/jpeg",
+                            ["imageBase64"] = Convert.ToBase64String(imgBytes),
+                            ["imageUrl"] = publicUrl,
+                            ["model"] = "pollinations-flux"
                         };
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    lastError = ex.Message;
+                    Console.WriteLine($"[POLLINATIONS ALL MODELS FAILED] HTTP {(int)res.StatusCode}");
                 }
             }
-
-            // Fallback to high quality image generation if Gemini API hits Quota Exceeded (HTTP 429 / 403)
-            try
+            catch (Exception ex)
             {
-                string searchPrompt = CleanPromptForAI(prompt);
-                string encodedPrompt = Uri.EscapeDataString(searchPrompt);
-
-                byte[]? imgBytes = null;
-                try
-                {
-                    using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}&nologo=true");
-                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                    var res = await _httpClient.SendAsync(req);
-                    if (res.IsSuccessStatusCode)
-                    {
-                        var readBytes = await res.Content.ReadAsByteArrayAsync();
-                        if (readBytes != null && readBytes.Length > 1000)
-                        {
-                            imgBytes = readBytes;
-                        }
-                    }
-                }
-                catch { }
-
-                if (imgBytes == null || imgBytes.Length <= 1000)
-                {
-                    try
-                    {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://image.pollinations.ai/prompt/{encodedPrompt}");
-                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                        var res = await _httpClient.SendAsync(req);
-                        if (res.IsSuccessStatusCode)
-                        {
-                            var readBytes = await res.Content.ReadAsByteArrayAsync();
-                            if (readBytes != null && readBytes.Length > 1000) imgBytes = readBytes;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (imgBytes == null || imgBytes.Length <= 1000)
-                {
-                    try
-                    {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://loremflickr.com/1024/1024/{Uri.EscapeDataString(searchPrompt)}");
-                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                        var res = await _httpClient.SendAsync(req);
-                        if (res.IsSuccessStatusCode)
-                        {
-                            var readBytes = await res.Content.ReadAsByteArrayAsync();
-                            if (readBytes != null && readBytes.Length > 1000) imgBytes = readBytes;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (imgBytes != null && imgBytes.Length > 0)
-                {
-                    if (cid > 0)
-                    {
-                        _lastImagePrompts[cid] = CleanPromptForAI(prompt);
-                    }
-                    return new JsonObject
-                    {
-                        ["success"] = true,
-                        ["mimeType"] = "image/jpeg",
-                        ["imageBase64"] = Convert.ToBase64String(imgBytes)
-                    };
-                }
+                Console.WriteLine("[POLLINATIONS EXCEPTION] " + ex.Message);
             }
-            catch { }
 
             return new JsonObject { ["success"] = false, ["error"] = "Không thể vẽ ảnh vào lúc này. Vui lòng thử lại sau ít phút." };
         }
@@ -464,6 +592,7 @@ User request: " + cleaned;
                         },
                         ["generationConfig"] = new JsonObject
                         {
+                            ["responseModalities"] = new JsonArray { "TEXT", "IMAGE" },
                             ["imageConfig"] = new JsonObject { ["aspectRatio"] = "1:1" }
                         }
                     };

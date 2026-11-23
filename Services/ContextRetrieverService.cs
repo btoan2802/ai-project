@@ -26,6 +26,10 @@ namespace BtoanAiNet.Services
 
         public async Task<List<ProjectFile>> GetRelevantFilesAsync(int projectId, string prompt, int maxFiles = 5)
         {
+            if (string.IsNullOrWhiteSpace(prompt) || prompt.Trim().Length < 15)
+            {
+                return new List<ProjectFile>();
+            }
             try
             {
                 // 1. Semantic Vector Search via Qdrant
