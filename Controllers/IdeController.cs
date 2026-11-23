@@ -1597,10 +1597,10 @@ Nhiệm vụ của bạn:
    - QUY TẮC DÙNG CLI SCAFFOLDING ('setupCommands'):
      + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài).
      + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'.
-     + Khi người dùng yêu cầu Angular: Sử dụng 'npx -y @angular/cli new frontend --routing --style=scss --ssr=false --skip-git' trong 'setupCommands' (luôn gắn cờ non-interactive để không bị treo).
+     + Khi người dùng yêu cầu Angular: Sử dụng 'npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install' trong 'setupCommands' (luôn gắn cờ non-interactive & --skip-install để tạo bộ file mã nguồn siêu nhanh trong 2-3s mà không bị treo tải node_modules).
      + Khi người dùng yêu cầu Fullstack (.NET Web API + Angular): Đưa 2 lệnh vào 'setupCommands':
        'dotnet new webapi --use-controllers -n backend'
-       'npx -y @angular/cli new frontend --routing --style=scss --ssr=false --skip-git'
+       'npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install'
      + Sau đó mới đưa code nghiệp vụ tùy chỉnh (Controllers, Models, Components, v.v.) vào mảng 'operations'.
      + Nếu là web tĩnh thuần HTML/CSS/JS: để 'setupCommands': [] và tạo trực tiếp index.html, css/style.css, js/app.js qua 'operations'.
    - KHÔNG ĐƯỢC để nội dung giả kiểu '// code here', viết code hoàn chỉnh, responsive, đẹp mắt và chạy thật 100%!
