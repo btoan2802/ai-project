@@ -382,6 +382,7 @@ namespace BtoanAiNet.Services
                             string jsonStr = line.Substring(6).Trim();
                             if (string.IsNullOrEmpty(jsonStr)) continue;
 
+                            List<string>? extractedChunks = null;
                             try
                             {
                                 using var doc = JsonDocument.Parse(jsonStr);
@@ -410,8 +411,8 @@ namespace BtoanAiNet.Services
                                                 string? txt = textElem.GetString();
                                                 if (!string.IsNullOrEmpty(txt))
                                                 {
-                                                    hasEmitted = true;
-                                                    yield return txt;
+                                                    extractedChunks ??= new List<string>();
+                                                    extractedChunks.Add(txt);
                                                 }
                                             }
                                         }
@@ -419,6 +420,15 @@ namespace BtoanAiNet.Services
                                 }
                             }
                             catch { }
+
+                            if (extractedChunks != null)
+                            {
+                                foreach (var chunk in extractedChunks)
+                                {
+                                    hasEmitted = true;
+                                    yield return chunk;
+                                }
+                            }
                         }
                     }
 
