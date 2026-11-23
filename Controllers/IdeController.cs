@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using BtoanAiNet.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Data.Sqlite;
 
 namespace BtoanAiNet.Controllers
 {
@@ -202,9 +203,17 @@ namespace BtoanAiNet.Controllers
             {
                 Directory.CreateDirectory(projectPath);
 
-                // Optional starter template if requested
-                if (string.Equals(model?.Template, "html5", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(model?.Template, "web", StringComparison.OrdinalIgnoreCase))
+                // Scaffolding templates
+                if (string.Equals(model?.Template, "dotnet-mvc", StringComparison.OrdinalIgnoreCase))
+                {
+                    GenerateMvcStarterTemplate(projectPath, cleanName);
+                }
+                else if (string.Equals(model?.Template, "dotnet-webapi", StringComparison.OrdinalIgnoreCase))
+                {
+                    GenerateWebApiStarterTemplate(projectPath, cleanName);
+                }
+                else if (string.Equals(model?.Template, "html5", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(model?.Template, "web", StringComparison.OrdinalIgnoreCase))
                 {
                     System.IO.File.WriteAllText(Path.Combine(projectPath, "index.html"), "<!DOCTYPE html>\n<html>\n<head>\n    <title>My Web Project</title>\n</head>\n<body>\n    <h1>Welcome to My Web Project</h1>\n</body>\n</html>", Encoding.UTF8);
                 }
@@ -221,6 +230,415 @@ namespace BtoanAiNet.Controllers
                 _logger.LogError(ex, "Error creating project {Name}", cleanName);
                 return StatusCode(500, new { ok = false, error = ex.Message });
             }
+        }
+
+        private static void GenerateMvcStarterTemplate(string projectPath, string projectName)
+        {
+            Directory.CreateDirectory(Path.Combine(projectPath, "Controllers"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Data"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Models"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Views", "Shared"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Views", "Products"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "wwwroot", "css"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "wwwroot", "js"));
+
+            string csproj = $@"<Project Sdk=""Microsoft.NET.Sdk.Web"">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""11.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""9.0.0"" />
+  </ItemGroup>
+</Project>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csproj, Encoding.UTF8);
+
+            string appsettings = @"{
+  ""Logging"": {
+    ""LogLevel"": {
+      ""Default"": ""Information"",
+      ""Microsoft.AspNetCore"": ""Warning""
+    }
+  },
+  ""AllowedHosts"": ""*"",
+  ""Database"": {
+    ""Provider"": ""Sqlite"",
+    ""SqliteConnection"": ""Data Source=app.db"",
+    ""SqlServerConnection"": ""Server=.;Database=MyAppDb;Trusted_Connection=True;TrustServerCertificate=True;""
+  }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "appsettings.json"), appsettings, Encoding.UTF8);
+
+            string dbContext = @"using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+
+namespace App.Data
+{
+    public class Product
+    {
+        public int Id { get; set; }
+        [Required]
+        public string Name { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public string Category { get; set; } = ""Chung"";
+        public int Stock { get; set; } = 10;
+    }
+
+    public class AppDbContext : DbContext
+    {
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        public DbSet<Product> Products => Set<Product>();
+    }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Data", "AppDbContext.cs"), dbContext, Encoding.UTF8);
+
+            string controller = @"using App.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace App.Controllers
+{
+    public class ProductsController : Controller
+    {
+        private readonly AppDbContext _db;
+        public ProductsController(AppDbContext db) => _db = db;
+
+        public async Task<IActionResult> Index()
+        {
+            var items = await _db.Products.ToListAsync();
+            return View(items);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(Product model)
+        {
+            if (ModelState.IsValid)
+            {
+                _db.Products.Add(model);
+                await _db.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var item = await _db.Products.FindAsync(id);
+            if (item != null)
+            {
+                _db.Products.Remove(item);
+                await _db.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Index));
+        }
+    }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Controllers", "ProductsController.cs"), controller, Encoding.UTF8);
+
+            string viewStart = @"@{
+    Layout = ""_Layout"";
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Views", "_ViewStart.cshtml"), viewStart, Encoding.UTF8);
+
+            string layout = @"<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""utf-8"" />
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
+    <title>@ViewData[""Title""] - Btoan MVC App</title>
+    <link href=""https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"" rel=""stylesheet"" />
+    <link href=""https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"" rel=""stylesheet"" />
+    <style>
+        body { background: #121212; color: #e0e0e0; font-family: system-ui, -apple-system, sans-serif; }
+        .card { background: #1e1e1e; border: 1px solid #333; }
+        .table { color: #e0e0e0; }
+        .table-dark { background-color: #252525; }
+        .navbar { background: #181818 !important; border-bottom: 1px solid #333; }
+    </style>
+</head>
+<body>
+    <nav class=""navbar navbar-expand-lg navbar-dark mb-4"">
+        <div class=""container"">
+            <a class=""navbar-brand fw-bold text-info"" href=""/""><i class=""bi bi-box-seam me-2""></i>Btoan MVC App (SQLite)</a>
+            <span class=""badge bg-success""><i class=""bi bi-database me-1""></i>SQLite: app.db</span>
+        </div>
+    </nav>
+    <div class=""container"">
+        @RenderBody()
+    </div>
+    <script src=""https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js""></script>
+</body>
+</html>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Views", "Shared", "_Layout.cshtml"), layout, Encoding.UTF8);
+
+            string viewIndex = @"@model IEnumerable<App.Data.Product>
+@{
+    ViewData[""Title""] = ""Quản lý Sản phẩm"";
+}
+
+<div class=""card p-4 shadow-sm mb-4"">
+    <div class=""d-flex justify-content-between align-items-center mb-3"">
+        <h4 class=""mb-0 text-white""><i class=""bi bi-grid-3x3-gap-fill text-primary me-2""></i>Danh sách Sản phẩm</h4>
+        <button class=""btn btn-sm btn-primary"" data-bs-toggle=""collapse"" data-bs-target=""#createForm""><i class=""bi bi-plus-lg me-1""></i>Thêm sản phẩm mới</button>
+    </div>
+
+    <div id=""createForm"" class=""collapse mb-4 p-3 bg-black rounded border border-secondary"">
+        <form asp-action=""Create"" method=""post"" class=""row g-2"">
+            <div class=""col-md-4"">
+                <input type=""text"" name=""Name"" class=""form-control form-control-sm bg-dark text-light border-secondary"" placeholder=""Tên sản phẩm..."" required />
+            </div>
+            <div class=""col-md-3"">
+                <input type=""number"" name=""Price"" class=""form-control form-control-sm bg-dark text-light border-secondary"" placeholder=""Giá (VNĐ)..."" required />
+            </div>
+            <div class=""col-md-3"">
+                <input type=""text"" name=""Category"" class=""form-control form-control-sm bg-dark text-light border-secondary"" placeholder=""Danh mục..."" value=""Thiết bị"" />
+            </div>
+            <div class=""col-md-2"">
+                <button type=""submit"" class=""btn btn-sm btn-success w-100""><i class=""bi bi-check-lg me-1""></i>Lưu</button>
+            </div>
+        </form>
+    </div>
+
+    <div class=""table-responsive"">
+        <table class=""table table-dark table-hover table-bordered align-middle"">
+            <thead>
+                <tr class=""table-secondary text-dark"">
+                    <th>#ID</th>
+                    <th>Tên sản phẩm</th>
+                    <th>Giá</th>
+                    <th>Danh mục</th>
+                    <th>Tồn kho</th>
+                    <th style=""width: 80px;"">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model)
+                {
+                    <tr>
+                        <td><strong>#@p.Id</strong></td>
+                        <td class=""text-info fw-semibold"">@p.Name</td>
+                        <td>@p.Price.ToString(""N0"") đ</td>
+                        <td><span class=""badge bg-secondary"">@p.Category</span></td>
+                        <td><span class=""badge bg-info text-dark"">@p.Stock cái</span></td>
+                        <td>
+                            <form asp-action=""Delete"" method=""post"" onsubmit=""return confirm('Xóa sản phẩm này?')"">
+                                <input type=""hidden"" name=""id"" value=""@p.Id"" />
+                                <button type=""submit"" class=""btn btn-sm btn-outline-danger py-0 px-2""><i class=""bi bi-trash""></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Views", "Products", "Index.cshtml"), viewIndex, Encoding.UTF8);
+
+            string program = @"using App.Data;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllersWithViews();
+
+string sqliteConn = builder.Configuration[""Database:SqliteConnection""] ?? ""Data Source=app.db"";
+builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlite(sqliteConn));
+
+var app = builder.Build();
+
+// Auto-migrate & seed sample data
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+    if (!db.Products.Any())
+    {
+        db.Products.AddRange(
+            new Product { Name = ""Laptop Dell XPS 15"", Price = 35000000, Category = ""Laptop"", Stock = 5 },
+            new Product { Name = ""Bàn phím cơ Keychron Q1"", Price = 4200000, Category = ""Phụ kiện"", Stock = 12 },
+            new Product { Name = ""Chuột Logitech MX Master 3S"", Price = 2400000, Category = ""Phụ kiện"", Stock = 20 },
+            new Product { Name = ""Màn hình Dell UltraSharp 27 inch"", Price = 12500000, Category = ""Màn hình"", Stock = 8 },
+            new Product { Name = ""Tai nghe Sony WH-1000XM5"", Price = 7800000, Category = ""Âm thanh"", Stock = 15 }
+        );
+        db.SaveChanges();
+    }
+}
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler(""/Home/Error"");
+    app.UseHsts();
+}
+
+app.UseStaticFiles();
+app.UseRouting();
+app.UseAuthorization();
+
+app.MapControllerRoute(
+    name: ""default"",
+    pattern: ""{controller=Products}/{action=Index}/{id?}"");
+
+app.Run();";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Program.cs"), program, Encoding.UTF8);
+        }
+
+        private static void GenerateWebApiStarterTemplate(string projectPath, string projectName)
+        {
+            Directory.CreateDirectory(Path.Combine(projectPath, "Controllers"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Data"));
+
+            string csproj = $@"<Project Sdk=""Microsoft.NET.Sdk.Web"">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=""Microsoft.AspNetCore.OpenApi"" Version=""10.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""11.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""9.0.0"" />
+  </ItemGroup>
+</Project>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csproj, Encoding.UTF8);
+
+            string appsettings = @"{
+  ""Logging"": {
+    ""LogLevel"": {
+      ""Default"": ""Information"",
+      ""Microsoft.AspNetCore"": ""Warning""
+    }
+  },
+  ""AllowedHosts"": ""*"",
+  ""Database"": {
+    ""Provider"": ""Sqlite"",
+    ""SqliteConnection"": ""Data Source=app.db"",
+    ""SqlServerConnection"": ""Server=.;Database=MyAppDb;Trusted_Connection=True;TrustServerCertificate=True;""
+  }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "appsettings.json"), appsettings, Encoding.UTF8);
+
+            string dbContext = @"using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+
+namespace App.Data
+{
+    public class TodoItem
+    {
+        public int Id { get; set; }
+        [Required]
+        public string Title { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class AppDbContext : DbContext
+    {
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        public DbSet<TodoItem> Todos => Set<TodoItem>();
+    }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Data", "AppDbContext.cs"), dbContext, Encoding.UTF8);
+
+            string controller = @"using App.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace App.Controllers
+{
+    [ApiController]
+    [Route(""api/[controller]"")]
+    public class TodosController : ControllerBase
+    {
+        private readonly AppDbContext _db;
+        public TodosController(AppDbContext db) => _db = db;
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<TodoItem>>> GetTodos()
+        {
+            return await _db.Todos.OrderByDescending(t => t.Id).ToListAsync();
+        }
+
+        [HttpGet(""{id}"")]
+        public async Task<ActionResult<TodoItem>> GetTodo(int id)
+        {
+            var item = await _db.Todos.FindAsync(id);
+            if (item == null) return NotFound();
+            return item;
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<TodoItem>> CreateTodo(TodoItem item)
+        {
+            _db.Todos.Add(item);
+            await _db.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetTodo), new { id = item.Id }, item);
+        }
+
+        [HttpPut(""{id}"")]
+        public async Task<IActionResult> UpdateTodo(int id, TodoItem updated)
+        {
+            if (id != updated.Id) return BadRequest();
+            _db.Entry(updated).State = EntityState.Modified;
+            await _db.SaveChangesAsync();
+            return NoContent();
+        }
+
+        [HttpDelete(""{id}"")]
+        public async Task<IActionResult> DeleteTodo(int id)
+        {
+            var item = await _db.Todos.FindAsync(id);
+            if (item == null) return NotFound();
+            _db.Todos.Remove(item);
+            await _db.SaveChangesAsync();
+            return NoContent();
+        }
+    }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Controllers", "TodosController.cs"), controller, Encoding.UTF8);
+
+            string program = @"using App.Data;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
+
+string sqliteConn = builder.Configuration[""Database:SqliteConnection""] ?? ""Data Source=app.db"";
+builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlite(sqliteConn));
+
+var app = builder.Build();
+
+// Auto-migrate & seed sample data
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+    if (!db.Todos.Any())
+    {
+        db.Todos.AddRange(
+            new TodoItem { Title = ""Nghiên cứu kiến trúc Web IDE"", IsCompleted = true },
+            new TodoItem { Title = ""Tích hợp SQLite Studio vào trình duyệt"", IsCompleted = true },
+            new TodoItem { Title = ""Viết Reverse Proxy chống SSRF cho Live Preview"", IsCompleted = true },
+            new TodoItem { Title = ""Triển khai test thực tế bằng Browser Agent"", IsCompleted = false }
+        );
+        db.SaveChanges();
+    }
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseRouting();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "Program.cs"), program, Encoding.UTF8);
         }
 
         // DELETE /api/ide/projects/{name} and POST /api/ide/projects/delete
@@ -1595,8 +2013,14 @@ Nhiệm vụ của bạn:
 2. Nếu người dùng yêu cầu TẠO NGUYÊN MỘT DỰ ÁN MỚI:
    - Đặt một tên dự án ngắn gọn bằng tiếng Anh/không dấu (ví dụ: 'shop-fullstack', 'my-webapi', 'love-letter', 'admin-dashboard').
    - QUY TẮC DÙNG CLI SCAFFOLDING ('setupCommands'):
-     + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài).
-     + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'.
+     + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài). Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'.
+     + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'. Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'.
+     + QUY TẮC CƠ SỞ DỮ LIỆU BẮT BUỘC (SQLITE & EF CORE):
+       * Luôn dùng EF Core + SQLite ('Data Source=app.db') làm mặc định để chạy được ngay trên Web IDE mà không cần cài SQL Server.
+       * Cung cấp công tắc chuyển đổi Database trong 'appsettings.json':
+         ""Database"": { ""Provider"": ""Sqlite"", ""SqliteConnection"": ""Data Source=app.db"", ""SqlServerConnection"": ""Server=.;Database=MyAppDb;Trusted_Connection=True;TrustServerCertificate=True;"" }
+       * Trong 'Program.cs': Đọc 'Database:Provider' (nếu là 'SqlServer' thì UseSqlServer, mặc định UseSqlite), luôn gọi 'db.Database.EnsureCreated()' và seed 5-10 bản ghi mẫu khởi tạo để ứng dụng có dữ liệu chạy ngay.
+       * Tuyệt đối KHÔNG hardcode kết nối SQL Server cục bộ (ví dụ 'Server=localhost;...') vì sẽ gây crash lỗi kết nối trên Web IDE.
      + Khi người dùng yêu cầu Angular: Sử dụng 'npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install' trong 'setupCommands' (luôn gắn cờ non-interactive & --skip-install để tạo bộ file mã nguồn siêu nhanh trong 2-3s mà không bị treo tải node_modules).
      + Khi người dùng yêu cầu Fullstack (.NET Web API + Angular): Đưa 2 lệnh vào 'setupCommands':
        'dotnet new webapi --use-controllers -n backend'
@@ -1860,6 +2284,208 @@ QUY TẮC QUAN TRỌNG:
                 _ => "plaintext"
             };
         }
+
+        // ==========================================
+        // 6. SQLITE DATABASE VIEWER & QUERY APIS
+        // ==========================================
+
+        // GET /api/ide/db/tables?project=...&path=...
+        [HttpGet("db/tables")]
+        public async Task<IActionResult> GetDbTables([FromQuery] string? project, [FromQuery] string? path)
+        {
+            if (!IsAuthenticated)
+            {
+                return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập để thao tác cơ sở dữ liệu.", needLogin = true });
+            }
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return BadRequest(new { ok = false, error = "Đường dẫn file database là bắt buộc." });
+            }
+
+            string wsPath = ResolveWorkspacePath(project);
+            if (!TryGetSafeFilePath(wsPath, path, out string fullDbPath) || !System.IO.File.Exists(fullDbPath))
+            {
+                return NotFound(new { ok = false, error = "Không tìm thấy file cơ sở dữ liệu." });
+            }
+
+            try
+            {
+                var tables = new List<object>();
+                using var conn = new SqliteConnection($"Data Source={fullDbPath};Pooling=False");
+                await conn.OpenAsync();
+
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    var tableNames = new List<string>();
+                    while (await reader.ReadAsync())
+                    {
+                        tableNames.Add(reader.GetString(0));
+                    }
+                    reader.Close();
+
+                    foreach (var tName in tableNames)
+                    {
+                        var cols = new List<object>();
+                        using var pragmaCmd = conn.CreateCommand();
+                        pragmaCmd.CommandText = $"PRAGMA table_info(\"{tName.Replace("\"", "\"\"")}\");";
+                        using var pReader = await pragmaCmd.ExecuteReaderAsync();
+                        while (await pReader.ReadAsync())
+                        {
+                            cols.Add(new
+                            {
+                                name = pReader["name"]?.ToString() ?? "",
+                                type = pReader["type"]?.ToString() ?? "",
+                                notNull = Convert.ToInt32(pReader["notnull"]) == 1,
+                                pk = Convert.ToInt32(pReader["pk"]) == 1
+                            });
+                        }
+                        pReader.Close();
+
+                        long count = 0;
+                        try
+                        {
+                            using var countCmd = conn.CreateCommand();
+                            countCmd.CommandText = $"SELECT COUNT(*) FROM \"{tName.Replace("\"", "\"\"")}\";";
+                            var obj = await countCmd.ExecuteScalarAsync();
+                            if (obj != null && long.TryParse(obj.ToString(), out long c)) count = c;
+                        }
+                        catch { }
+
+                        tables.Add(new { name = tName, columns = cols, rowCount = count });
+                    }
+                }
+
+                return Ok(new { ok = true, tables });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi đọc metadata SQLite: {Path}", path);
+                return BadRequest(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // POST /api/ide/db/query
+        [HttpPost("db/query")]
+        public async Task<IActionResult> ExecuteDbQuery([FromBody] DbQueryRequestModel req)
+        {
+            if (!IsAuthenticated)
+            {
+                return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập để truy vấn cơ sở dữ liệu.", needLogin = true });
+            }
+
+            if (req == null || string.IsNullOrWhiteSpace(req.Path))
+            {
+                return BadRequest(new { ok = false, error = "Đường dẫn file database là bắt buộc." });
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Sql))
+            {
+                return BadRequest(new { ok = false, error = "Câu lệnh SQL không được trống." });
+            }
+
+            string wsPath = ResolveWorkspacePath(req.Project);
+            if (!TryGetSafeFilePath(wsPath, req.Path, out string fullDbPath) || !System.IO.File.Exists(fullDbPath))
+            {
+                return NotFound(new { ok = false, error = "Không tìm thấy file cơ sở dữ liệu." });
+            }
+
+            string trimmedSql = req.Sql.Trim();
+            bool isRead = Regex.IsMatch(trimmedSql, @"^\s*(SELECT|PRAGMA|WITH|EXPLAIN)\b", RegexOptions.IgnoreCase);
+            var sw = Stopwatch.StartNew();
+
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={fullDbPath};Pooling=False");
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = trimmedSql;
+                cmd.CommandTimeout = 10;
+
+                if (isRead)
+                {
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    var columns = new List<string>();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        columns.Add(reader.GetName(i));
+                    }
+
+                    var rows = new List<Dictionary<string, object?>>();
+                    int count = 0;
+                    while (await reader.ReadAsync() && count < 500)
+                    {
+                        var row = new Dictionary<string, object?>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            object val = reader.GetValue(i);
+                            row[columns[i]] = val == DBNull.Value ? null : val;
+                        }
+                        rows.Add(row);
+                        count++;
+                    }
+
+                    sw.Stop();
+                    return Ok(new
+                    {
+                        ok = true,
+                        isQuery = true,
+                        columns,
+                        rows,
+                        rowCount = rows.Count,
+                        elapsedMs = sw.ElapsedMilliseconds
+                    });
+                }
+                else
+                {
+                    using var tx = conn.BeginTransaction();
+                    cmd.Transaction = tx;
+                    int affected = await cmd.ExecuteNonQueryAsync();
+                    tx.Commit();
+                    sw.Stop();
+
+                    return Ok(new
+                    {
+                        ok = true,
+                        isQuery = false,
+                        rowsAffected = affected,
+                        elapsedMs = sw.ElapsedMilliseconds,
+                        message = $"Thực thi thành công. {affected} dòng bị ảnh hưởng."
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                return BadRequest(new { ok = false, error = ex.Message, elapsedMs = sw.ElapsedMilliseconds });
+            }
+        }
+
+        // ==========================================
+        // 7. DYNAMIC PORT ALLOCATION API
+        // ==========================================
+
+        // GET /api/ide/allocate-port?project=...
+        [HttpGet("allocate-port")]
+        public IActionResult AllocateDynamicPort([FromQuery] string? project)
+        {
+            if (!IsAuthenticated)
+            {
+                return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập.", needLogin = true });
+            }
+
+            try
+            {
+                int port = RunningAppSessionManager.AllocatePort(CurrentUserId, project ?? "app");
+                return Ok(new { ok = true, port });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { ok = false, error = ex.Message });
+            }
+        }
     }
 
     // ==========================================
@@ -1971,5 +2597,12 @@ QUY TẮC QUAN TRỌNG:
         public string? Project { get; set; }
         public string? SourcePath { get; set; }
         public string? TargetFolderPath { get; set; }
+    }
+
+    public class DbQueryRequestModel
+    {
+        public string? Project { get; set; }
+        public string? Path { get; set; }
+        public string? Sql { get; set; }
     }
 }

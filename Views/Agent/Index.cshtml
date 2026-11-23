@@ -546,9 +546,14 @@
                     <!-- Dynamically populated by agent_ide.js -->
                 </div>
                 <div class="editor-tab-actions">
+                    <!-- Live App Dynamic Port Badge & Actions -->
+                    <span id="tabLiveAppBadge" class="badge bg-success extra-small d-none align-items-center gap-1" style="cursor: pointer;" onclick="openAppLivePreview()" title="Ứng dụng đang chạy thật trên cổng động"><span class="spinner-grow spinner-grow-sm" style="width: 7px; height: 7px;"></span> Live <span id="tabLiveAppPort">:5201</span></span>
+                    <button id="tabBtnOpenApp" onclick="openAppLivePreview()" class="tab-action-btn text-success d-none" title="Mở Live App (Reverse Proxy)"><i class="bi bi-box-arrow-up-right me-1"></i><span class="d-none d-md-inline extra-small">Open App</span></button>
+                    <button id="tabBtnStopApp" onclick="stopRunningApp()" class="tab-action-btn text-danger d-none" title="Dừng ứng dụng đang chạy (Stop)"><i class="bi bi-stop-fill fs-5"></i></button>
+
                     <button id="tabBtnPreview" onclick="openLivePreview()" class="tab-action-btn text-info" title="Xem trước Web tĩnh (Live Preview)"><i class="bi bi-globe me-1"></i><span class="d-none d-md-inline extra-small">Preview</span></button>
                     <button id="tabBtnDownloadZip" onclick="downloadCurrentProjectZip()" class="tab-action-btn text-warning" title="Tải toàn bộ dự án về máy (.zip)"><i class="bi bi-file-earmark-zip me-1"></i><span class="d-none d-md-inline extra-small">Zip</span></button>
-                    <button onclick="runSmartAction()" class="tab-action-btn text-success" title="Run Current File / Build (F5)"><i class="bi bi-play-fill fs-5"></i></button>
+                    <button id="tabBtnRunSmart" onclick="runSmartAction()" class="tab-action-btn text-success" title="Run Current File / Build (F5)"><i class="bi bi-play-fill fs-5"></i></button>
                     <button onclick="toggleDiffSideBySide()" class="tab-action-btn" title="Toggle Side-by-Side Diff"><i class="bi bi-layout-split"></i></button>
                     <button onclick="openQuickOpenModal()" class="tab-action-btn" title="Find File (Ctrl+P)"><i class="bi bi-search"></i></button>
                 </div>
@@ -608,6 +613,49 @@
                 
                 <div id="monacoContainer" style="width: 100%; height: 100%;"></div>
                 <div id="monacoDiffContainer" style="width: 100%; height: 100%; display: none;"></div>
+
+                <!-- SQLite Studio Panel (#1e1e1e) -->
+                <div id="sqliteStudioContainer" class="sqlite-studio-panel" style="width: 100%; height: 100%; display: none;">
+                    <div class="sqlite-sidebar">
+                        <div class="sqlite-sidebar-header">
+                            <span class="fw-semibold text-light extra-small"><i class="bi bi-database me-1 text-info"></i>TABLES</span>
+                            <button onclick="refreshSqliteTables()" class="btn btn-sm btn-link text-secondary p-0" title="Tải lại danh sách bảng"><i class="bi bi-arrow-clockwise"></i></button>
+                        </div>
+                        <div id="sqliteTableList" class="sqlite-table-list">
+                            <!-- Tables rendered dynamically -->
+                        </div>
+                    </div>
+                    <div class="sqlite-main">
+                        <div class="sqlite-query-box">
+                            <div class="d-flex align-items-center justify-content-between p-1 px-2 border-bottom border-dark bg-dark-subtle">
+                                <span class="extra-small text-secondary"><i class="bi bi-terminal me-1"></i>SQL Query (Ctrl + Enter để chạy)</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span id="sqliteQueryStatus" class="extra-small text-info"></span>
+                                    <button onclick="executeSqliteQuery()" class="btn btn-sm btn-primary extra-small py-0.5 px-2 d-flex align-items-center gap-1"><i class="bi bi-play-fill"></i> Run SQL</button>
+                                </div>
+                            </div>
+                            <textarea id="sqliteSqlInput" class="sqlite-sql-textarea" placeholder="Nhập câu lệnh SQL (SELECT * FROM Users LIMIT 50;)..." spellcheck="false"></textarea>
+                        </div>
+                        <div class="sqlite-result-box">
+                            <div id="sqliteResultContainer" class="sqlite-grid-wrapper">
+                                <div class="text-secondary extra-small p-3">Chọn một bảng từ danh sách bên trái hoặc nhập câu lệnh SQL và bấm Run SQL.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live App Preview Panel (Reverse Proxy) -->
+                <div id="liveAppPreviewContainer" class="live-app-preview-panel" style="width: 100%; height: 100%; display: none; flex-direction: column;">
+                    <div class="d-flex align-items-center justify-content-between px-2 py-1 bg-dark border-bottom border-secondary">
+                        <div class="d-flex align-items-center gap-2 flex-grow-1">
+                            <button onclick="reloadLiveAppIframe()" class="btn btn-sm btn-dark py-0 px-2 border-secondary text-light extra-small" title="Tải lại"><i class="bi bi-arrow-clockwise me-1"></i>Reload</button>
+                            <input id="liveAppUrlInput" type="text" class="form-control form-control-sm bg-black text-light border-secondary font-monospace extra-small py-0" readonly />
+                            <a id="liveAppExternalLink" href="#" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2 extra-small text-nowrap" title="Mở tab mới"><i class="bi bi-box-arrow-up-right me-1"></i>Tab mới</a>
+                        </div>
+                        <button onclick="closeLiveAppPreview()" class="btn btn-sm btn-link text-secondary p-0 ms-2 text-decoration-none fs-5">&times;</button>
+                    </div>
+                    <iframe id="liveAppIframe" style="width: 100%; height: 100%; border: none; background: #fff;"></iframe>
+                </div>
             </div>
 
             <!-- Horizontal Resizer: Editor / Terminal Panel -->
@@ -840,9 +888,9 @@
                         <label class="form-label extra-small fw-semibold">Template khởi tạo nhanh (1-Click Scaffolding):</label>
                         <select id="newProjectTemplate" class="form-select bg-dark-subtle text-light border-secondary extra-small">
                             <option value="empty">📁 Empty Project (Trống hoàn toàn)</option>
-                            <option value="dotnet-mvc">🌐 ASP.NET Core MVC (dotnet new mvc)</option>
-                            <option value="dotnet-webapi" selected>⚙️ ASP.NET Core Web API (dotnet new webapi --use-controllers)</option>
-                            <option value="angular">🅰️ Angular App (npx -y @@angular/cli new frontend)</option>
+                            <option value="dotnet-mvc" selected>🌐 ASP.NET Core MVC (+ SQLite DB)</option>
+                            <option value="dotnet-webapi">⚙️ ASP.NET Core Web API (+ SQLite DB & Swagger)</option>
+                            <option value="angular">🅰️ Angular App (npx -y @@angular/cli new)</option>
                             <option value="fullstack">🚀 Fullstack (.NET Web API + Angular)</option>
                             <option value="html5">🎨 HTML5 / CSS3 / JS Web Studio</option>
                         </select>

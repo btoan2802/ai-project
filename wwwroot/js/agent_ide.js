@@ -446,6 +446,9 @@ const FILE_ICON_MAP = {
     "csproj": "file_type_csproj.svg",
     "xml": "file_type_xml.svg",
     "sql": "file_type_sql.svg",
+    "db": "file_type_sqlite.svg",
+    "sqlite": "file_type_sqlite.svg",
+    "sqlite3": "file_type_sqlite.svg",
     "png": "file_type_image.svg",
     "jpg": "file_type_image.svg",
     "jpeg": "file_type_image.svg",
@@ -661,6 +664,12 @@ function getMonacoLanguage(fileName) {
 async function openFileInEditor(filePath) {
     if (!monacoEditor) return;
 
+    const lower = (filePath || "").toLowerCase();
+    if (lower.endsWith('.db') || lower.endsWith('.sqlite') || lower.endsWith('.sqlite3')) {
+        await openSqliteStudio(filePath);
+        return;
+    }
+
     // Check if model already exists in memory
     if (openTabsMap.has(filePath)) {
         const tab = openTabsMap.get(filePath);
@@ -711,6 +720,27 @@ async function openFileInEditor(filePath) {
 
 function updateEditorUI(tab) {
     renderTabBar();
+
+    const mContainer = document.getElementById("monacoContainer");
+    const diffContainer = document.getElementById("monacoDiffContainer");
+    const sqliteContainer = document.getElementById("sqliteStudioContainer");
+    const liveAppContainer = document.getElementById("liveAppPreviewContainer");
+
+    if (tab && tab.isSqlite) {
+        if (mContainer) mContainer.style.display = "none";
+        if (diffContainer) diffContainer.style.display = "none";
+        if (liveAppContainer) liveAppContainer.style.display = "none";
+        if (sqliteContainer) sqliteContainer.style.display = "flex";
+    } else {
+        if (sqliteContainer) sqliteContainer.style.display = "none";
+        if (liveAppContainer) liveAppContainer.style.display = "none";
+        if (diffContainer && diffContainer.style.display !== "none") {
+            // Keep diff if active
+        } else if (mContainer) {
+            mContainer.style.display = "block";
+            monacoEditor?.layout();
+        }
+    }
 
     // Update Breadcrumb & Top Bar Title
     const projName = activeProjectId || "Workspace";
@@ -793,6 +823,13 @@ function closeTab(path) {
             openFileInEditor(remaining[remaining.length - 1]);
         } else {
             activeFilePath = null;
+            const sqliteContainer = document.getElementById("sqliteStudioContainer");
+            if (sqliteContainer) sqliteContainer.style.display = "none";
+            const liveAppContainer = document.getElementById("liveAppPreviewContainer");
+            if (liveAppContainer) liveAppContainer.style.display = "none";
+            const mContainer = document.getElementById("monacoContainer");
+            if (mContainer) mContainer.style.display = "block";
+
             if (monacoEditor) {
                 monacoEditor.setValue("// Select a file from Explorer to begin coding.\n");
             }
@@ -814,6 +851,7 @@ function closeTab(path) {
 async function saveCurrentFile(silent = false) {
     if (!activeFilePath || !openTabsMap.has(activeFilePath)) return;
     const tab = openTabsMap.get(activeFilePath);
+    if (tab.isSqlite || !tab.model) return;
     const content = tab.model.getValue();
 
     try {
@@ -1254,6 +1292,31 @@ async function initTerminalSignalR() {
         showToastNotification(`Dev Server running at ${url}`);
     });
 
+    terminalHubConn.on("AppPreviewReady", (data) => {
+        if (!data || !data.port) return;
+        currentLiveAppPort = data.port;
+        const portEl = document.getElementById("tabLiveAppPort");
+        if (portEl) portEl.textContent = `:${data.port}`;
+        const badge = document.getElementById("tabLiveAppBadge");
+        if (badge) badge.classList.remove("d-none");
+        const btnOpen = document.getElementById("tabBtnOpenApp");
+        if (btnOpen) btnOpen.classList.remove("d-none");
+        const btnStop = document.getElementById("tabBtnStopApp");
+        if (btnStop) btnStop.classList.remove("d-none");
+        showToastNotification(`🟢 Ứng dụng đã sẵn sàng trên cổng :${data.port}!`);
+    });
+
+    terminalHubConn.on("AppPreviewStopped", (data) => {
+        currentLiveAppPort = null;
+        const badge = document.getElementById("tabLiveAppBadge");
+        if (badge) badge.classList.add("d-none");
+        const btnOpen = document.getElementById("tabBtnOpenApp");
+        if (btnOpen) btnOpen.classList.add("d-none");
+        const btnStop = document.getElementById("tabBtnStopApp");
+        if (btnStop) btnStop.classList.add("d-none");
+        closeLiveAppPreview();
+    });
+
     // Auto-refresh file tree when a terminal command finishes successfully (e.g. dotnet new, ng new)
     terminalHubConn.on("TerminalCommandFinished", (info) => {
         console.log("[Terminal] Command finished:", info);
@@ -1609,6 +1672,29 @@ function detectProjectType() {
     return { type: "unknown" };
 }
 
+async function fetchDynamicPortAndRun(type, prefix = "") {
+    let port = 5201;
+    try {
+        const res = await fetch(`/api/ide/allocate-port?project=${encodeURIComponent(activeProjectId || "app")}`, {
+            headers: getApiHeaders()
+        });
+        const data = await res.json();
+        if (data.ok && data.port) {
+            port = data.port;
+        }
+    } catch (e) {
+        console.warn("[IDE] Port allocation fallback to 5201:", e);
+    }
+
+    if (type === "dotnet") {
+        showToastNotification(`Đang khởi chạy .NET trên cổng động :${port}...`);
+        runCustomTerminalCmd(`dotnet run --urls http://127.0.0.1:${port}`);
+    } else if (type === "angular") {
+        showToastNotification(`Đang khởi chạy Angular trên cổng động :${port}...`);
+        runCustomTerminalCmd(`${prefix}ng serve --port ${port}`);
+    }
+}
+
 function runSmartAction() {
     switchBottomTab('terminal');
     const projInfo = detectProjectType();
@@ -1621,8 +1707,8 @@ function runSmartAction() {
             showToastNotification("Running Angular Tests (ng test)...");
             runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
         } else {
-            showToastNotification("Starting Angular App (npm start)...");
-            runCustomTerminalCmd(`${prefix}npm start`);
+            showToastNotification("Starting Angular App...");
+            fetchDynamicPortAndRun("angular", prefix);
         }
         return;
     }
@@ -1663,7 +1749,7 @@ function runSmartAction() {
     if (activeFilePath && activeFilePath.endsWith('Test.cs')) {
         runCustomTerminalCmd("dotnet test");
     } else {
-        runCustomTerminalCmd("dotnet run");
+        fetchDynamicPortAndRun("dotnet");
     }
 }
 
@@ -2495,7 +2581,7 @@ async function submitCreateProject() {
         const res = await fetch('/api/ide/create-project', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name, template: "empty" })
+            body: JSON.stringify({ name, template })
         });
         const data = await res.json();
         if (data.ok) {
@@ -2508,10 +2594,8 @@ async function submitCreateProject() {
 
             // Template scaffolding CLI command mapping
             let scaffoldCmd = "";
-            if (template === "dotnet-mvc") {
-                scaffoldCmd = "dotnet new mvc";
-            } else if (template === "dotnet-webapi") {
-                scaffoldCmd = "dotnet new webapi --use-controllers";
+            if (template === "dotnet-mvc" || template === "dotnet-webapi") {
+                scaffoldCmd = "dotnet restore";
             } else if (template === "angular") {
                 scaffoldCmd = "npx -y @angular/cli new " + cleanName + " --directory . --routing --style=css --ssr=false --skip-git --skip-install";
             } else if (template === "fullstack") {
@@ -3647,10 +3731,245 @@ function showToastNotification(msg) {
     }, 2500);
 }
 
+// ==========================================
+// SQLITE STUDIO & LIVE APP PREVIEW MODULES
+// ==========================================
+let currentSqliteDbPath = "";
+let currentLiveAppPort = null;
+
+async function openSqliteStudio(filePath) {
+    currentSqliteDbPath = filePath;
+    const fileName = filePath.split(/[\\/]/).pop();
+
+    const mContainer = document.getElementById("monacoContainer");
+    const diffContainer = document.getElementById("monacoDiffContainer");
+    const sqliteContainer = document.getElementById("sqliteStudioContainer");
+    const liveAppContainer = document.getElementById("liveAppPreviewContainer");
+
+    if (mContainer) mContainer.style.display = "none";
+    if (diffContainer) diffContainer.style.display = "none";
+    if (liveAppContainer) liveAppContainer.style.display = "none";
+    if (sqliteContainer) sqliteContainer.style.display = "flex";
+
+    const tab = {
+        path: filePath,
+        name: fileName,
+        language: 'sqlite',
+        isSqlite: true,
+        model: null,
+        isDirty: false
+    };
+
+    openTabsMap.set(filePath, tab);
+    activeFilePath = filePath;
+    updateEditorUI(tab);
+
+    await loadSqliteTables(filePath);
+}
+
+async function loadSqliteTables(dbPath) {
+    const listEl = document.getElementById("sqliteTableList");
+    if (!listEl) return;
+    listEl.innerHTML = `<div class="text-secondary extra-small p-2"><div class="spinner-border spinner-border-sm me-1 text-info"></div> Loading tables...</div>`;
+
+    try {
+        const res = await fetch(`/api/ide/db/tables?project=${encodeURIComponent(activeProjectId || "")}&path=${encodeURIComponent(dbPath)}`, {
+            headers: getApiHeaders()
+        });
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.tables)) {
+            if (data.tables.length === 0) {
+                listEl.innerHTML = `<div class="text-secondary extra-small p-2">Database chưa có bảng nào.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = "";
+            data.tables.forEach((t, idx) => {
+                const item = document.createElement("div");
+                item.className = "sqlite-table-item" + (idx === 0 ? " active" : "");
+                item.innerHTML = `
+                    <span><i class="bi bi-table me-1.5 text-info"></i>${escapeHtml(t.name)}</span>
+                    <span class="badge bg-secondary extra-small">${t.rowCount}</span>
+                `;
+                item.onclick = () => {
+                    document.querySelectorAll(".sqlite-table-item").forEach(el => el.classList.remove("active"));
+                    item.classList.add("active");
+                    selectSqliteTable(t.name);
+                };
+                listEl.appendChild(item);
+            });
+
+            // Auto-select first table
+            selectSqliteTable(data.tables[0].name);
+        } else {
+            listEl.innerHTML = `<div class="text-danger extra-small p-2">${escapeHtml(data.error || "Không thể nạp bảng")}</div>`;
+        }
+    } catch (err) {
+        listEl.innerHTML = `<div class="text-danger extra-small p-2">${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function selectSqliteTable(tableName) {
+    const input = document.getElementById("sqliteSqlInput");
+    if (input) {
+        input.value = `SELECT * FROM "${tableName}" LIMIT 100;`;
+        executeSqliteQuery();
+    }
+}
+
+async function executeSqliteQuery() {
+    const input = document.getElementById("sqliteSqlInput");
+    const statusEl = document.getElementById("sqliteQueryStatus");
+    const resultBox = document.getElementById("sqliteResultContainer");
+    if (!input || !resultBox) return;
+
+    const sql = input.value.trim();
+    if (!sql) return;
+
+    if (statusEl) statusEl.innerHTML = `<div class="spinner-border spinner-border-sm text-info" style="width: 12px; height: 12px;"></div> Đang chạy...`;
+
+    try {
+        const res = await fetch('/api/ide/db/query', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({
+                project: activeProjectId || "",
+                path: currentSqliteDbPath,
+                sql: sql
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            if (data.isQuery) {
+                if (statusEl) statusEl.textContent = `${data.rowCount} dòng (${data.elapsedMs} ms)`;
+
+                if (!data.columns || data.columns.length === 0) {
+                    resultBox.innerHTML = `<div class="text-secondary extra-small p-3">Kết quả trống.</div>`;
+                    return;
+                }
+
+                let html = `<table class="sqlite-table"><thead><tr>`;
+                data.columns.forEach(col => {
+                    html += `<th>${escapeHtml(col)}</th>`;
+                });
+                html += `</tr></thead><tbody>`;
+
+                data.rows.forEach(row => {
+                    html += `<tr>`;
+                    data.columns.forEach(col => {
+                        const val = row[col];
+                        if (val === null || val === undefined) {
+                            html += `<td class="sqlite-null">NULL</td>`;
+                        } else {
+                            html += `<td>${escapeHtml(String(val))}</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                });
+                html += `</tbody></table>`;
+                resultBox.innerHTML = html;
+            } else {
+                if (statusEl) statusEl.textContent = `${data.rowsAffected} dòng ảnh hưởng (${data.elapsedMs} ms)`;
+                resultBox.innerHTML = `<div class="alert alert-success extra-small m-3 py-2 px-3"><i class="bi bi-check-circle me-1"></i> ${escapeHtml(data.message || "Thực thi thành công.")}</div>`;
+                refreshSqliteTables();
+            }
+        } else {
+            if (statusEl) statusEl.textContent = `Lỗi (${data.elapsedMs || 0} ms)`;
+            resultBox.innerHTML = `<div class="alert alert-danger extra-small m-3 py-2 px-3"><i class="bi bi-exclamation-triangle me-1"></i> <strong>Lỗi SQL:</strong> ${escapeHtml(data.error || "Không thể thực thi câu lệnh")}</div>`;
+        }
+    } catch (err) {
+        if (statusEl) statusEl.textContent = `Lỗi kết nối`;
+        resultBox.innerHTML = `<div class="alert alert-danger extra-small m-3 py-2 px-3"><i class="bi bi-wifi-off me-1"></i> <strong>Lỗi mạng:</strong> ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function refreshSqliteTables() {
+    if (currentSqliteDbPath) {
+        loadSqliteTables(currentSqliteDbPath);
+    }
+}
+
+function openAppLivePreview() {
+    if (!currentLiveAppPort) {
+        showToastNotification("Chưa có ứng dụng nào đang chạy.");
+        return;
+    }
+    const mContainer = document.getElementById("monacoContainer");
+    const diffContainer = document.getElementById("monacoDiffContainer");
+    const sqliteContainer = document.getElementById("sqliteStudioContainer");
+    const liveAppContainer = document.getElementById("liveAppPreviewContainer");
+    const iframe = document.getElementById("liveAppIframe");
+    const urlInput = document.getElementById("liveAppUrlInput");
+    const link = document.getElementById("liveAppExternalLink");
+
+    if (mContainer) mContainer.style.display = "none";
+    if (diffContainer) diffContainer.style.display = "none";
+    if (sqliteContainer) sqliteContainer.style.display = "none";
+    if (liveAppContainer) liveAppContainer.style.display = "flex";
+
+    const proxyUrl = `/ide-preview/${currentLiveAppPort}/`;
+    if (iframe && iframe.src !== window.location.origin + proxyUrl) {
+        iframe.src = proxyUrl;
+    }
+    if (urlInput) urlInput.value = proxyUrl;
+    if (link) link.href = proxyUrl;
+}
+
+function closeLiveAppPreview() {
+    const liveAppContainer = document.getElementById("liveAppPreviewContainer");
+    if (liveAppContainer) liveAppContainer.style.display = "none";
+    const sqliteContainer = document.getElementById("sqliteStudioContainer");
+    const mContainer = document.getElementById("monacoContainer");
+
+    if (activeFilePath && (activeFilePath.endsWith('.db') || activeFilePath.endsWith('.sqlite'))) {
+        if (sqliteContainer) sqliteContainer.style.display = "flex";
+    } else if (mContainer) {
+        mContainer.style.display = "block";
+        monacoEditor?.layout();
+    }
+}
+
+function reloadLiveAppIframe() {
+    const iframe = document.getElementById("liveAppIframe");
+    if (iframe && currentLiveAppPort) {
+        iframe.src = `/ide-preview/${currentLiveAppPort}/?_t=${Date.now()}`;
+    }
+}
+
+async function stopRunningApp() {
+    if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+        try {
+            await terminalHubConn.invoke("KillRunningProcess");
+            showToastNotification("Đã gửi tín hiệu dừng ứng dụng.");
+        } catch (e) {
+            console.error("Stop error:", e);
+        }
+    }
+    currentLiveAppPort = null;
+    const badge = document.getElementById("tabLiveAppBadge");
+    if (badge) badge.classList.add("d-none");
+    const btnOpen = document.getElementById("tabBtnOpenApp");
+    if (btnOpen) btnOpen.classList.add("d-none");
+    const btnStop = document.getElementById("tabBtnStopApp");
+    if (btnStop) btnStop.classList.add("d-none");
+    closeLiveAppPreview();
+}
+
 // Initial Boot
 window.addEventListener('DOMContentLoaded', () => {
     initMonacoEditors();
     initDraggableSplitters();
     initGlobalShortcuts();
     initXtermTerminal();
+
+    // Ctrl + Enter shortcut for SQLite Query input
+    const sqlInput = document.getElementById("sqliteSqlInput");
+    if (sqlInput) {
+        sqlInput.addEventListener("keydown", (e) => {
+            if (e.ctrlKey && e.key === "Enter") {
+                e.preventDefault();
+                executeSqliteQuery();
+            }
+        });
+    }
 });

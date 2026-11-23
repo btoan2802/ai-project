@@ -41,6 +41,7 @@ if (!string.IsNullOrEmpty(connectionString))
 }
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("NoRedirectsClient").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
 // Register Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using BtoanAiNet.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
@@ -288,6 +289,7 @@ namespace BtoanAiNet.Hubs
             // Set environment paths
             psi.Environment["CI"] = "false";
             psi.Environment["FORCE_COLOR"] = "1";
+            psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
 
             var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             session.ActiveProcess = process;
@@ -300,7 +302,7 @@ namespace BtoanAiNet.Hubs
             {
                 if (e.Data != null)
                 {
-                    ScanForDevServerUrl(caller, e.Data);
+                    ScanForDevServerUrl(caller, e.Data, session);
                     await caller.SendAsync("TerminalOutput", e.Data + "\r\n");
                 }
             };
@@ -309,7 +311,7 @@ namespace BtoanAiNet.Hubs
             {
                 if (e.Data != null)
                 {
-                    ScanForDevServerUrl(caller, e.Data);
+                    ScanForDevServerUrl(caller, e.Data, session);
                     await caller.SendAsync("TerminalOutput", "\x1b[33m" + e.Data + "\x1b[0m\r\n");
                 }
             };
@@ -364,6 +366,8 @@ namespace BtoanAiNet.Hubs
                     finally
                     {
                         session.ActiveProcess = null;
+                        RunningAppSessionManager.ReleaseSessionByConnection(Context.ConnectionId);
+                        _ = Clients.Caller.SendAsync("AppPreviewStopped", new { projectName = session.ProjectName });
                     }
                 }
             }
@@ -375,7 +379,7 @@ namespace BtoanAiNet.Hubs
             await InitializeTerminal(project);
         }
 
-        private void ScanForDevServerUrl(IClientProxy caller, string line)
+        private void ScanForDevServerUrl(IClientProxy caller, string line, TerminalInteractiveSession session)
         {
             try
             {
@@ -384,6 +388,13 @@ namespace BtoanAiNet.Hubs
                 {
                     string detectedUrl = match.Value.TrimEnd('.', ',', ')', ']');
                     caller.SendAsync("DevServerDetected", detectedUrl);
+
+                    var portMatch = Regex.Match(detectedUrl, @":(\d+)");
+                    if (portMatch.Success && int.TryParse(portMatch.Groups[1].Value, out int port))
+                    {
+                        RunningAppSessionManager.RegisterActiveApp(port, session.UserId, session.ProjectName, session.ActiveProcess?.Id ?? 0, session.ConnectionId);
+                        caller.SendAsync("AppPreviewReady", new { port, projectName = session.ProjectName });
+                    }
                 }
             }
             catch { }
@@ -391,6 +402,7 @@ namespace BtoanAiNet.Hubs
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
+            RunningAppSessionManager.ReleaseSessionByConnection(Context.ConnectionId);
             if (Sessions.TryRemove(Context.ConnectionId, out var session))
             {
                 if (session.ActiveProcess != null && !session.ActiveProcess.HasExited)
