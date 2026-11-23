@@ -1603,3 +1603,18 @@ body.agent-ide-body {
     overflow: hidden !important;
     visibility: hidden !important;
 }
+
+/* ========================================================
+   TERMINAL TEXT SELECTION & CONTEXT MENU
+   ======================================================== */
+#xtermTerminalContainer,
+#xtermTerminalContainer .xterm,
+#xtermTerminalContainer .xterm-screen,
+#xtermTerminalContainer .xterm-rows {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+#terminalContextMenu {
+    min-width: 190px;
+}

@@ -242,7 +242,8 @@ namespace BtoanAiNet.Hubs
         private async Task RunProcessStreamingAsync(TerminalInteractiveSession session, string command)
         {
             string shell = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash";
-            string args = OperatingSystem.IsWindows() ? $"/c \"{command}\"" : $"-c \"{command.Replace("\"", "\\\"")}\"";
+            // On Windows, use /s /c to preserve outer and inner quotes properly
+            string args = OperatingSystem.IsWindows() ? $"/s /c \"{command}\"" : $"-c \"{command.Replace("\"", "\\\"")}\"";
 
             var psi = new ProcessStartInfo
             {
@@ -266,6 +267,7 @@ namespace BtoanAiNet.Hubs
             session.Cts = new CancellationTokenSource();
 
             var caller = Clients.Caller;
+            int exitCode = -1;
 
             process.OutputDataReceived += async (s, e) =>
             {
@@ -292,15 +294,21 @@ namespace BtoanAiNet.Hubs
                 process.BeginErrorReadLine();
 
                 await process.WaitForExitAsync(session.Cts.Token);
+                exitCode = process.ExitCode;
+
+                // Notify client that command completed (ExitCode == 0 triggers automatic file tree refresh)
+                await caller.SendAsync("TerminalCommandFinished", new { exitCode, command });
             }
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
                 await caller.SendAsync("TerminalOutput", "\r\n\x1b[31m^C (Process terminated by user)\x1b[0m\r\n");
+                await caller.SendAsync("TerminalCommandFinished", new { exitCode = 130, command });
             }
             catch (Exception ex)
             {
                 await caller.SendAsync("TerminalOutput", $"\r\n\x1b[31m[Process Error] {ex.Message}\x1b[0m\r\n");
+                await caller.SendAsync("TerminalCommandFinished", new { exitCode = 1, command });
             }
             finally
             {

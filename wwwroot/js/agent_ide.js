@@ -288,6 +288,27 @@ function onProjectChanged() {
     }
 }
 
+async function switchActiveProject(projName) {
+    const select = document.getElementById("projectSelect");
+    if (select) {
+        select.value = projName;
+    }
+    activeProjectId = projName;
+    if (activeProjectId) {
+        hideEmptyWorkspaceState();
+        const rootNameEl = document.getElementById("workspaceRootName");
+        if (rootNameEl) {
+            rootNameEl.innerText = select?.options[select.selectedIndex]?.text || activeProjectId;
+        }
+        updateTerminalPrompt();
+        await refreshFileTree();
+        loadGitStatus();
+        if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+            await terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
+        }
+    }
+}
+
 async function refreshFileTree() {
     const container = document.getElementById("workspaceTreeContainer");
     if (!container) return;
@@ -1125,6 +1146,56 @@ function initXtermTerminal() {
         try { fitAddon?.fit(); } catch(e){}
     });
 
+    // Smart Copy / Paste / Select All via attachCustomKeyEventHandler
+    xtermInstance.attachCustomKeyEventHandler((e) => {
+        if (e.type !== "keydown") return true;
+
+        // 1. Copy: Ctrl + C or Ctrl + Shift + C
+        if ((e.ctrlKey && !e.shiftKey && (e.key === 'c' || e.key === 'C')) ||
+            (e.ctrlKey && e.shiftKey && (e.key === 'c' || e.key === 'C'))) {
+            if (xtermInstance.hasSelection()) {
+                const selectedText = xtermInstance.getSelection();
+                navigator.clipboard.writeText(selectedText);
+                xtermInstance.clearSelection();
+                showToastNotification("Copied to clipboard");
+                return false; // Prevent sending SIGINT / KillRunningProcess when copying text
+            }
+            if (e.shiftKey) return false;
+            // No selection + Ctrl+C -> Pass to onData to send ^C and kill running process
+            return true;
+        }
+
+        // 2. Paste: Ctrl + V or Ctrl + Shift + V
+        if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) {
+            e.preventDefault();
+            pasteIntoTerminal();
+            return false; // Prevent double paste
+        }
+
+        // 3. Select All: Ctrl + Shift + A
+        if (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+            e.preventDefault();
+            xtermInstance.selectAll();
+            return false;
+        }
+
+        return true;
+    });
+
+    // Right-click Context Menu on Terminal Container
+    container.addEventListener("contextmenu", (e) => {
+        onTerminalContextMenu(e);
+    });
+
+    // Native paste fallback on container (handles middle click or browser paste)
+    container.addEventListener("paste", (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData)?.getData('text');
+        if (text) {
+            insertTextIntoTerminalBuffer(text);
+        }
+    });
+
     // Keystroke handling
     xtermInstance.onData((data) => {
         handleTerminalKeyInput(data);
@@ -1165,6 +1236,14 @@ async function initTerminalSignalR() {
 
     terminalHubConn.on("DevServerDetected", (url) => {
         showToastNotification(`Dev Server running at ${url}`);
+    });
+
+    // Auto-refresh file tree when a terminal command finishes successfully (e.g. dotnet new, ng new)
+    terminalHubConn.on("TerminalCommandFinished", (info) => {
+        console.log("[Terminal] Command finished:", info);
+        if (!info || info.exitCode === 0) {
+            refreshFileTree();
+        }
     });
 
     terminalHubConn.onreconnected(() => {
@@ -1288,6 +1367,106 @@ function refreshCurrentCommandLine() {
     if (moveBack > 0) {
         xtermInstance.write(`\x1b[${moveBack}D`);
     }
+}
+
+// Smart Paste into Terminal (with clean multi-line and buffer synchronization)
+async function pasteIntoTerminal() {
+    if (!xtermInstance) return;
+    try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+            insertTextIntoTerminalBuffer(text);
+        }
+    } catch (err) {
+        console.warn("[Terminal] Clipboard read error:", err);
+    }
+}
+
+function insertTextIntoTerminalBuffer(text) {
+    if (!xtermInstance || !text) return;
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (cleanText.includes('\n')) {
+        const lines = cleanText.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            terminalInputBuffer += line;
+            terminalCursorPos = terminalInputBuffer.length;
+            if (i < lines.length - 1) {
+                const cmd = terminalInputBuffer.trim();
+                xtermInstance.write(line + "\r\n");
+                terminalInputBuffer = "";
+                terminalCursorPos = 0;
+                if (cmd) {
+                    terminalHistory.push(cmd);
+                    terminalHistoryIndex = terminalHistory.length;
+                    sendTerminalCommand(cmd);
+                }
+            } else {
+                refreshCurrentCommandLine();
+            }
+        }
+    } else {
+        terminalInputBuffer = terminalInputBuffer.slice(0, terminalCursorPos) + cleanText + terminalInputBuffer.slice(terminalCursorPos);
+        terminalCursorPos += cleanText.length;
+        refreshCurrentCommandLine();
+    }
+}
+
+// Terminal Context Menu
+function onTerminalContextMenu(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    hideExplorerContextMenu();
+
+    const menu = document.getElementById("terminalContextMenu");
+    if (!menu) return;
+
+    const copyItem = document.getElementById("ctxTermCopy");
+    if (copyItem) {
+        if (xtermInstance && xtermInstance.hasSelection()) {
+            copyItem.classList.remove("disabled");
+        } else {
+            copyItem.classList.add("disabled");
+        }
+    }
+
+    menu.style.display = "block";
+    const x = Math.min(e.clientX, window.innerWidth - 210);
+    const y = Math.min(e.clientY, window.innerHeight - 190);
+    menu.style.left = `${Math.max(10, x)}px`;
+    menu.style.top = `${Math.max(10, y)}px`;
+}
+
+function hideTerminalContextMenu() {
+    const menu = document.getElementById("terminalContextMenu");
+    if (menu) menu.style.display = "none";
+}
+
+function terminalContextCopy() {
+    hideTerminalContextMenu();
+    if (xtermInstance && xtermInstance.hasSelection()) {
+        const text = xtermInstance.getSelection();
+        navigator.clipboard.writeText(text);
+        xtermInstance.clearSelection();
+        showToastNotification("Copied to clipboard");
+    }
+}
+
+function terminalContextPaste() {
+    hideTerminalContextMenu();
+    pasteIntoTerminal();
+}
+
+function terminalContextSelectAll() {
+    hideTerminalContextMenu();
+    if (xtermInstance) {
+        xtermInstance.selectAll();
+    }
+}
+
+function terminalContextClear() {
+    hideTerminalContextMenu();
+    clearTerminalOutput();
 }
 
 async function sendTerminalCommand(cmd) {
@@ -1852,6 +2031,31 @@ async function sendAgentTask() {
 function renderAgentResponse(data, container) {
     container.innerHTML = "";
 
+    // 0. CLI Scaffolding Commands Card (if Agent requested setup commands)
+    if (Array.isArray(data.setupCommands) && data.setupCommands.length > 0) {
+        window.currentAgentSetupCommands = data.setupCommands;
+        const cliCard = document.createElement("div");
+        cliCard.className = "agent-cli-scaffold-card p-2 rounded bg-dark border border-info mb-2";
+        cliCard.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="fw-semibold text-info extra-small"><i class="bi bi-terminal-fill me-1"></i> CLI Scaffolding Commands</span>
+                <span class="badge bg-primary extra-small">${data.setupCommands.length} lệnh</span>
+            </div>
+            <div class="d-flex flex-column gap-1 mb-2 font-mono" style="font-size: 11px;">
+                ${data.setupCommands.map(cmd => `
+                    <div class="p-1 px-2 rounded bg-black border border-secondary text-light d-flex align-items-center">
+                        <span class="text-secondary me-1.5">&gt;</span>
+                        <span>${escapeHtml(cmd)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <button class="btn btn-sm btn-info text-dark fw-bold w-100 extra-small py-1 d-flex align-items-center justify-content-center gap-1.5" onclick="runScaffoldingAndApplyAll()">
+                <i class="bi bi-lightning-charge-fill"></i> ⚡ Chạy lệnh khởi tạo & Áp dụng (Run & Apply)
+            </button>
+        `;
+        container.appendChild(cliCard);
+    }
+
     // 1. Plan Card
     if (Array.isArray(data.plan) && data.plan.length > 0) {
         const planCard = document.createElement("div");
@@ -1961,6 +2165,26 @@ function renderAgentResponse(data, container) {
             </div>
         `;
         container.appendChild(diffCard);
+    }
+}
+
+async function runScaffoldingAndApplyAll() {
+    const cmds = window.currentAgentSetupCommands || [];
+    switchBottomTab('terminal');
+
+    if (cmds.length > 0) {
+        showToastNotification(`Đang thực thi ${cmds.length} lệnh scaffolding khởi tạo...`);
+        for (const cmd of cmds) {
+            if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+                await terminalHubConn.invoke("ExecuteCommand", activeProjectId || "my-project", cmd);
+            }
+        }
+    }
+
+    if (window.currentAgentOperations && window.currentAgentOperations.length > 0) {
+        await applyAllAgentOperations();
+    } else {
+        await refreshFileTree();
     }
 }
 
@@ -2153,22 +2377,51 @@ function openQuickOpenModal() {
 
 async function submitCreateProject() {
     const name = document.getElementById("newProjectName")?.value?.trim();
-    const template = document.getElementById("newProjectTemplate")?.value || "dotnet-mvc";
+    const template = document.getElementById("newProjectTemplate")?.value || "empty";
     if (!name) return alert("Vui lòng nhập tên dự án.");
 
     try {
         const res = await fetch('/api/ide/create-project', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name, template })
+            body: JSON.stringify({ name, template: "empty" })
         });
         const data = await res.json();
         if (data.ok) {
             hideModalSafely("createProjectModal");
             await loadUserProjects();
-            alert(`✅ Đã tạo dự án ${name} thành công!`);
+            
+            // Switch to the newly created project
+            const cleanName = data.project || name;
+            await switchActiveProject(cleanName);
+
+            // Template scaffolding CLI command mapping
+            let scaffoldCmd = "";
+            if (template === "dotnet-mvc") {
+                scaffoldCmd = "dotnet new mvc";
+            } else if (template === "dotnet-webapi") {
+                scaffoldCmd = "dotnet new webapi --use-controllers";
+            } else if (template === "angular") {
+                scaffoldCmd = "npx -y @angular/cli new frontend --routing --style=scss --ssr=false --skip-git";
+            } else if (template === "fullstack") {
+                scaffoldCmd = "dotnet new webapi --use-controllers -n backend && npx -y @angular/cli new frontend --routing --style=scss --ssr=false --skip-git";
+            } else if (template === "html5") {
+                scaffoldCmd = "echo ^<!DOCTYPE html^>^<html^>^<head^>^<title^>" + cleanName + "^</title^>^</head^>^<body^>^<h1^>Welcome to " + cleanName + "^</h1^>^</body^>^</html^> > index.html";
+            }
+
+            if (scaffoldCmd) {
+                switchBottomTab('terminal');
+                showToastNotification(`Khởi tạo template [${template}]...`);
+                setTimeout(async () => {
+                    if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+                        await terminalHubConn.invoke("ExecuteCommand", cleanName, scaffoldCmd);
+                    }
+                }, 600);
+            } else {
+                showToastNotification(`Đã tạo dự án ${cleanName} thành công!`);
+            }
         } else {
-            showRestrictedLoginPrompt(data.message);
+            showRestrictedLoginPrompt(data.message || data.error);
         }
     } catch (err) {
         alert("❌ Lỗi: " + err.message);

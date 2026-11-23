@@ -836,15 +836,14 @@
                         <input type="text" id="newProjectName" class="form-control bg-dark-subtle text-light border-secondary extra-small" placeholder="Ví dụ: MyShopApp">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label extra-small fw-semibold">Template dự án mẫu:</label>
+                        <label class="form-label extra-small fw-semibold">Template khởi tạo nhanh (1-Click Scaffolding):</label>
                         <select id="newProjectTemplate" class="form-select bg-dark-subtle text-light border-secondary extra-small">
-                            <option value="dotnet-mvc">C# ASP.NET Core MVC (.cs, .cshtml)</option>
-                            <option value="html5">🌐 HTML5 / CSS3 / JS Web Studio (.html, .css, .js)</option>
-                            <option value="java">☕ Java Application (.java)</option>
-                            <option value="react">React Project (.jsx)</option>
-                            <option value="nodejs">NodeJS Express (.js)</option>
-                            <option value="python">Python Project (.py)</option>
-                            <option value="empty">Empty Project</option>
+                            <option value="empty">📁 Empty Project (Trống hoàn toàn)</option>
+                            <option value="dotnet-mvc">🌐 ASP.NET Core MVC (dotnet new mvc)</option>
+                            <option value="dotnet-webapi" selected>⚙️ ASP.NET Core Web API (dotnet new webapi --use-controllers)</option>
+                            <option value="angular">🅰️ Angular App (npx -y @@angular/cli new frontend)</option>
+                            <option value="fullstack">🚀 Fullstack (.NET Web API + Angular)</option>
+                            <option value="html5">🎨 HTML5 / CSS3 / JS Web Studio</option>
                         </select>
                     </div>
                 </div>
@@ -1117,6 +1116,15 @@
         <!-- Modifications -->
         <div class="context-menu-item" onclick="contextMenuInlineRename()"><i class="bi bi-pencil text-info me-2"></i>Rename... <span class="menu-shortcut">F2</span></div>
         <div class="context-menu-item text-danger" onclick="contextMenuDeletePermanently()"><i class="bi bi-trash3 text-danger me-2"></i>Delete Permanently <span class="menu-shortcut">Delete</span></div>
+    </div>
+
+    <!-- 12.1. TERMINAL CONTEXT MENU (xterm.js Context Menu) -->
+    <div id="terminalContextMenu" class="explorer-context-menu" style="display: none;">
+        <div id="ctxTermCopy" class="context-menu-item" onclick="terminalContextCopy()"><i class="bi bi-copy text-secondary me-2"></i>Copy <span class="menu-shortcut">Ctrl+Shift+C</span></div>
+        <div class="context-menu-item" onclick="terminalContextPaste()"><i class="bi bi-clipboard text-secondary me-2"></i>Paste <span class="menu-shortcut">Ctrl+V</span></div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="terminalContextSelectAll()"><i class="bi bi-check-all text-secondary me-2"></i>Select All <span class="menu-shortcut">Ctrl+Shift+A</span></div>
+        <div class="context-menu-item" onclick="terminalContextClear()"><i class="bi bi-trash text-secondary me-2"></i>Clear Terminal <span class="menu-shortcut">cls</span></div>
     </div>
 
     <!-- 13. MODAL CONFIRM DELETE -->
