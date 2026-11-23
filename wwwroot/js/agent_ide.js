@@ -1616,7 +1616,7 @@ function runSmartAction() {
 
     // 1. Angular Project
     if (projInfo.type === 'angular') {
-        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        const prefix = projInfo.inFrontend ? 'cd frontend && ' : '';
         if (activeFilePath && activeFilePath.endsWith('.spec.ts')) {
             showToastNotification("Running Angular Tests (ng test)...");
             runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
@@ -1671,7 +1671,7 @@ function runBuildInTerminal() {
     switchBottomTab('terminal');
     const projInfo = detectProjectType();
     if (projInfo.type === 'angular') {
-        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        const prefix = projInfo.inFrontend ? 'cd frontend && ' : '';
         runCustomTerminalCmd(`${prefix}npx ng build`);
     } else if (projInfo.type === 'node') {
         runCustomTerminalCmd("npm run build");
@@ -1684,7 +1684,7 @@ function runTestInTerminal() {
     switchBottomTab('terminal');
     const projInfo = detectProjectType();
     if (projInfo.type === 'angular') {
-        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        const prefix = projInfo.inFrontend ? 'cd frontend && ' : '';
         runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
     } else if (projInfo.type === 'node') {
         runCustomTerminalCmd("npm test");

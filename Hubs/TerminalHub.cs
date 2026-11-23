@@ -174,35 +174,62 @@ namespace BtoanAiNet.Hubs
                 return;
             }
 
-            // 3. Internal cd navigation
+            // 3. Internal cd navigation & compound command chaining (e.g. cd frontend && npm start or cd frontend; npm start)
             if (trimmedCmd.StartsWith("cd ", StringComparison.OrdinalIgnoreCase) || string.Equals(trimmedCmd, "cd", StringComparison.OrdinalIgnoreCase))
             {
-                string targetSub = trimmedCmd.Length > 3 ? trimmedCmd.Substring(3).Trim(' ', '"', '\'') : "";
-                if (string.IsNullOrEmpty(targetSub))
+                int sepIdx = -1;
+                string sep = "";
+                int idxAmp = trimmedCmd.IndexOf("&&", StringComparison.Ordinal);
+                int idxSemi = trimmedCmd.IndexOf(';');
+                if (idxAmp >= 0 && (idxSemi < 0 || idxAmp < idxSemi))
                 {
-                    // Print current directory
-                    await Clients.Caller.SendAsync("TerminalOutput", $"\r\n{session.CurrentDirectory}\r\n\r\nPS {session.CurrentDirectory}> ");
+                    sepIdx = idxAmp;
+                    sep = "&&";
+                }
+                else if (idxSemi >= 0)
+                {
+                    sepIdx = idxSemi;
+                    sep = ";";
+                }
+
+                string cdPart = sepIdx >= 0 ? trimmedCmd.Substring(0, sepIdx).Trim() : trimmedCmd;
+                string? nextCmd = sepIdx >= 0 ? trimmedCmd.Substring(sepIdx + sep.Length).Trim() : null;
+
+                string targetSub = cdPart.Length > 3 ? cdPart.Substring(3).Trim(' ', '"', '\'') : "";
+                if (!string.IsNullOrEmpty(targetSub))
+                {
+                    string newPath = Path.GetFullPath(Path.Combine(session.CurrentDirectory, targetSub));
+
+                    // If already inside the target subfolder, gracefully accept
+                    if (!Directory.Exists(newPath) && string.Equals(Path.GetFileName(session.CurrentDirectory), targetSub, StringComparison.OrdinalIgnoreCase))
+                    {
+                        newPath = session.CurrentDirectory;
+                    }
+
+                    if (!newPath.StartsWith(session.ProjectRootPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await Clients.Caller.SendAsync("TerminalOutput", 
+                            $"\r\n\x1b[31m[Security Violation] Không thể chuyển thư mục ra ngoài phạm vi dự án: {session.ProjectName}\x1b[0m\r\n\r\nPS {session.CurrentDirectory}> ");
+                        return;
+                    }
+
+                    if (!Directory.Exists(newPath))
+                    {
+                        await Clients.Caller.SendAsync("TerminalOutput", 
+                            $"\r\n\x1b[31mHệ thống không tìm thấy đường dẫn được chỉ định: {targetSub}\x1b[0m\r\n\r\nPS {session.CurrentDirectory}> ");
+                        return;
+                    }
+
+                    session.CurrentDirectory = newPath;
+                }
+
+                if (string.IsNullOrEmpty(nextCmd))
+                {
+                    await Clients.Caller.SendAsync("TerminalOutput", $"\r\nPS {session.CurrentDirectory}> ");
                     return;
                 }
 
-                string newPath = Path.GetFullPath(Path.Combine(session.CurrentDirectory, targetSub));
-                if (!newPath.StartsWith(session.ProjectRootPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    await Clients.Caller.SendAsync("TerminalOutput", 
-                        $"\r\n\x1b[31m[Security Violation] Không thể chuyển thư mục ra ngoài phạm vi dự án: {session.ProjectName}\x1b[0m\r\n\r\nPS {session.CurrentDirectory}> ");
-                    return;
-                }
-
-                if (!Directory.Exists(newPath))
-                {
-                    await Clients.Caller.SendAsync("TerminalOutput", 
-                        $"\r\n\x1b[31mHệ thống không tìm thấy đường dẫn được chỉ định: {targetSub}\x1b[0m\r\n\r\nPS {session.CurrentDirectory}> ");
-                    return;
-                }
-
-                session.CurrentDirectory = newPath;
-                await Clients.Caller.SendAsync("TerminalOutput", $"\r\nPS {session.CurrentDirectory}> ");
-                return;
+                trimmedCmd = nextCmd;
             }
 
             // 4. Security Check
