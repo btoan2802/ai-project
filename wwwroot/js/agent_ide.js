@@ -2435,7 +2435,7 @@ async function submitCreateProject() {
             } else if (template === "dotnet-webapi") {
                 scaffoldCmd = "dotnet new webapi --use-controllers";
             } else if (template === "angular") {
-                scaffoldCmd = "npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install";
+                scaffoldCmd = "npx -y @angular/cli new " + cleanName + " --directory . --routing --style=css --ssr=false --skip-git --skip-install";
             } else if (template === "fullstack") {
                 scaffoldCmd = "dotnet new webapi --use-controllers -n backend && npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install";
             } else if (template === "html5") {
