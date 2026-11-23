@@ -831,6 +831,7 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div id="createProjectErrorMsg" class="alert alert-danger extra-small py-1.5 px-2.5 mb-2" style="display: none;"></div>
                     <div class="mb-3">
                         <label class="form-label extra-small fw-semibold">Tên dự án:</label>
                         <input type="text" id="newProjectName" class="form-control bg-dark-subtle text-light border-secondary extra-small" placeholder="Ví dụ: MyShopApp">
@@ -1152,6 +1153,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=2.7.0" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=2.7.5" asp-append-version="true"></script>
 </body>
 </html>

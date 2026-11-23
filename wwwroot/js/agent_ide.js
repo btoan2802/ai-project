@@ -2378,7 +2378,14 @@ function toggleDiffSideBySide() {
 // ==========================================
 // 9. MODALS: CREATE PROJECT / FILE / FOLDER
 // ==========================================
-function openCreateProjectModal() { showModalSafely("createProjectModal"); }
+function openCreateProjectModal() {
+    const errBox = document.getElementById("createProjectErrorMsg");
+    if (errBox) errBox.style.display = "none";
+    const nameInput = document.getElementById("newProjectName");
+    if (nameInput) nameInput.value = "";
+    showModalSafely("createProjectModal");
+    setTimeout(() => nameInput?.focus(), 150);
+}
 function openImportGitModal() { showModalSafely("importGitModal"); }
 function openCreateFileModal() { showModalSafely("createFileModal"); }
 function openCreateFolderModal() { showModalSafely("createFolderModal"); }
@@ -2392,9 +2399,19 @@ function openQuickOpenModal() {
 }
 
 async function submitCreateProject() {
+    const errBox = document.getElementById("createProjectErrorMsg");
+    if (errBox) errBox.style.display = "none";
+
     const name = document.getElementById("newProjectName")?.value?.trim();
     const template = document.getElementById("newProjectTemplate")?.value || "empty";
-    if (!name) return showToastNotification("Vui lòng nhập tên dự án.");
+    if (!name) {
+        if (errBox) {
+            errBox.textContent = "Vui lòng nhập tên dự án.";
+            errBox.style.display = "block";
+        }
+        showToastNotification("Vui lòng nhập tên dự án.");
+        return;
+    }
 
     try {
         const res = await fetch('/api/ide/create-project', {
@@ -2437,9 +2454,22 @@ async function submitCreateProject() {
                 showToastNotification(`Đã tạo dự án ${cleanName} thành công!`);
             }
         } else {
-            showRestrictedLoginPrompt(data.message || data.error);
+            if (data.needLogin) {
+                showRestrictedLoginPrompt(data.error);
+            } else {
+                const errorText = data.error || data.message || "Tạo dự án thất bại";
+                if (errBox) {
+                    errBox.textContent = "⚠️ " + errorText;
+                    errBox.style.display = "block";
+                }
+                showToastNotification("⚠️ " + errorText);
+            }
         }
     } catch (err) {
+        if (errBox) {
+            errBox.textContent = "❌ Lỗi: " + err.message;
+            errBox.style.display = "block";
+        }
         showToastNotification("Lỗi: " + err.message);
     }
 }

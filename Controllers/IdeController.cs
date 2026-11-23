@@ -195,7 +195,7 @@ namespace BtoanAiNet.Controllers
 
             if (Directory.Exists(projectPath))
             {
-                return BadRequest(new { ok = false, error = $"Dự án '{cleanName}' đã tồn tại trong không gian của bạn." });
+                return BadRequest(new { ok = false, error = $"Dự án '{cleanName}' đã tồn tại trong không gian của bạn. Hãy chọn tên khác (ví dụ: {cleanName}-1)." });
             }
 
             try
