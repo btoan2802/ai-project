@@ -265,7 +265,7 @@ function onProjectChanged() {
     const select = document.getElementById("projectSelect");
     if (!select) return;
     activeProjectId = select.value;
-    
+
     if (activeProjectId) {
         hideEmptyWorkspaceState();
         const rootNameEl = document.getElementById("workspaceRootName");
@@ -289,25 +289,41 @@ function onProjectChanged() {
 }
 
 async function switchActiveProject(projName) {
+    if (!projName) return;
+    activeProjectId = projName;
     const select = document.getElementById("projectSelect");
     if (select) {
         select.value = projName;
+        let found = false;
+        for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === projName) {
+                select.selectedIndex = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            const opt = document.createElement("option");
+            opt.value = projName;
+            opt.textContent = projName;
+            opt.selected = true;
+            select.appendChild(opt);
+        }
     }
-    activeProjectId = projName;
-    if (activeProjectId) {
-        hideEmptyWorkspaceState();
-        const rootNameEl = document.getElementById("workspaceRootName");
-        if (rootNameEl) {
-            rootNameEl.innerText = select?.options[select.selectedIndex]?.text || activeProjectId;
-        }
-        updateTerminalPrompt();
-        await refreshFileTree();
-        loadGitStatus();
-        if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-            await terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
-        }
+
+    hideEmptyWorkspaceState();
+    const rootNameEl = document.getElementById("workspaceRootName");
+    if (rootNameEl) {
+        rootNameEl.innerText = projName;
+    }
+    updateTerminalPrompt();
+    await refreshFileTree();
+    loadGitStatus();
+    if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+        await terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
     }
 }
+window.switchActiveProject = switchActiveProject;
 
 async function refreshFileTree() {
     const container = document.getElementById("workspaceTreeContainer");
@@ -548,7 +564,7 @@ function renderTreeLevel(dirObj, parentElement, depth, currentPath = "") {
                 if (data && data.path && data.path !== dirRelPath) {
                     await handleMoveItem(data.path, dirRelPath);
                 }
-            } catch (err) {}
+            } catch (err) { }
         };
 
         parentElement.appendChild(dirEl);
@@ -909,8 +925,8 @@ function toggleBottomPanel() {
         panel.style.display = "flex";
         if (resizer) resizer.style.display = "block";
         setTimeout(() => {
-            try { fitAddon?.fit(); } catch(e){}
-            try { xtermInstance?.focus(); } catch(e){}
+            try { fitAddon?.fit(); } catch (e) { }
+            try { xtermInstance?.focus(); } catch (e) { }
         }, 50);
     } else {
         panel.classList.add("ide-panel-hidden");
@@ -953,7 +969,7 @@ function toggleBottomPanelHeight() {
     }
     triggerEditorLayout();
     setTimeout(() => {
-        try { fitAddon?.fit(); } catch(e){}
+        try { fitAddon?.fit(); } catch (e) { }
     }, 60);
 }
 
@@ -1036,7 +1052,7 @@ async function loadGitStatus() {
 
         if (data.ok && Array.isArray(data.changes)) {
             gitChangesCache = data.changes;
-            
+
             // Update badges
             const bBadge = document.getElementById("gitBadgeCount");
             if (bBadge) bBadge.innerText = data.changes.length;
@@ -1143,7 +1159,7 @@ function initXtermTerminal() {
 
     // Auto-fit on window resize
     window.addEventListener("resize", () => {
-        try { fitAddon?.fit(); } catch(e){}
+        try { fitAddon?.fit(); } catch (e) { }
     });
 
     // Smart Copy / Paste / Select All via attachCustomKeyEventHandler
@@ -1503,8 +1519,8 @@ function switchBottomTab(tabName) {
         document.getElementById('bottomTabBtnTerminal')?.classList.add("active");
         document.getElementById('bottomTabTerminalBody').style.display = "flex";
         setTimeout(() => {
-            try { fitAddon?.fit(); } catch(e){}
-            try { xtermInstance?.focus(); } catch(e){}
+            try { fitAddon?.fit(); } catch (e) { }
+            try { xtermInstance?.focus(); } catch (e) { }
         }, 50);
     } else if (tabName === 'problems') {
         document.getElementById('bottomTabBtnProblems')?.classList.add("active");
@@ -2087,7 +2103,7 @@ function renderAgentResponse(data, container) {
     if (hasOps || hasImgs) {
         const opsCard = document.createElement("div");
         opsCard.className = "agent-operations-card";
-        
+
         const opsList = data.operations || [];
         const imgsList = data.images || [];
 
@@ -2378,7 +2394,7 @@ function openQuickOpenModal() {
 async function submitCreateProject() {
     const name = document.getElementById("newProjectName")?.value?.trim();
     const template = document.getElementById("newProjectTemplate")?.value || "empty";
-    if (!name) return alert("Vui lòng nhập tên dự án.");
+    if (!name) return showToastNotification("Vui lòng nhập tên dự án.");
 
     try {
         const res = await fetch('/api/ide/create-project', {
@@ -2390,7 +2406,7 @@ async function submitCreateProject() {
         if (data.ok) {
             hideModalSafely("createProjectModal");
             await loadUserProjects();
-            
+
             // Switch to the newly created project
             const cleanName = data.project || name;
             await switchActiveProject(cleanName);
@@ -2424,7 +2440,7 @@ async function submitCreateProject() {
             showRestrictedLoginPrompt(data.message || data.error);
         }
     } catch (err) {
-        alert("❌ Lỗi: " + err.message);
+        showToastNotification("Lỗi: " + err.message);
     }
 }
 
@@ -2826,8 +2842,8 @@ function filterCommandPalette(query) {
     if (!query) {
         filteredPaletteItems = [...COMMAND_PALETTE_ITEMS];
     } else {
-        filteredPaletteItems = COMMAND_PALETTE_ITEMS.filter(item => 
-            item.title.toLowerCase().includes(query) || 
+        filteredPaletteItems = COMMAND_PALETTE_ITEMS.filter(item =>
+            item.title.toLowerCase().includes(query) ||
             (item.shortcut && item.shortcut.toLowerCase().includes(query))
         );
     }
@@ -3237,7 +3253,7 @@ function contextMenuCopy() {
 async function contextMenuPaste() {
     hideExplorerContextMenu();
     if (!explorerClipboard || !explorerClipboard.path) return;
-    
+
     let destFolder = "";
     if (contextTargetItem) {
         if (contextTargetItem.isDirectory) {
