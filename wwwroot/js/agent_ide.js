@@ -1592,31 +1592,105 @@ async function resetTerminalSession() {
     }
 }
 
+function detectProjectType() {
+    const files = Array.isArray(workspaceFilesList) ? workspaceFilesList : [];
+    const hasAngular = files.some(f => f.path.includes("angular.json") || (f.path.includes("package.json") && f.path.includes("frontend")));
+    const hasDotnet = files.some(f => f.path.endsWith(".csproj") || f.path.endsWith(".sln") || f.path === "Program.cs" || f.path.endsWith("/Program.cs"));
+    const hasPackageJson = files.some(f => f.path.endsWith("package.json"));
+    const hasPython = files.some(f => f.path.endsWith(".py") || f.path.endsWith("requirements.txt"));
+    
+    if (hasAngular) {
+        const inFrontend = files.some(f => f.path.startsWith("frontend/") || f.path.startsWith("frontend\\"));
+        return { type: "angular", inFrontend };
+    }
+    if (hasDotnet) return { type: "dotnet" };
+    if (hasPackageJson) return { type: "node" };
+    if (hasPython) return { type: "python" };
+    return { type: "unknown" };
+}
+
 function runSmartAction() {
     switchBottomTab('terminal');
-    if (!activeFilePath) {
-        runCustomTerminalCmd("dotnet build");
+    const projInfo = detectProjectType();
+    const ext = activeFilePath ? activeFilePath.split('.').pop().toLowerCase() : '';
+
+    // 1. Angular Project
+    if (projInfo.type === 'angular') {
+        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        if (activeFilePath && activeFilePath.endsWith('.spec.ts')) {
+            showToastNotification("Running Angular Tests (ng test)...");
+            runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
+        } else {
+            showToastNotification("Starting Angular App (npm start)...");
+            runCustomTerminalCmd(`${prefix}npm start`);
+        }
         return;
     }
 
-    const ext = activeFilePath.split('.').pop().toLowerCase();
+    // 2. Node.js / Frontend Project
+    if (projInfo.type === 'node') {
+        if (ext === 'js' || ext === 'ts') {
+            runCustomTerminalCmd(`node ${activeFilePath}`);
+        } else {
+            runCustomTerminalCmd("npm start");
+        }
+        return;
+    }
+
+    // 3. Python Project / File
+    if (ext === 'py' || projInfo.type === 'python') {
+        if (activeFilePath && ext === 'py') {
+            runCustomTerminalCmd(`python ${activeFilePath}`);
+        } else {
+            runCustomTerminalCmd("python main.py");
+        }
+        return;
+    }
+
+    // 4. Pure HTML / Web Static
+    if (ext === 'html' || ext === 'htm') {
+        triggerLivePreview();
+        return;
+    }
+
+    // 5. JavaScript single file
     if (ext === 'js') {
         runCustomTerminalCmd(`node ${activeFilePath}`);
-    } else if (ext === 'py') {
-        runCustomTerminalCmd(`python ${activeFilePath}`);
+        return;
+    }
+
+    // 6. .NET / C# Project (default)
+    if (activeFilePath && activeFilePath.endsWith('Test.cs')) {
+        runCustomTerminalCmd("dotnet test");
     } else {
-        runCustomTerminalCmd("dotnet build");
+        runCustomTerminalCmd("dotnet run");
     }
 }
 
 function runBuildInTerminal() {
     switchBottomTab('terminal');
-    runCustomTerminalCmd("dotnet build");
+    const projInfo = detectProjectType();
+    if (projInfo.type === 'angular') {
+        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        runCustomTerminalCmd(`${prefix}npx ng build`);
+    } else if (projInfo.type === 'node') {
+        runCustomTerminalCmd("npm run build");
+    } else {
+        runCustomTerminalCmd("dotnet build");
+    }
 }
 
 function runTestInTerminal() {
     switchBottomTab('terminal');
-    runCustomTerminalCmd("dotnet test");
+    const projInfo = detectProjectType();
+    if (projInfo.type === 'angular') {
+        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
+    } else if (projInfo.type === 'node') {
+        runCustomTerminalCmd("npm test");
+    } else {
+        runCustomTerminalCmd("dotnet test");
+    }
 }
 
 function closeCurrentTab() {
