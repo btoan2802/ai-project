@@ -382,31 +382,43 @@ namespace BtoanAiNet.Services
                             string jsonStr = line.Substring(6).Trim();
                             if (string.IsNullOrEmpty(jsonStr)) continue;
 
-                            JsonNode? node = null;
-                            try { node = JsonNode.Parse(jsonStr); } catch { }
-
-                            if (node is JsonObject obj && obj["candidates"] is JsonArray candidates && candidates.Count > 0)
+                            try
                             {
-                                if (candidates[0]?["content"]?["parts"] is JsonArray parts)
+                                using var doc = JsonDocument.Parse(jsonStr);
+                                var root = doc.RootElement;
+
+                                if (TryGetPropertyCaseInsensitive(root, "candidates", out var candidatesElem) &&
+                                    candidatesElem.ValueKind == JsonValueKind.Array &&
+                                    candidatesElem.GetArrayLength() > 0)
                                 {
-                                    foreach (var part in parts)
+                                    var firstCandidate = candidatesElem[0];
+                                    if (TryGetPropertyCaseInsensitive(firstCandidate, "content", out var contentElem) &&
+                                        TryGetPropertyCaseInsensitive(contentElem, "parts", out var partsElem) &&
+                                        partsElem.ValueKind == JsonValueKind.Array)
                                     {
-                                        if (part is JsonObject pObj)
+                                        foreach (var part in partsElem.EnumerateArray())
                                         {
-                                            if (pObj.ContainsKey("thought") && pObj["thought"]?.GetValue<bool>() == true)
+                                            if (TryGetPropertyCaseInsensitive(part, "thought", out var thoughtElem) &&
+                                                thoughtElem.ValueKind == JsonValueKind.True)
                                             {
                                                 continue;
                                             }
-                                            string? txt = pObj["text"]?.ToString();
-                                            if (!string.IsNullOrEmpty(txt))
+
+                                            if (TryGetPropertyCaseInsensitive(part, "text", out var textElem) &&
+                                                textElem.ValueKind == JsonValueKind.String)
                                             {
-                                                hasEmitted = true;
-                                                yield return txt;
+                                                string? txt = textElem.GetString();
+                                                if (!string.IsNullOrEmpty(txt))
+                                                {
+                                                    hasEmitted = true;
+                                                    yield return txt;
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+                            catch { }
                         }
                     }
 
@@ -420,6 +432,24 @@ namespace BtoanAiNet.Services
                 Console.WriteLine($"[GeminiService.StreamContentAsync] Completed without output. Last error: {lastStreamError}");
                 yield return $"❌ Lỗi kết nối Gemini API: {lastStreamError}";
             }
+        }
+
+        private static bool TryGetPropertyCaseInsensitive(JsonElement element, string propertyName, out JsonElement value)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                if (element.TryGetProperty(propertyName, out value)) return true;
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = prop.Value;
+                        return true;
+                    }
+                }
+            }
+            value = default;
+            return false;
         }
     }
 }

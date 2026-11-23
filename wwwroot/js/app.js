@@ -927,15 +927,18 @@ async function streamGeminiChat(userText, images, files, onChunk) {
                         }
                     }
                     if (parsed.error) {
-                        throw new Error(parsed.error);
+                        const errText = parsed.error.startsWith("❌") ? parsed.error : `❌ ${parsed.error}`;
+                        if (typeof onChunk === "function") {
+                            onChunk(errText, errText);
+                        }
+                        accumulatedText = errText;
+                        finalDoneData = { ...parsed, error: parsed.error, answer: errText };
                     }
                     if (parsed.done) {
                         finalDoneData = parsed;
                     }
                 } catch (e) {
-                    if (e.message && (e.message.startsWith("❌") || e.message.startsWith("Lỗi") || e.message.startsWith("HTTP"))) {
-                        throw e;
-                    }
+                    console.debug("SSE Parse error:", e);
                 }
             }
         }
@@ -943,7 +946,21 @@ async function streamGeminiChat(userText, images, files, onChunk) {
 
     const finalAnswer = (finalDoneData && finalDoneData.answer) ? finalDoneData.answer : accumulatedText;
     if (!finalAnswer || finalAnswer.trim() === "") {
-        throw new Error("Luồng SSE trả về rỗng, chuyển sang fallback JSON");
+        return {
+            ok: false,
+            empty: true,
+            text: "",
+            chat_id: finalDoneData?.conversation_id || conversation_id
+        };
+    }
+
+    if (finalDoneData && finalDoneData.error) {
+        return {
+            ok: false,
+            text: finalAnswer,
+            error: finalDoneData.error,
+            chat_id: finalDoneData?.conversation_id || conversation_id
+        };
     }
 
     return {
@@ -1316,6 +1333,15 @@ async function send() {
                 liveBotBubble.innerHTML = renderMarkdownWithMath(fullText);
                 scrollToBottom();
             });
+
+            // If stream completed but text was empty, automatically fallback to JSON callGemini
+            if (!geminiRes || geminiRes.empty || !geminiRes.text || geminiRes.text.trim() === "") {
+                console.warn("SSE stream finished with empty text, automatically falling back to JSON callGemini...");
+                if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
+                liveBotRow = null;
+                liveBotBubble = null;
+                geminiRes = await callGemini(userText, images, files);
+            }
         } catch (streamErr) {
             console.warn("SSE Stream encountered error, falling back to callGemini:", streamErr);
             if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
