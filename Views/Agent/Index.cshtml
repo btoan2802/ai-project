@@ -35,7 +35,7 @@
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
     <!-- Btoan Studio IDE Dark Modern CSS -->
-    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261124" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261124_mobile" asp-append-version="true" />
 </head>
 <body class="agent-ide-body">
 
@@ -379,8 +379,21 @@
         </div>
     </header>
 
+    <!-- MOBILE IDE TAB SWITCHER (< 768px) -->
+    <div class="mobile-ide-tabs d-flex d-md-none" id="mobileIdeTabs">
+        <button class="mobile-tab-btn active" id="mTabBtnExplorer" onclick="switchMobileIdeTab('explorer')">
+            <i class="bi bi-folder2-open me-1"></i>Explorer
+        </button>
+        <button class="mobile-tab-btn" id="mTabBtnEditor" onclick="switchMobileIdeTab('editor')">
+            <i class="bi bi-code-slash me-1"></i>Code & Terminal
+        </button>
+        <button class="mobile-tab-btn" id="mTabBtnAgent" onclick="switchMobileIdeTab('agent')">
+            <i class="bi bi-stars me-1 text-info"></i>Btoan Agent
+        </button>
+    </div>
+
     <!-- 2. MAIN WORKSPACE CONTAINER (4 COLUMNS: ACTIVITY BAR | SIDEBAR | EDITOR | AGENT) -->
-    <div class="vscode-main-container">
+    <div class="vscode-main-container" data-mobile-tab="explorer">
 
         <!-- 2.1. ACTIVITY BAR (FAR-LEFT VERTICAL BAR, 48px, #181818) -->
         <div class="activity-bar">
@@ -1232,6 +1245,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261124" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261124_mobile" asp-append-version="true"></script>
 </body>
 </html>

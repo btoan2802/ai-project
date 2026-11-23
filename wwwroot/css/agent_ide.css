@@ -1818,3 +1818,125 @@ body.agent-ide-body {
     font-size: 10px;
     font-weight: 600;
 }
+
+/* ==========================================
+   MOBILE RESPONSIVE FOR BTOAN STUDIO IDE (< 768px)
+   ========================================== */
+.mobile-ide-tabs {
+    height: 38px;
+    background: #181818;
+    border-bottom: 1px solid #2b2b2b;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 4px;
+    z-index: 105;
+}
+
+.mobile-tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 500;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s ease;
+}
+
+.mobile-tab-btn.active {
+    color: #ffffff;
+    border-bottom: 2px solid #3b82f6;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 768px) {
+    html, body {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+    }
+
+    .vscode-top-bar {
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: none;
+        padding: 0 6px;
+    }
+    .vscode-top-bar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .activity-bar {
+        display: none !important;
+    }
+
+    #resizerExplorer,
+    #resizerAgent {
+        display: none !important;
+    }
+
+    .vscode-main-container {
+        display: flex !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        position: relative !important;
+    }
+
+    /* Tab switcher behavior: Explorer default */
+    .vscode-main-container:not([data-mobile-tab="editor"]):not([data-mobile-tab="agent"]) #primarySidebar,
+    .vscode-main-container[data-mobile-tab="explorer"] #primarySidebar {
+        display: flex !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    .vscode-main-container:not([data-mobile-tab="editor"]):not([data-mobile-tab="agent"]) .center-editor-panel,
+    .vscode-main-container:not([data-mobile-tab="editor"]):not([data-mobile-tab="agent"]) #rightAgentPanel,
+    .vscode-main-container[data-mobile-tab="explorer"] .center-editor-panel,
+    .vscode-main-container[data-mobile-tab="explorer"] #rightAgentPanel {
+        display: none !important;
+    }
+
+    /* Editor tab */
+    .vscode-main-container[data-mobile-tab="editor"] .center-editor-panel {
+        display: flex !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    .vscode-main-container[data-mobile-tab="editor"] #primarySidebar,
+    .vscode-main-container[data-mobile-tab="editor"] #rightAgentPanel {
+        display: none !important;
+    }
+
+    /* Agent tab */
+    .vscode-main-container[data-mobile-tab="agent"] #rightAgentPanel {
+        display: flex !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    .vscode-main-container[data-mobile-tab="agent"] #primarySidebar,
+    .vscode-main-container[data-mobile-tab="agent"] .center-editor-panel {
+        display: none !important;
+    }
+
+    .vscode-status-bar {
+        font-size: 10.5px !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        scrollbar-width: none !important;
+    }
+    .vscode-status-bar::-webkit-scrollbar {
+        display: none !important;
+    }
+}

@@ -721,6 +721,10 @@ async function openFileInEditor(filePath) {
 function updateEditorUI(tab) {
     renderTabBar();
 
+    if (window.innerWidth <= 768 && typeof window.switchMobileIdeTab === "function") {
+        window.switchMobileIdeTab("editor");
+    }
+
     const mContainer = document.getElementById("monacoContainer");
     const diffContainer = document.getElementById("monacoDiffContainer");
     const sqliteContainer = document.getElementById("sqliteStudioContainer");
@@ -4175,3 +4179,24 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// Mobile IDE Tab Switcher
+window.switchMobileIdeTab = function(tabName) {
+    const container = document.querySelector('.vscode-main-container');
+    if (container) {
+        container.setAttribute('data-mobile-tab', tabName);
+    }
+    document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(
+        tabName === 'explorer' ? 'mTabBtnExplorer' :
+        tabName === 'editor' ? 'mTabBtnEditor' : 'mTabBtnAgent'
+    );
+    if (btn) btn.classList.add('active');
+
+    if (tabName === 'editor') {
+        setTimeout(() => {
+            if (monacoEditor && typeof monacoEditor.layout === 'function') monacoEditor.layout();
+            if (window.fitAddon && typeof window.fitAddon.fit === 'function') window.fitAddon.fit();
+        }, 150);
+    }
+};

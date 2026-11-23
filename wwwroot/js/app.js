@@ -2105,6 +2105,13 @@ async function deleteChat(id) {
 async function loadConversation(id, updateUrl = true) {
     console.log(performance.now(), "[LOAD CONVERSATION START]", id);
 
+    if (window.innerWidth <= 768) {
+        const sb = document.getElementById("sidebar");
+        if (sb && sb.classList.contains("open")) {
+            sb.classList.remove("open");
+        }
+    }
+
     if (window._loadingConversationId === id) {
         console.log(performance.now(), "[LOAD CONVERSATION SKIPPED - IN PROGRESS]", id);
         return;
