@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -6,6 +8,7 @@ namespace BtoanAiNet.Services
     public interface IGeminiService
     {
         Task<(bool Success, JsonObject? ResponseData, string? RawResponse, string? ErrorMessage)> GenerateContentAsync(string model, JsonObject payload);
+        IAsyncEnumerable<string> StreamContentAsync(string model, JsonObject payload, CancellationToken cancellationToken = default);
         Task<string> GenerateTextAsync(string prompt);
     }
 
@@ -60,7 +63,7 @@ namespace BtoanAiNet.Services
                 }
             };
 
-            var res = await GenerateContentAsync("gemini-3-flash-preview", payload);
+            var res = await GenerateContentAsync("gemini-2.5-flash", payload);
             if (res.Success && res.ResponseData != null)
             {
                 try
@@ -87,29 +90,40 @@ namespace BtoanAiNet.Services
             }
 
             var candidateModels = new List<string>();
-            if (isThinkingMode)
+            string cleanModel = (model ?? "").Trim().ToLowerInvariant();
+            if (isThinkingMode || cleanModel.Contains("pro"))
             {
-                if (!string.IsNullOrWhiteSpace(model)) candidateModels.Add(model);
                 candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-3-flash-preview");
+                candidateModels.Add("gemini-3.6-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             else
             {
-                // Fast mode: prioritize ultra-fast models with thinkingBudget: 0 (1-shot 200 OK under 1.5s)
-                if (!string.IsNullOrWhiteSpace(model) &&
-                    !model.Equals("gemini-3.5-flash", StringComparison.OrdinalIgnoreCase) &&
-                    !model.Equals("gemini-3.5-flash-lite", StringComparison.OrdinalIgnoreCase) &&
-                    !model.Equals("gemini-2.5-flash", StringComparison.OrdinalIgnoreCase) &&
-                    !model.Equals("gemini-2.5-flash-lite", StringComparison.OrdinalIgnoreCase) &&
-                    !model.Equals("gemini-2.0-flash", StringComparison.OrdinalIgnoreCase))
-                {
-                    candidateModels.Add(model);
-                }
-                candidateModels.Add("gemini-3.1-flash-lite");
-                candidateModels.Add("gemini-3.1-flash-lite-preview");
+                // Fast mode: prioritize active sub-second models with thinkingBudget: 0
+                candidateModels.Add("gemini-3.5-flash-lite");
                 candidateModels.Add("gemini-3-flash-preview");
+                candidateModels.Add("gemini-3.5-flash");
+                candidateModels.Add("gemini-3.6-flash");
+                candidateModels.Add("gemini-2.5-flash");
             }
             candidateModels = candidateModels.Distinct().ToList();
+
+            // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
+            if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
+            {
+                payload["generationConfig"] = new JsonObject();
+            }
+            if (payload["generationConfig"] is JsonObject gConfig)
+            {
+                if (!isThinkingMode)
+                {
+                    gConfig.Remove("thinkingConfig");
+                }
+                else if (!gConfig.ContainsKey("thinkingConfig"))
+                {
+                    gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 2048 };
+                }
+            }
 
             var allKeys = GetConfiguredApiKeys();
             if (allKeys.Count == 0)
@@ -141,8 +155,8 @@ namespace BtoanAiNet.Services
                 modelPayload.Remove("conversation_id");
                 modelPayload.Remove("intent");
 
-                // Strip thinkingConfig only for models known to reject it (e.g. legacy flash-latest)
-                if (currentModel.Contains("flash-latest") || currentModel.Contains("flash-lite-latest"))
+                // Strip thinkingConfig only for models known to reject it (e.g. legacy flash-latest or flash-lite)
+                if (currentModel.Contains("flash-latest") || currentModel.Contains("flash-lite-latest") || currentModel.Contains("lite"))
                 {
                     if (modelPayload.ContainsKey("generationConfig") && modelPayload["generationConfig"] is JsonObject genConfig)
                     {
@@ -167,6 +181,21 @@ namespace BtoanAiNet.Services
 
                         if (!response.IsSuccessStatusCode)
                         {
+                            if ((int)response.StatusCode == 503)
+                            {
+                                await Task.Delay(300);
+                                var retryResponse = await _httpClient.PostAsync(url, content);
+                                if (retryResponse.IsSuccessStatusCode)
+                                {
+                                    string retryRaw = await retryResponse.Content.ReadAsStringAsync();
+                                    var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
+                                    if (retryJson != null && retryJson.ContainsKey("candidates"))
+                                    {
+                                        return (true, retryJson, retryRaw, null);
+                                    }
+                                }
+                            }
+
                             string snippet = rawResponse.Length > 150 ? rawResponse.Substring(0, 150) : rawResponse;
                             lastError = $"[{currentModel}] HTTP {(int)response.StatusCode}: {snippet}";
                             continue;
@@ -189,6 +218,162 @@ namespace BtoanAiNet.Services
             }
 
             return (false, null, null, lastError);
+        }
+
+        public async IAsyncEnumerable<string> StreamContentAsync(string model, JsonObject payload, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            bool isThinkingMode = false;
+            if (payload.ContainsKey("mode") && payload["mode"]?.ToString()?.Equals("thinking", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                isThinkingMode = true;
+            }
+            if (payload.ContainsKey("generationConfig") && payload["generationConfig"] is JsonObject gc && gc.ContainsKey("thinkingConfig"))
+            {
+                var tb = gc["thinkingConfig"]?["thinkingBudget"]?.GetValue<int>() ?? 0;
+                if (tb > 0) isThinkingMode = true;
+            }
+
+            var candidateModels = new List<string>();
+            string cleanModel = (model ?? "").Trim().ToLowerInvariant();
+            if (isThinkingMode || cleanModel.Contains("pro"))
+            {
+                candidateModels.Add("gemini-3.5-flash");
+                candidateModels.Add("gemini-3.6-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
+            }
+            else
+            {
+                // Fast mode: prioritize active sub-second models with thinkingBudget: 0
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-3-flash-preview");
+                candidateModels.Add("gemini-3.5-flash");
+                candidateModels.Add("gemini-3.6-flash");
+                candidateModels.Add("gemini-2.5-flash");
+            }
+            candidateModels = candidateModels.Distinct().ToList();
+
+            // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
+            if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
+            {
+                payload["generationConfig"] = new JsonObject();
+            }
+            if (payload["generationConfig"] is JsonObject gConfig)
+            {
+                if (!isThinkingMode)
+                {
+                    gConfig.Remove("thinkingConfig");
+                }
+                else if (!gConfig.ContainsKey("thinkingConfig"))
+                {
+                    gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 2048 };
+                }
+            }
+
+            var allKeys = GetConfiguredApiKeys();
+            if (allKeys.Count == 0) yield break;
+            var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
+
+            if (payload.ContainsKey("system_instruction"))
+            {
+                if (!payload.ContainsKey("systemInstruction"))
+                {
+                    payload["systemInstruction"] = payload["system_instruction"]?.DeepClone();
+                }
+                payload.Remove("system_instruction");
+            }
+
+            foreach (var currentModel in candidateModels)
+            {
+                var modelPayload = payload.DeepClone() as JsonObject ?? new JsonObject();
+                modelPayload.Remove("mode");
+                modelPayload.Remove("question");
+                modelPayload.Remove("user_id");
+                modelPayload.Remove("conversation_id");
+                modelPayload.Remove("intent");
+                if (!isThinkingMode)
+                {
+                    modelPayload.Remove("tools");
+                }
+
+                if (currentModel.Contains("flash-latest") || currentModel.Contains("flash-lite-latest") || currentModel.Contains("lite"))
+                {
+                    if (modelPayload.ContainsKey("generationConfig") && modelPayload["generationConfig"] is JsonObject genConfig)
+                    {
+                        genConfig.Remove("thinkingConfig");
+                    }
+                }
+                string requestJson = modelPayload.ToJsonString();
+
+                foreach (var key in keys)
+                {
+                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/{currentModel}:streamGenerateContent?alt=sse&key={key}";
+                    using var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    {
+                        Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
+                    };
+
+                    HttpResponseMessage? response = null;
+                    try
+                    {
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        response.Dispose();
+                        continue;
+                    }
+
+                    using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                    bool hasEmitted = false;
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        string? line = await reader.ReadLineAsync(cancellationToken);
+                        if (line == null) break;
+                        line = line.Trim();
+                        if (line.StartsWith("data: "))
+                        {
+                            string jsonStr = line.Substring(6).Trim();
+                            if (string.IsNullOrEmpty(jsonStr)) continue;
+
+                            JsonNode? node = null;
+                            try { node = JsonNode.Parse(jsonStr); } catch { }
+
+                            if (node is JsonObject obj && obj["candidates"] is JsonArray candidates && candidates.Count > 0)
+                            {
+                                if (candidates[0]?["content"]?["parts"] is JsonArray parts)
+                                {
+                                    foreach (var part in parts)
+                                    {
+                                        if (part is JsonObject pObj)
+                                        {
+                                            if (pObj.ContainsKey("thought") && pObj["thought"]?.GetValue<bool>() == true)
+                                            {
+                                                continue;
+                                            }
+                                            string? txt = pObj["text"]?.ToString();
+                                            if (!string.IsNullOrEmpty(txt))
+                                            {
+                                                hasEmitted = true;
+                                                yield return txt;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    response.Dispose();
+                    if (hasEmitted) yield break;
+                }
+            }
         }
     }
 }

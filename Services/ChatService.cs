@@ -4,11 +4,16 @@ using BtoanAiNet.Models;
 using BtoanAiNet.Repositories;
 using BtoanAiNet.ViewModels;
 
+using System.Runtime.CompilerServices;
+using System.Text;
+
 namespace BtoanAiNet.Services
 {
     public interface IChatService
     {
         Task<JsonObject> ProcessChatAsync(ChatRequestModel requestModel, string webRootPath);
+        IAsyncEnumerable<string> StreamChatAsync(ChatRequestModel requestModel, string webRootPath, CancellationToken cancellationToken = default);
+        Task<string> GenerateTitleAsync(string firstPrompt);
     }
 
     public class ChatService : IChatService
@@ -17,6 +22,15 @@ namespace BtoanAiNet.Services
         private readonly ITrainingRepository _trainingRepository;
         private readonly IIntentEngineService _intentEngineService;
         private readonly IGeminiService _geminiService;
+        private readonly IUserRepository _userRepository;
+        private readonly IServiceScopeFactory _scopeFactory;
+
+        private const string FastSystemInstructionText = @"Bạn là Btoan AI - Trợ lý trí tuệ nhân tạo thông minh, tự nhiên, thân thiện và hữu ích do Nguyễn Bảo Toàn phát triển (sinh viên CNTT Đại học Bách Khoa ĐHQG-HCM).
+- Phản hồi trực tiếp, ngắn gọn, súc tích và tự nhiên bằng tiếng Việt (hoặc ngôn ngữ người dùng dùng).
+- Khi người dùng chào hỏi hoặc nhắn ngắn (như 'ê', 'chào', 'ko', 'ok', 'sao thế'), hãy phản hồi ngắn gọn, tự nhiên, thân thiện. Tuyệt đối không lặp lại quy tắc máy móc.
+- Tạo ảnh: kết thúc bằng [GENIMAGE] <prompt tiếng Anh chi tiết>
+- Tạo video: kết thúc bằng [GENVIDEO] <prompt tiếng Anh chi tiết>
+- Tạo nhạc: kết thúc bằng [GENMUSIC] <prompt tiếng Anh chi tiết>";
 
         private const string SystemInstructionText = @"
 Bạn là Btoan AI - Trợ lý trí tuệ nhân tạo thông minh, tự nhiên, thân thiện và hữu ích do Nguyễn Bảo Toàn phát triển.
@@ -69,12 +83,16 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             IConversationRepository conversationRepository,
             ITrainingRepository trainingRepository,
             IIntentEngineService intentEngineService,
-            IGeminiService geminiService)
+            IGeminiService geminiService,
+            IUserRepository userRepository,
+            IServiceScopeFactory scopeFactory)
         {
             _conversationRepository = conversationRepository;
             _trainingRepository = trainingRepository;
             _intentEngineService = intentEngineService;
             _geminiService = geminiService;
+            _userRepository = userRepository;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task<JsonObject> ProcessChatAsync(ChatRequestModel requestModel, string webRootPath)
@@ -88,7 +106,12 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
 
             int userId = requestModel.User_Id ?? 0;
             int conversationId = requestModel.Conversation_Id ?? 0;
-            string model = requestModel.Model ?? "gemini-3.1-flash-lite";
+
+            User? currentUser = null;
+            if (userId > 0)
+            {
+                try { currentUser = await _userRepository.GetByIdAsync(userId); } catch { }
+            }
 
             var payload = requestModel.Payload ?? new JsonObject();
             if (!payload.ContainsKey("contents"))
@@ -102,6 +125,10 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 string modeStr = payload["mode"]?.ToString() ?? "fast";
                 isThinking = modeStr.Equals("thinking", StringComparison.OrdinalIgnoreCase);
             }
+
+            string model = requestModel.Model ?? (isThinking ? "gemini-2.5-pro" : "gemini-2.5-flash");
+            if (model.Contains("pro") || isThinking) model = "gemini-2.5-pro";
+            else model = "gemini-2.5-flash";
 
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
             {
@@ -329,7 +356,22 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
             }
 
-            string currentSystemInstruction = SystemInstructionText;
+            string currentSystemInstruction = (!isThinking && !isExportFollowup) ? FastSystemInstructionText : SystemInstructionText;
+            if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.CustomInstructions))
+            {
+                currentSystemInstruction += "\n\n[HƯỚNG DẪN TÙY CHỈNH TỪ NGƯỜI DÙNG]:\n" + currentUser.CustomInstructions.Trim();
+            }
+            if (currentUser?.Temperature != null)
+            {
+                if (payload["generationConfig"] is JsonObject genCfg)
+                {
+                    genCfg["temperature"] = currentUser.Temperature.Value;
+                }
+                else
+                {
+                    payload["generationConfig"] = new JsonObject { ["temperature"] = currentUser.Temperature.Value };
+                }
+            }
             payload["systemInstruction"] = new JsonObject
             {
                 ["parts"] = new JsonArray { new JsonObject { ["text"] = currentSystemInstruction } }
@@ -484,20 +526,31 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                         var existingConv = await _conversationRepository.GetConversationByIdAsync(conversationId, userId);
                         if (existingConv != null && (existingConv.Title == "Chat mới" || string.IsNullOrWhiteSpace(existingConv.Title)))
                         {
-                            if (isShortChat)
+                            // Instant fast title so t_save is < 15ms
+                            string quickTitle = (question ?? "").Trim();
+                            if (quickTitle.Length > 40) quickTitle = quickTitle.Substring(0, 40) + "...";
+                            if (string.IsNullOrWhiteSpace(quickTitle)) quickTitle = "Chat mới";
+                            generatedTitle = quickTitle;
+                            await _conversationRepository.UpdateConversationTitleAsync(conversationId, quickTitle);
+
+                            // Background refinement with Gemini without blocking main chat stream
+                            int convId = conversationId;
+                            string qText = question ?? "";
+                            _ = Task.Run(async () =>
                             {
-                                generatedTitle = string.IsNullOrWhiteSpace(question) ? "Chat mới" : question.Trim();
-                                await _conversationRepository.UpdateConversationTitleAsync(conversationId, generatedTitle);
-                            }
-                            else
-                            {
-                                var genTitle = await GenerateTitleAsync(question ?? "Chat mới");
-                                if (!string.IsNullOrWhiteSpace(genTitle))
+                                try
                                 {
-                                    await _conversationRepository.UpdateConversationTitleAsync(conversationId, genTitle);
-                                    generatedTitle = genTitle;
+                                    using var scope = _scopeFactory.CreateScope();
+                                    var chatSvc = scope.ServiceProvider.GetRequiredService<IChatService>();
+                                    var convRepo = scope.ServiceProvider.GetRequiredService<IConversationRepository>();
+                                    var refined = await chatSvc.GenerateTitleAsync(qText);
+                                    if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && !refined.StartsWith("{") && !refined.StartsWith("["))
+                                    {
+                                        await convRepo.UpdateConversationTitleAsync(convId, refined);
+                                    }
                                 }
-                            }
+                                catch { }
+                            });
                         }
                         else if (existingConv != null)
                         {
@@ -558,7 +611,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             };
         }
 
-        private async Task<string> GenerateTitleAsync(string firstPrompt)
+        public async Task<string> GenerateTitleAsync(string firstPrompt)
         {
             if (string.IsNullOrWhiteSpace(firstPrompt)) return "Chat mới";
             try
@@ -569,7 +622,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                     {
                         ["parts"] = new JsonArray
                         {
-                            new JsonObject { ["text"] = "Tạo tiêu đề ngắn gọn (3-6 từ) bằng tiếng Việt cho cuộc hội thoại dựa trên câu hỏi đầu tiên của người dùng. KHÔNG dùng dấu ngoặc kép, KHÔNG giải thích, chỉ trả đúng chuỗi tiêu đề." }
+                            new JsonObject { ["text"] = "Bạn là chuyên gia đặt tiêu đề. Hãy đặt một tiêu đề ngắn gọn (3 đến 6 từ) bằng tiếng Việt cho cuộc hội thoại dựa vào câu hỏi của người dùng. CHỈ trả về đúng chuỗi tiêu đề tiếng Việt, TUYỆT ĐỐI KHÔNG dùng dấu ngoặc kép, KHÔNG giải thích, KHÔNG trả về định dạng JSON hay Markdown." }
                         }
                     },
                     ["contents"] = new JsonArray
@@ -580,18 +633,45 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                             ["parts"] = new JsonArray { new JsonObject { ["text"] = firstPrompt } }
                         }
                     },
-                    ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = 30 }
+                    ["generationConfig"] = new JsonObject 
+                    { 
+                        ["maxOutputTokens"] = 60,
+                        ["temperature"] = 0.2,
+                        ["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 }
+                    }
                 };
 
-                var res = await _geminiService.GenerateContentAsync("gemini-3.1-flash-lite", titlePayload);
-                string raw = ExtractTextFromGeminiResult(res);
-                string clean = raw?.Trim().Trim('"', '\'', '`', '\r', '\n') ?? "";
+                var res = await _geminiService.GenerateContentAsync("gemini-3.5-flash", titlePayload);
+                string clean = "";
+                if (res.Success && res.ResponseData != null)
+                {
+                    var candidates = res.ResponseData["candidates"]?.AsArray();
+                    if (candidates != null && candidates.Count > 0)
+                    {
+                        var parts = candidates[0]?["content"]?["parts"]?.AsArray();
+                        if (parts != null && parts.Count > 0)
+                        {
+                            clean = parts[0]?["text"]?.ToString()?.Trim() ?? "";
+                        }
+                    }
+                }
+
+                clean = clean.Trim('"', '\'', '`', '\r', '\n', ' ');
+                // Security & Validity check: if JSON, cut-off, or empty, fallback to clean user prompt
+                if (string.IsNullOrWhiteSpace(clean) || clean.StartsWith("{") || clean.StartsWith("[") || clean.Length < 3)
+                {
+                    string fallback = firstPrompt.Trim();
+                    if (fallback.Length > 45) fallback = fallback.Substring(0, 45) + "...";
+                    return fallback;
+                }
                 if (clean.Length > 50) clean = clean.Substring(0, 50);
-                return string.IsNullOrWhiteSpace(clean) ? "Chat mới" : clean;
+                return clean;
             }
             catch
             {
-                return "Chat mới";
+                string fallback = firstPrompt.Trim();
+                if (fallback.Length > 45) fallback = fallback.Substring(0, 45) + "...";
+                return string.IsNullOrWhiteSpace(fallback) ? "Chat mới" : fallback;
             }
         }
 
@@ -611,7 +691,156 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
             }
             catch { }
-            return res.RawResponse ?? "";
+            return string.Empty;
+        }
+        public async IAsyncEnumerable<string> StreamChatAsync(ChatRequestModel requestModel, string webRootPath, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            int userId = requestModel.User_Id ?? 0;
+            int conversationId = requestModel.Conversation_Id ?? 0;
+
+            User? currentUser = null;
+            if (userId > 0)
+            {
+                try { currentUser = await _userRepository.GetByIdAsync(userId); } catch { }
+            }
+
+            var payload = requestModel.Payload ?? new JsonObject();
+            if (!payload.ContainsKey("contents"))
+            {
+                payload["contents"] = new JsonArray();
+            }
+
+            bool isThinking = false;
+            if (payload.ContainsKey("mode"))
+            {
+                string modeStr = payload["mode"]?.ToString() ?? "fast";
+                isThinking = modeStr.Equals("thinking", StringComparison.OrdinalIgnoreCase);
+            }
+
+            string model = requestModel.Model ?? (isThinking ? "gemini-2.5-pro" : "gemini-2.5-flash");
+            if (model.Contains("pro") || isThinking) model = "gemini-2.5-pro";
+            else model = "gemini-2.5-flash";
+
+            if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
+            {
+                payload["generationConfig"] = new JsonObject { ["maxOutputTokens"] = 8192 };
+            }
+            if (payload["generationConfig"] is JsonObject genConfig)
+            {
+                genConfig["maxOutputTokens"] = 8192;
+                if (!isThinking)
+                {
+                    genConfig.Remove("thinkingConfig");
+                }
+                if (currentUser?.Temperature != null)
+                {
+                    genConfig["temperature"] = currentUser.Temperature.Value;
+                }
+            }
+
+            string question = payload["question"]?.ToString() ?? "";
+            var contents = payload["contents"]?.AsArray();
+            if (contents != null && contents.Count > 0)
+            {
+                var cleanContents = new JsonArray();
+                foreach (var item in contents)
+                {
+                    if (item is JsonObject msgObj && msgObj["parts"] is JsonArray pArr && pArr.Count > 0)
+                    {
+                        string txt = pArr[0]?["text"]?.ToString() ?? "";
+                        if (txt.Contains("Bạn đang chạy trong một ứng dụng") || 
+                            txt.Contains("QUY TẮC XUẤT FILE") || 
+                            txt.Contains("USER_INTENT_ADHERENCE_PROTOCOL"))
+                        {
+                            continue;
+                        }
+                    }
+                    cleanContents.Add(item?.DeepClone());
+                }
+                contents = cleanContents;
+
+                if (contents.Count > 0)
+                {
+                    var lastMsg = contents[contents.Count - 1]?.AsObject();
+                    if (lastMsg != null && lastMsg["parts"] is JsonArray parts && parts.Count > 0)
+                    {
+                        string extracted = parts[0]?["text"]?.ToString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(extracted)) question = extracted;
+                    }
+                }
+            }
+
+            string trimmedQ = (question ?? "").Trim().ToLowerInvariant();
+            bool isShortChat = string.IsNullOrWhiteSpace(trimmedQ) || 
+                               trimmedQ.Length <= 10 || 
+                               trimmedQ == "ê" || trimmedQ == "ko" || trimmedQ == "không" || 
+                               trimmedQ == "um" || trimmedQ == "ừ" || trimmedQ == "ok" || 
+                               trimmedQ == "chào" || trimmedQ == "hi" || trimmedQ == "hello";
+
+            var historyChats = new List<Chat>();
+            if (!isShortChat && userId > 0 && conversationId > 0)
+            {
+                try
+                {
+                    historyChats = await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 6);
+                }
+                catch { }
+            }
+
+            var historyMessages = new JsonArray();
+            foreach (var chat in historyChats)
+            {
+                string q = chat.Question ?? "";
+                string a = chat.Answer ?? "";
+                historyMessages.Add(new JsonObject { ["role"] = "user", ["parts"] = new JsonArray { new JsonObject { ["text"] = q } } });
+                if (!string.IsNullOrEmpty(a))
+                {
+                    historyMessages.Add(new JsonObject { ["role"] = "model", ["parts"] = new JsonArray { new JsonObject { ["text"] = a } } });
+                }
+            }
+
+            if (contents != null)
+            {
+                var currentContents = new JsonArray();
+                foreach (var item in historyMessages) currentContents.Add(item?.DeepClone());
+                foreach (var item in contents) currentContents.Add(item?.DeepClone());
+                payload["contents"] = currentContents;
+            }
+
+            string lowerExportQ = (question ?? "").ToLowerInvariant();
+            bool isExportFollowup = lowerExportQ.Contains("bỏ vào word") || lowerExportQ.Contains("cho vào word") || 
+                                    lowerExportQ.Contains("vào word") || lowerExportQ.Contains("xuất file") || 
+                                    lowerExportQ.Contains("tạo file word") || lowerExportQ.Contains("tải file word") || 
+                                    lowerExportQ.Contains("lưu vào word") || lowerExportQ.Contains("xuất word") ||
+                                    lowerExportQ.Contains("xuất docx") || lowerExportQ.Contains("tạo file docx");
+
+            string currentSystemInstruction = (!isThinking && !isExportFollowup) ? FastSystemInstructionText : SystemInstructionText;
+            if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.CustomInstructions))
+            {
+                currentSystemInstruction += "\n\n[HƯỚNG DẪN TÙY CHỈNH TỪ NGƯỜI DÙNG]:\n" + currentUser.CustomInstructions.Trim();
+            }
+            if (currentUser?.Temperature != null)
+            {
+                if (payload["generationConfig"] is JsonObject genCfg)
+                {
+                    genCfg["temperature"] = currentUser.Temperature.Value;
+                }
+                else
+                {
+                    payload["generationConfig"] = new JsonObject { ["temperature"] = currentUser.Temperature.Value };
+                }
+            }
+            payload["systemInstruction"] = new JsonObject
+            {
+                ["parts"] = new JsonArray { new JsonObject { ["text"] = currentSystemInstruction } }
+            };
+
+            var sbFull = new StringBuilder();
+            await foreach (var chunk in _geminiService.StreamContentAsync(model, payload, cancellationToken))
+            {
+                sbFull.Append(chunk);
+                yield return chunk;
+            }
         }
     }
 }

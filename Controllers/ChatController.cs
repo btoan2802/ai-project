@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BtoanAiNet.Models;
 using BtoanAiNet.Repositories;
 using BtoanAiNet.Services;
 using BtoanAiNet.ViewModels;
@@ -13,19 +14,22 @@ namespace BtoanAiNet.Controllers
         private readonly IMemoryService _memoryService;
         private readonly ITrainingService _trainingService;
         private readonly IWebHostEnvironment _env;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         public ChatController(
             IChatService chatService,
             IConversationRepository conversationRepository,
             IMemoryService memoryService,
             ITrainingService trainingService,
-            IWebHostEnvironment env)
+            IWebHostEnvironment env,
+            IServiceScopeFactory scopeFactory)
         {
             _chatService = chatService;
             _conversationRepository = conversationRepository;
             _memoryService = memoryService;
             _trainingService = trainingService;
             _env = env;
+            _scopeFactory = scopeFactory;
         }
 
         protected int? CurrentUserId
@@ -39,8 +43,9 @@ namespace BtoanAiNet.Controllers
         }
 
 
-        // POST /ai/api/chat.php
+        // POST /ai/api/chat.php & /api/chat
         [HttpPost]
+        [Route("api/chat")]
         [Route("ai/api/chat.php")]
         [Route("Chat/Send")]
         public async Task<IActionResult> Chat([FromBody] ChatRequestModel model)
@@ -62,9 +67,212 @@ namespace BtoanAiNet.Controllers
             }
         }
 
+        // POST /api/chat/stream - Realtime SSE Streaming under 1 second TTFT
+        [HttpPost]
+        [Route("api/chat/stream")]
+        public async Task StreamChat([FromBody] ChatRequestModel model)
+        {
+            if (model == null)
+            {
+                Response.StatusCode = 400;
+                return;
+            }
+
+            Response.ContentType = "text/event-stream; charset=utf-8";
+            Response.Headers["Cache-Control"] = "no-cache";
+            Response.Headers["X-Accel-Buffering"] = "no";
+
+            var ct = HttpContext.RequestAborted;
+            string webRootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+
+            int currentUid = CurrentUserId ?? model.UserId;
+            if (model.UserId == 0 && currentUid > 0)
+            {
+                model.UserId = currentUid;
+            }
+
+            int conversationId = model.ConversationId;
+            bool isNewConv = false;
+            string? convTitle = null;
+
+            if (currentUid > 0 && conversationId == 0)
+            {
+                try
+                {
+                    var newConv = await _conversationRepository.CreateConversationAsync(currentUid, "Chat mới");
+                    conversationId = newConv.Id;
+                    model.ConversationId = conversationId;
+                    isNewConv = true;
+                }
+                catch { }
+            }
+
+            var swTotal = System.Diagnostics.Stopwatch.StartNew();
+            long ttftMs = 0;
+            bool firstChunk = true;
+
+            var sbFull = new System.Text.StringBuilder();
+            try
+            {
+                await foreach (var chunk in _chatService.StreamChatAsync(model, webRootPath, ct))
+                {
+                    if (firstChunk)
+                    {
+                        ttftMs = swTotal.ElapsedMilliseconds;
+                        firstChunk = false;
+                    }
+                    sbFull.Append(chunk);
+                    var payload = System.Text.Json.JsonSerializer.Serialize(new { chunk, ttft_ms = ttftMs });
+                    await Response.WriteAsync($"data: {payload}\n\n", ct);
+                    await Response.Body.FlushAsync(ct);
+                }
+
+                if (ttftMs == 0) ttftMs = swTotal.ElapsedMilliseconds;
+
+                // Save to DB asynchronously upon stream completion
+                if (currentUid > 0 && conversationId > 0)
+                {
+                    try
+                    {
+                        string qText = model.Question ?? (model.Payload?["question"]?.ToString() ?? "");
+                        if (string.IsNullOrWhiteSpace(qText) && model.Payload?["contents"] is System.Text.Json.Nodes.JsonArray cArr && cArr.Count > 0)
+                        {
+                            var lastU = cArr.LastOrDefault(c => c?["role"]?.ToString() == "user");
+                            if (lastU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
+                            {
+                                qText = pArr[0]?["text"]?.ToString() ?? "";
+                            }
+                        }
+                        await _conversationRepository.AddChatAsync(new Chat
+                        {
+                            UserId = currentUid,
+                            ConversationId = conversationId,
+                            Question = qText,
+                            Answer = sbFull.ToString(),
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                    catch { }
+                }
+
+                // If this is a new conversation or title is "Chat mới", auto-generate title in Vietnamese
+                if (currentUid > 0 && conversationId > 0 && (isNewConv || string.IsNullOrWhiteSpace(convTitle)))
+                {
+                    try
+                    {
+                        var existing = await _conversationRepository.GetConversationByIdAsync(conversationId, currentUid);
+                        if (existing != null && (existing.Title == "Chat mới" || isNewConv))
+                        {
+                            string qText = model.Question ?? (model.Payload?["question"]?.ToString() ?? "");
+                            if (string.IsNullOrWhiteSpace(qText) && model.Payload?["contents"] is System.Text.Json.Nodes.JsonArray cArr2 && cArr2.Count > 0)
+                            {
+                                var lastU = cArr2.LastOrDefault(c => c?["role"]?.ToString() == "user");
+                                if (lastU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
+                                {
+                                    qText = pArr[0]?["text"]?.ToString() ?? "";
+                                }
+                            }
+                            string quickTitle = qText.Trim();
+                            if (quickTitle.Length > 35) quickTitle = quickTitle.Substring(0, 35) + "...";
+                            if (string.IsNullOrWhiteSpace(quickTitle)) quickTitle = "Chat mới";
+                            convTitle = quickTitle;
+                            await _conversationRepository.UpdateConversationTitleAsync(conversationId, quickTitle);
+
+                            // Background Gemini title generation without blocking the SSE done stream
+                            int cId = conversationId;
+                            string bgQText = quickTitle;
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    using var scope = _scopeFactory.CreateScope();
+                                    var chatSvc = scope.ServiceProvider.GetRequiredService<IChatService>();
+                                    var convRepo = scope.ServiceProvider.GetRequiredService<IConversationRepository>();
+                                    var refined = await chatSvc.GenerateTitleAsync(bgQText);
+                                    if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && !refined.StartsWith("{") && !refined.StartsWith("["))
+                                    {
+                                        await convRepo.UpdateConversationTitleAsync(cId, refined);
+                                    }
+                                }
+                                catch { }
+                            });
+                        }
+                        else if (existing != null)
+                        {
+                            convTitle = existing.Title;
+                        }
+                    }
+                    catch { }
+                }
+
+                var donePayload = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    done = true,
+                    answer = sbFull.ToString(),
+                    conversation_id = conversationId,
+                    conversation_title = convTitle ?? "Chat mới",
+                    ttft_ms = ttftMs,
+                    total_ms = swTotal.ElapsedMilliseconds
+                });
+                await Response.WriteAsync($"data: {donePayload}\n\n", ct);
+                await Response.Body.FlushAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                var errPayload = System.Text.Json.JsonSerializer.Serialize(new { error = ex.Message, done = true });
+                await Response.WriteAsync($"data: {errPayload}\n\n", ct);
+                await Response.Body.FlushAsync(ct);
+            }
+        }
+
+        [HttpGet]
+        [Route("api/chat/export-all")]
+        public async Task<IActionResult> ExportAllConversations()
+        {
+            int? uid = CurrentUserId;
+            if (!uid.HasValue || uid.Value <= 0)
+            {
+                return Unauthorized(new { error = "Vui lòng đăng nhập" });
+            }
+
+            try
+            {
+                var data = await _conversationRepository.GetAllWithChatsByUserIdAsync(uid.Value);
+                var jsonBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                return File(jsonBytes, "application/json", $"btoan_ai_conversations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [Route("api/chat/delete-all")]
+        public async Task<IActionResult> DeleteAllConversations()
+        {
+            int? uid = CurrentUserId;
+            if (!uid.HasValue || uid.Value <= 0)
+            {
+                return Unauthorized(new { error = "Vui lòng đăng nhập" });
+            }
+
+            try
+            {
+                await _conversationRepository.DeleteAllByUserIdAsync(uid.Value);
+                return Ok(new { success = true, message = "Đã xóa toàn bộ lịch sử trò chuyện" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
         // GET /ai/api/get_conversations.php
         [HttpGet]
         [Route("ai/api/get_conversations.php")]
+        [Route("ai/api/get_history.php")]
+        [Route("api/chat/history")]
         [Route("Chat/GetConversations")]
         public async Task<IActionResult> GetConversations([FromQuery] int user_id)
         {

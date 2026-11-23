@@ -141,19 +141,31 @@ namespace BtoanAiNet.Services
             try
             {
                 bool isWindows = OperatingSystem.IsWindows();
-                string fileName = isWindows ? "cmd.exe" : "/bin/bash";
-                string args = isWindows ? $"/c \"{command}\"" : $"-c \"{command}\"";
-
                 var psi = new ProcessStartInfo
                 {
-                    FileName = fileName,
-                    Arguments = args,
                     WorkingDirectory = workingDir,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
+
+                if (isWindows)
+                {
+                    string script = $"$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;\n{command}";
+                    byte[] bytes = Encoding.Unicode.GetBytes(script);
+                    string encoded = Convert.ToBase64String(bytes);
+
+                    psi.FileName = "powershell.exe";
+                    psi.Arguments = $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}";
+                }
+                else
+                {
+                    psi.FileName = "/bin/bash";
+                    psi.Arguments = $"-c \"{command.Replace("\"", "\\\"")}\"";
+                }
 
                 using var process = new Process { StartInfo = psi };
                 RunningProcesses[sessionId] = process;

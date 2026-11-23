@@ -53,7 +53,14 @@ builder.Services.AddScoped<ITrainingRepository, TrainingRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IFaceAuthService, FaceAuthService>();
 builder.Services.AddScoped<IGoogleAuthService, GoogleAuthService>();
-builder.Services.AddScoped<IGeminiService, GeminiService>();
+builder.Services.AddHttpClient<IGeminiService, GeminiService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
+        EnableMultipleHttp2Connections = true
+    });
 builder.Services.AddScoped<IIntentEngineService, IntentEngineService>();
 builder.Services.AddScoped<IMemoryService, MemoryService>();
 builder.Services.AddScoped<ITrainingService, TrainingService>();
@@ -211,6 +218,29 @@ BEGIN
     CREATE UNIQUE INDEX [IX_users_username] ON [dbo].[users] ([username]) WHERE [username] IS NOT NULL;
 END
 
+-- Ensure User Settings Columns Exist
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND type in (N'U'))
+BEGIN
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'bio')
+        ALTER TABLE [dbo].[users] ADD [bio] NVARCHAR(500) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'default_model')
+        ALTER TABLE [dbo].[users] ADD [default_model] NVARCHAR(50) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'custom_instructions')
+        ALTER TABLE [dbo].[users] ADD [custom_instructions] NVARCHAR(MAX) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'temperature')
+        ALTER TABLE [dbo].[users] ADD [temperature] FLOAT NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'long_term_memory')
+        ALTER TABLE [dbo].[users] ADD [long_term_memory] INT NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'rag_enabled')
+        ALTER TABLE [dbo].[users] ADD [rag_enabled] INT NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'theme')
+        ALTER TABLE [dbo].[users] ADD [theme] NVARCHAR(20) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'chat_font_size')
+        ALTER TABLE [dbo].[users] ADD [chat_font_size] NVARCHAR(20) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND name = 'tts_speed')
+        ALTER TABLE [dbo].[users] ADD [tts_speed] FLOAT NULL;
+END
+
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[conversations]') AND type in (N'U'))
 BEGIN
     CREATE TABLE [dbo].[conversations] (
@@ -230,6 +260,31 @@ BEGIN
         [text] NVARCHAR(MAX) NULL,
         [created_at] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
     );
+END
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[chats]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[chats] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NULL,
+        [conversation_id] INT NULL,
+        [question] NVARCHAR(MAX) NULL,
+        [answer] NVARCHAR(MAX) NULL,
+        [images] NVARCHAR(MAX) NULL,
+        [model_used] NVARCHAR(50) NULL,
+        [attachments_json] NVARCHAR(MAX) NULL,
+        [artifacts_json] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+ELSE
+BEGIN
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[chats]') AND name = 'model_used')
+        ALTER TABLE [dbo].[chats] ADD [model_used] NVARCHAR(50) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[chats]') AND name = 'attachments_json')
+        ALTER TABLE [dbo].[chats] ADD [attachments_json] NVARCHAR(MAX) NULL;
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[chats]') AND name = 'artifacts_json')
+        ALTER TABLE [dbo].[chats] ADD [artifacts_json] NVARCHAR(MAX) NULL;
 END
 
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[projects]') AND type in (N'U'))

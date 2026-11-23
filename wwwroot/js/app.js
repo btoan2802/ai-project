@@ -25,10 +25,69 @@ window.addEventListener('resize', setAppHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppHeight);
 setAppHeight();
 
-const MODEL = "gemini-3.1-flash-lite";
+const MODEL = "gemini-2.5-flash";
 const TEMPERATURE = 0.5;
 const MAX_OUTPUT_TOKENS = 20000;
 const REQUEST_TIMEOUT_MS = 600000;
+
+// ====== MATHJAX & MARKDOWN HELPER (PREVENT INLINE MATH FROM WRAPPING) ======
+function renderMarkdownWithMath(text) {
+    if (!text) return "";
+    const mathTokens = [];
+
+    // 1. Protect block/display math ($$...$$ and \[...\])
+    let processed = text.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g, (match) => {
+        const token = `@@MATH_BLOCK_${mathTokens.length}@@`;
+        mathTokens.push({ token, val: match });
+        return token;
+    });
+
+    // 2. Protect inline math ($...$ and \(...\))
+    processed = processed.replace(/(\$(?!\$)(\S(?:[\s\S]*?\S)?)\$|\\\([\s\S]*?\\\))/g, (match) => {
+        const token = `@@MATH_INLINE_${mathTokens.length}@@`;
+        mathTokens.push({ token, val: match });
+        return token;
+    });
+
+    // 3. Parse Markdown
+    let html = "";
+    try {
+        const escaped = typeof escapeUnsafeTags === "function" ? escapeUnsafeTags(processed) : processed;
+        html = marked.parse(escaped).replace(/language-j /g, "language-java");
+    } catch (e) {
+        html = processed;
+    }
+
+    // 4. Restore math tokens
+    mathTokens.forEach(({ token, val }) => {
+        html = html.replace(token, val);
+    });
+
+    return html;
+}
+
+function typesetMathInElement(elem) {
+    if (!elem) return;
+    if (elem !== document && elem !== document.body && !elem.isConnected) {
+        requestAnimationFrame(() => {
+            if (elem.isConnected && window.MathJax) {
+                if (typeof MathJax.typesetPromise === "function") {
+                    MathJax.typesetPromise([elem]).catch(() => {});
+                } else if (typeof MathJax.typeset === "function") {
+                    try { MathJax.typeset([elem]); } catch(e){}
+                }
+            }
+        });
+        return;
+    }
+    if (window.MathJax) {
+        if (typeof MathJax.typesetPromise === "function") {
+            MathJax.typesetPromise([elem]).catch(err => console.debug("MathJax typesetPromise:", err));
+        } else if (typeof MathJax.typeset === "function") {
+            try { MathJax.typeset([elem]); } catch(e){}
+        }
+    }
+}
 
 // ====== elements ======
 let autoRenamed = false
@@ -48,14 +107,14 @@ function setMode(m) {
     const status = document.getElementById("modeStatus");
     if (status) {
         if (m === "thinking") {
-            status.innerHTML = `<img src="img/thinking_logo.png?v=10" style="width:16px; height:16px; margin-right:6px; border-radius: 50%; object-fit: cover;"> Thinking`;
+            status.innerHTML = `<span class="fw-semibold">🧠 Btoan 2.5 Pro</span>`;
             status.className = "badge ms-1 d-inline-flex align-items-center";
-            status.style.backgroundColor = "#0d9488"; // Professional Teal
+            status.style.backgroundColor = "#4f46e5";
             status.style.color = "white";
             status.style.padding = "4px 10px";
             status.style.borderRadius = "20px";
         } else {
-            status.innerHTML = `<img src="img/fast_logo.png?v=10" style="width:16px; height:16px; margin-right:6px; border-radius: 50%; object-fit: cover;"> Fast`;
+            status.innerHTML = `<span class="fw-semibold">⚡ Btoan 2.5 Flash</span>`;
             status.className = "badge bg-light text-dark ms-1 border d-inline-flex align-items-center";
             status.style.backgroundColor = ""; 
             status.style.padding = "4px 10px";
@@ -329,36 +388,172 @@ function addUserBubble(text, images = []) {
 }
 
 function createMessageActions({ text, exportType = null, onExport = null }) {
-    const actions = document.createElement("div")
-    actions.className = "assistant-corner-actions"
+    const actions = document.createElement("div");
+    actions.className = "ai-msg-actions";
+
+    // 1. Copy button
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "btn-ai-action";
+    copyBtn.title = "Sao chép câu trả lời";
+    copyBtn.innerHTML = `<i class="bi bi-clipboard"></i>`;
+    copyBtn.onclick = async () => {
+        const cleanText = typeof cleanBotText === "function" ? cleanBotText(text) : text;
+        await navigator.clipboard.writeText(cleanText || "");
+        copyBtn.innerHTML = `<i class="bi bi-check2 text-success"></i>`;
+        setTimeout(() => {
+            copyBtn.innerHTML = `<i class="bi bi-clipboard"></i>`;
+        }, 2000);
+    };
+    actions.appendChild(copyBtn);
+
+    // 2. Regenerate button
+    const regenBtn = document.createElement("button");
+    regenBtn.className = "btn-ai-action";
+    regenBtn.title = "Tạo lại câu trả lời này";
+    regenBtn.innerHTML = `<i class="bi bi-arrow-clockwise"></i>`;
+    regenBtn.onclick = () => {
+        if (typeof regenerateLastAnswer === "function") {
+            regenerateLastAnswer();
+        }
+    };
+    actions.appendChild(regenBtn);
+
+    // 3. Text-to-Speech button
+    const speakBtn = document.createElement("button");
+    speakBtn.className = "btn-ai-action";
+    speakBtn.title = "Nghe đọc nội dung (Text-to-Speech)";
+    speakBtn.innerHTML = `<i class="bi bi-volume-up"></i>`;
+    speakBtn.onclick = () => {
+        speakBotText(text, speakBtn);
+    };
+    actions.appendChild(speakBtn);
 
     if (exportType) {
-        const exportBtn = document.createElement("button")
-        exportBtn.className = "corner-action-btn"
-        exportBtn.title = `Tải ${exportType.toUpperCase()}`
-        exportBtn.innerHTML = `<i class="bi bi-download"></i>`
+        const exportBtn = document.createElement("button");
+        exportBtn.className = "btn-ai-action";
+        exportBtn.title = `Tải ${exportType.toUpperCase()}`;
+        exportBtn.innerHTML = `<i class="bi bi-download"></i>`;
         exportBtn.onclick = () => {
-            if (typeof onExport === "function") return onExport()
-            if (exportType === "docx") exportDOCX(text)
-            else exportFile(text)
+            if (typeof onExport === "function") return onExport();
+            if (exportType === "docx") exportDOCX(text);
+            else exportFile(text);
+        };
+        actions.appendChild(exportBtn);
+    }
+
+    return actions;
+}
+
+// Web Speech API: Text-to-Speech
+function speakBotText(text, btn) {
+    if (!('speechSynthesis' in window)) {
+        alert("Trình duyệt của bạn không hỗ trợ Text-to-Speech.");
+        return;
+    }
+
+    if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        if (btn) btn.innerHTML = `<i class="bi bi-volume-up"></i> <span>Đọc</span>`;
+        return;
+    }
+
+    const clean = typeof cleanBotText === "function" ? cleanBotText(text) : text;
+    if (!clean) return;
+
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = "vi-VN";
+    utterance.rate = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find(v => v.lang.includes("vi") || v.lang.includes("VN"));
+    if (viVoice) utterance.voice = viVoice;
+
+    utterance.onstart = () => {
+        if (btn) btn.innerHTML = `<i class="bi bi-stop-fill text-danger"></i> <span class="text-danger">Dừng</span>`;
+    };
+    utterance.onend = utterance.onerror = () => {
+        if (btn) btn.innerHTML = `<i class="bi bi-volume-up"></i> <span>Đọc</span>`;
+    };
+
+    window.speechSynthesis.speak(utterance);
+}
+
+// Regenerate last AI response
+function regenerateLastAnswer() {
+    if (!lastUserMessage) return;
+    if (msgEl) {
+        msgEl.value = lastUserMessage;
+        send();
+    }
+}
+
+// Web Speech API: Voice Input
+let voiceRecognition = null;
+let isVoiceRecording = false;
+
+function toggleVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert("Trình duyệt không hỗ trợ Web Speech API nhận diện giọng nói. Hãy dùng Google Chrome hoặc Microsoft Edge.");
+        return;
+    }
+
+    const micBtn = document.getElementById("micBtn");
+    const micIcon = document.getElementById("micIcon");
+
+    if (isVoiceRecording && voiceRecognition) {
+        voiceRecognition.stop();
+        return;
+    }
+
+    voiceRecognition = new SpeechRecognition();
+    voiceRecognition.lang = "vi-VN";
+    voiceRecognition.continuous = false;
+    voiceRecognition.interimResults = true;
+
+    voiceRecognition.onstart = () => {
+        isVoiceRecording = true;
+        if (micBtn) micBtn.classList.add("recording");
+        if (micIcon) micIcon.className = "bi bi-mic-fill text-danger";
+        if (msgEl) msgEl.placeholder = "Đang lắng nghe bạn nói...";
+    };
+
+    voiceRecognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
         }
-        actions.appendChild(exportBtn)
-    }
+        if (msgEl && transcript) {
+            msgEl.value = transcript;
+            msgEl.style.height = "auto";
+            msgEl.style.height = Math.min(msgEl.scrollHeight, 160) + "px";
+        }
+    };
 
-    const copyBtn = document.createElement("button")
-    copyBtn.className = "corner-action-btn"
-    copyBtn.title = "Copy tin nhắn"
-    copyBtn.innerHTML = `<i class="bi bi-clipboard"></i>`
-    copyBtn.onclick = async () => {
-        await navigator.clipboard.writeText(text || "")
-        copyBtn.innerHTML = `<i class="bi bi-check2"></i>`
-        setTimeout(() => {
-            copyBtn.innerHTML = `<i class="bi bi-clipboard"></i>`
-        }, 2000)
-    }
-    actions.appendChild(copyBtn)
+    voiceRecognition.onerror = (event) => {
+        console.warn("Speech recognition error:", event.error);
+        stopVoiceRecording();
+    };
 
-    return actions
+    voiceRecognition.onend = () => {
+        stopVoiceRecording();
+    };
+
+    try {
+        voiceRecognition.start();
+    } catch (e) {
+        console.warn("Could not start speech recognition:", e);
+        stopVoiceRecording();
+    }
+}
+
+function stopVoiceRecording() {
+    isVoiceRecording = false;
+    const micBtn = document.getElementById("micBtn");
+    const micIcon = document.getElementById("micIcon");
+    if (micBtn) micBtn.classList.remove("recording");
+    if (micIcon) micIcon.className = "bi bi-mic fs-5";
+    if (msgEl) msgEl.placeholder = "Hỏi Btoan AI bất kỳ điều gì...";
 }
 
 
@@ -401,7 +596,7 @@ function addBotBubble(text, exportType = null) {
 
     const content = document.createElement("div");
     content.className = "message-content";
-    content.innerHTML = marked.parse(cleanedText || (artifacts.length > 0 ? "Dưới đây là tài liệu bạn yêu cầu:" : ""));
+    content.innerHTML = renderMarkdownWithMath(cleanedText || (artifacts.length > 0 ? "Dưới đây là tài liệu bạn yêu cầu:" : ""));
     bubble.appendChild(content);
 
     if (artifacts.length > 0 && typeof renderArtifactCards === "function") {
@@ -412,6 +607,8 @@ function addBotBubble(text, exportType = null) {
 
     row.appendChild(bubble);
     chatEl.appendChild(row);
+
+    typesetMathInElement(content);
 
     /* highlight code */
     bubble.querySelectorAll("pre code").forEach(el => {
@@ -520,7 +717,8 @@ function streamBot(text, exportType = null) {
     if (artifacts.length > 0) {
         const displayIntro = cleanedFullText.trim() || "Dưới đây là tài liệu bạn yêu cầu:";
         try {
-            content.innerHTML = marked.parse(displayIntro);
+            content.innerHTML = renderMarkdownWithMath(displayIntro);
+            typesetMathInElement(content);
         } catch {
             content.textContent = displayIntro;
         }
@@ -539,9 +737,8 @@ function streamBot(text, exportType = null) {
     if (totalLen < 80) {
         const cleanedCurrent = cleanBotText(normalizedText);
         try {
-            const escaped = typeof escapeUnsafeTags === "function" ? escapeUnsafeTags(cleanedCurrent) : cleanedCurrent;
-            const parsedHtml = marked.parse(escaped).replace(/language-j /g, "language-java");
-            content.innerHTML = parsedHtml;
+            content.innerHTML = renderMarkdownWithMath(cleanedCurrent);
+            typesetMathInElement(content);
         } catch (markedErr) {
             content.textContent = cleanedCurrent;
         }
@@ -609,7 +806,142 @@ function streamBot(text, exportType = null) {
     }, 16);
 }
 
+// ====== Real-time SSE Streaming Helper ======
+function renderStreamingFinalBubble(bubble, text, exportType = null) {
+    if (!bubble) return;
+    const artifacts = typeof extractArtifacts === "function" ? extractArtifacts(text) : [];
+    if (artifacts.length === 0 && (exportType || (typeof userWantsExport === "function" && (userWantsExport(lastUserMessage) || userWantsExport(text))))) {
+        const fallbackText = typeof getFallbackExportContent === "function" ? getFallbackExportContent(text) : (lastExportContent || lastAIAnswer || cleanBotText(text));
+        if (typeof isValidForExport === "function" && isValidForExport(fallbackText)) {
+            artifacts.push({
+                type: exportType || (typeof detectExportType === "function" ? detectExportType(lastUserMessage || text) : "docx"),
+                title: "Tài liệu hoàn chỉnh",
+                content: fallbackText
+            });
+        }
+    }
 
+    const cleanedFullText = cleanBotText(text);
+    const normalizedText = normalizeMathText(text);
+    bubble.innerHTML = "";
+    bubble.className = "bubble position-relative";
+
+    const content = document.createElement("div");
+    content.className = "message-content";
+    bubble.appendChild(content);
+
+    const displayIntro = (artifacts.length > 0) ? (cleanedFullText.trim() || "Dưới đây là tài liệu bạn yêu cầu:") : normalizedText;
+    try {
+        content.innerHTML = renderMarkdownWithMath(displayIntro);
+        typesetMathInElement(content);
+    } catch {
+        content.textContent = displayIntro;
+    }
+
+    if (artifacts.length > 0) {
+        if (typeof renderArtifactCards === "function") {
+            renderArtifactCards(bubble, artifacts);
+        }
+    } else {
+        bubble.appendChild(createMessageActions({ text, exportType }));
+    }
+
+    scrollToBottom();
+    isSending = false;
+}
+
+async function streamGeminiChat(userText, images, files, onChunk) {
+    const isThinking = mode === "thinking" || (mode === "auto" && detectThinking(userText));
+    const allContents = [];
+    if (Array.isArray(chatHistoryBuffer) && chatHistoryBuffer.length > 0) {
+        const recentHistory = chatHistoryBuffer.slice(-10);
+        for (const item of recentHistory) {
+            if (item && item.role && Array.isArray(item.parts) && item.parts.length > 0) {
+                allContents.push({
+                    role: item.role,
+                    parts: item.parts.map(p => ({ ...p }))
+                });
+            }
+        }
+    }
+    const currentTurnParts = [
+        { text: userText },
+        ...files.map(f => ({ text: "File " + f.name + ":\n" + f.content })),
+        ...images.map(img => ({
+            inline_data: {
+                mime_type: img.startsWith("data:image/png") ? "image/png" : "image/jpeg",
+                data: img.split(",")[1]
+            }
+        }))
+    ];
+    allContents.push({ role: "user", parts: currentTurnParts });
+
+    const payload = {
+        contents: allContents,
+        generationConfig: {
+            temperature: isThinking ? 0.7 : 0.5,
+            maxOutputTokens: isThinking ? 20000 : 8192
+        }
+    };
+
+    const res = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: mode === "thinking" ? "gemini-2.5-pro" : "gemini-2.5-flash",
+            payload: { ...payload, mode: mode },
+            user_id: localStorage.getItem("user_id") || "1",
+            conversation_id: conversation_id,
+            intent: "chat"
+        })
+    });
+
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let accumulatedText = "";
+    let finalDoneData = null;
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("data: ")) {
+                const jsonStr = trimmed.substring(6).trim();
+                if (!jsonStr) continue;
+                try {
+                    const parsed = JSON.parse(jsonStr);
+                    if (parsed.chunk) {
+                        accumulatedText += parsed.chunk;
+                        if (typeof onChunk === "function") {
+                            onChunk(parsed.chunk, accumulatedText);
+                        }
+                    }
+                    if (parsed.done) {
+                        finalDoneData = parsed;
+                    }
+                } catch (e) { }
+            }
+        }
+    }
+
+    return {
+        ok: true,
+        text: (finalDoneData && finalDoneData.answer) ? finalDoneData.answer : accumulatedText,
+        chat_id: finalDoneData?.conversation_id || conversation_id,
+        title: finalDoneData?.conversation_title,
+        doneData: finalDoneData
+    };
+}
 
 // ====== Gemini ======
 async function callGemini(userText, images, files) {
@@ -699,7 +1031,7 @@ async function callGemini(userText, images, files) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: mode === "thinking" ? "gemini-3.5-flash" : "gemini-3.1-flash-lite",
+                model: mode === "thinking" ? "gemini-2.5-pro" : "gemini-2.5-flash",
                 payload: {
                     ...payload,
                     mode: mode
@@ -740,6 +1072,16 @@ async function callGemini(userText, images, files) {
         conversation_id = data.conversation_id
         window.history.pushState({ cid: conversation_id }, "", "/c/" + conversation_id);
         loadHistory()
+    }
+    if (data?.conversation_title && data.conversation_title !== "Chat mới" && !data.conversation_title.startsWith("{")) {
+        document.title = `${data.conversation_title} - Btoan AI`;
+        const activeItem = document.querySelector(`.chat-history-item[data-id="${conversation_id}"]`) ||
+                           document.querySelector(`.history-item[data-id="${conversation_id}"]`);
+        if (activeItem) {
+            const activeTitle = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
+            if (activeTitle) activeTitle.innerText = data.conversation_title;
+        }
+        setTimeout(() => loadHistory(), 600);
     }
 
 
@@ -796,8 +1138,17 @@ async function callGemini(userText, images, files) {
 // ====== SEND ======
 async function send() {
 
-    if (isSending) return
-    isSending = true
+    if (isSending) {
+        if (Date.now() - (window._lastSendTimestamp || 0) > 12000) {
+            console.warn("[SEND AUTO-RECOVERY] Resetting stuck isSending state.");
+            isSending = false;
+        } else {
+            return;
+        }
+    }
+    window._lastSendTimestamp = Date.now();
+    isSending = true;
+    showWelcomeScreen(false);
 
 
     const userText = msgEl.value.trim()
@@ -928,17 +1279,44 @@ async function send() {
 
     const typing = document.createElement("div")
     typing.className = "msgrow bot"
-    typing.innerHTML = `<div class="bubble">đang trả lời…</div>`
+    typing.innerHTML = `<div class="bubble"><span class="spinner-grow spinner-grow-sm text-primary me-2"></span>⚡ Đang suy nghĩ...</div>`
 
     chatEl.appendChild(typing)
+    scrollToBottom()
+
+    let liveBotRow = null;
+    let liveBotBubble = null;
+    let geminiRes = null;
 
     try {
 
-        let geminiRes = await callGemini(userText, images, files)
-        
-        if (!geminiRes.ok) {
-            typing.remove();
-            addBotBubble("❌ " + geminiRes.text);
+        try {
+            geminiRes = await streamGeminiChat(userText, images, files, (chunk, fullText) => {
+                if (typing && typing.parentNode) typing.remove();
+                if (!liveBotBubble) {
+                    liveBotRow = document.createElement("div");
+                    liveBotRow.className = "msgrow bot";
+                    liveBotBubble = document.createElement("div");
+                    liveBotBubble.className = "bubble";
+                    liveBotRow.appendChild(liveBotBubble);
+                    chatEl.appendChild(liveBotRow);
+                }
+                liveBotBubble.innerHTML = renderMarkdownWithMath(fullText);
+                scrollToBottom();
+            });
+        } catch (streamErr) {
+            console.warn("SSE Stream encountered error, falling back to callGemini:", streamErr);
+            if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
+            liveBotRow = null;
+            liveBotBubble = null;
+            geminiRes = await callGemini(userText, images, files);
+        }
+
+        if (typing && typing.parentNode) typing.remove();
+
+        if (!geminiRes || !geminiRes.ok) {
+            if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
+            addBotBubble("❌ " + (geminiRes?.text || "Lỗi phản hồi"));
             isSending = false;
             return;
         }
@@ -947,10 +1325,26 @@ async function send() {
         let current_chat_id = geminiRes.chat_id;
 
         if (!reply || reply.trim() === "") {
-            typing.remove();
+            if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
             addBotBubble("❌ Backend trả về rỗng, vui lòng kiểm tra log.");
             isSending = false;
             return;
+        }
+
+        if (geminiRes.title && geminiRes.title !== "Chat mới" && !geminiRes.title.startsWith("{")) {
+            document.title = `${geminiRes.title} - Btoan AI`;
+            const activeItem = document.querySelector(`.chat-history-item[data-id="${current_chat_id}"]`) ||
+                               document.querySelector(`.history-item[data-id="${current_chat_id}"]`);
+            if (activeItem) {
+                const titleEl = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
+                if (titleEl) titleEl.innerText = geminiRes.title;
+            }
+            setTimeout(() => { if (typeof loadHistory === "function") loadHistory(); }, 500);
+        }
+        if (current_chat_id && !conversation_id) {
+            conversation_id = current_chat_id;
+            window.history.pushState({ cid: conversation_id }, "", "/c/" + conversation_id);
+            if (typeof loadHistory === "function") loadHistory();
         }
 
         // 🔥 AI quyết định export
@@ -977,6 +1371,7 @@ async function send() {
 
         // 🔥 AUTO GENMUSIC
         if (reply.includes("[GENMUSIC]")) {
+            if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
             const tag = "[GENMUSIC]";
             const index = reply.indexOf(tag);
 
@@ -1008,6 +1403,7 @@ async function send() {
 
         // 🔥 AUTO GENIMAGE (ROBUST JOIN)
         if (reply.includes("[GENIMAGE]")) {
+            if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
             // Kiểm tra xem đây có phải là nhầm lẫn không (AI trả [GENIMAGE] cho yêu cầu video)
             const isActuallyVideo = userText.toLowerCase().match(/video|clip|phim|animate|chuyển động/);
             if (isActuallyVideo) {
@@ -1365,11 +1761,16 @@ async function send() {
 
 
 
-        typing.remove();
+        if (typing && typing.parentNode) typing.remove();
 
         console.log(performance.now(), "[SEND UI RENDER] ANSWER LENGTH", reply.length);
 
-        streamBot(reply, exportType);
+        if (liveBotBubble) {
+            renderStreamingFinalBubble(liveBotBubble, reply, exportType);
+            isSending = false;
+        } else {
+            streamBot(reply, exportType);
+        }
 
         setTimeout(() => {
             console.log(performance.now(), "[MATHJAX TYPESET 100ms BEFORE]");
@@ -1512,6 +1913,28 @@ function logout() {
 
 }
 
+// ====== WELCOME SCREEN ======
+function showWelcomeScreen(show) {
+    const welcomeEl = document.getElementById("welcome-screen");
+    const chatEl = document.getElementById("chat");
+    if (!welcomeEl) return;
+    if (show) {
+        welcomeEl.style.display = "flex";
+        if (chatEl) chatEl.style.display = "none";
+        updateWelcomeGreeting();
+    } else {
+        welcomeEl.style.display = "none";
+        if (chatEl) chatEl.style.display = "block";
+    }
+}
+
+function updateWelcomeGreeting(customName) {
+    const greetingEl = document.getElementById("welcomeGreetingTitle");
+    if (!greetingEl) return;
+    const name = customName || localStorage.getItem("full_name") || localStorage.getItem("username") || "bạn";
+    greetingEl.innerText = `Xin chào ${name}, hôm nay mình giúp gì được cho bạn?`;
+}
+
 // ====== HISTORY ======
 async function loadHistory() {
     const user_id = localStorage.getItem("user_id");
@@ -1634,17 +2057,25 @@ async function deleteChat(id) {
     console.log(data)
     loadHistory()
 
-    chatEl.innerHTML = ""
-
+    if (conversation_id == id) {
+        newChat(true);
+    }
 }
 
 async function loadConversation(id, updateUrl = true) {
     console.log(performance.now(), "[LOAD CONVERSATION START]", id);
 
-    if (conversation_id === id && chatEl.innerHTML !== "" && !updateUrl) {
+    if (window._loadingConversationId === id) {
+        console.log(performance.now(), "[LOAD CONVERSATION SKIPPED - IN PROGRESS]", id);
+        return;
+    }
+
+    if (conversation_id === id && chatEl.innerHTML !== "" && !updateUrl && !chatEl.querySelector(".spinner-border")) {
         console.log(performance.now(), "[LOAD CONVERSATION SKIPPED - ALREADY LOADED]", id);
         return;
     }
+
+    window._loadingConversationId = id;
 
     conversation_id = id;
     if (updateUrl) {
@@ -1671,6 +2102,12 @@ async function loadConversation(id, updateUrl = true) {
 
         chatEl.innerHTML = ""; // Clear loader
 
+        if (!data || data.length === 0) {
+            showWelcomeScreen(true);
+            return;
+        }
+
+        showWelcomeScreen(false);
 
         data.forEach(m => {
             if (m.role === "user") {
@@ -1792,10 +2229,12 @@ async function loadConversation(id, updateUrl = true) {
                 })
             }
         })
-        scrollToBottom()
+        scrollToBottom();
     } catch (e) {
         console.error("LOAD CONV ERROR:", e)
         chatEl.innerHTML = '<div class="p-4 text-center text-danger">⚠️ Không thể tải cuộc trò chuyện.</div>'
+    } finally {
+        window._loadingConversationId = null;
     }
 }
 
@@ -1910,18 +2349,17 @@ window.onload = function () {
         }
     });
 
-    chatEl.addEventListener("dragover", (e) => {
-        e.preventDefault()
-    })
+    if (chatEl) {
+        chatEl.addEventListener("dragover", (e) => {
+            e.preventDefault();
+        });
 
-    chatEl.addEventListener("drop", (e) => {
-
-        e.preventDefault()
-
-        // ✅ chỉ 1 dòng
-        addImages(e.dataTransfer.files)
-
-    })
+        chatEl.addEventListener("drop", (e) => {
+            e.preventDefault();
+            // ✅ chỉ 1 dòng
+            addImages(e.dataTransfer.files);
+        });
+    }
 
     attachments = document.getElementById("attachments");
     // camera preview
@@ -2060,7 +2498,7 @@ function toggleSidebar() {
 
 
 document.getElementById("pickImage")?.addEventListener("click", () => {
-    document.getElementById("fileImg").click()
+    document.getElementById("fileImg")?.click();
 })
 
 document.getElementById("pickCamera")?.addEventListener("click", async () => {
@@ -2082,13 +2520,13 @@ document.getElementById("pickCamera")?.addEventListener("click", async () => {
 
     } else {
         // fallback cho trình duyệt
-        document.getElementById("fileCam").click()
+        document.getElementById("fileCam")?.click();
     }
 
 })
 
 document.getElementById("pickFile")?.addEventListener("click", () => {
-    document.getElementById("fileDoc").click()
+    document.getElementById("fileDoc")?.click();
 })
 
 
@@ -2135,6 +2573,7 @@ function newChat(updateUrl = true) {
     if (chatEl) {
         chatEl.innerHTML = ""
     }
+    showWelcomeScreen(true);
 }
 
 document.addEventListener("click", function (e) {
@@ -2155,12 +2594,9 @@ document.addEventListener("click", function (e) {
 
 
 function scrollToBottom() {
-    if (!chatEl) return
-
-    // ❌ chặn mobile
-    if (window.innerWidth < 768) return
-
-    chatEl.scrollTop = chatEl.scrollHeight
+    const scrollContainer = document.getElementById("chatScrollWrapper") || chatEl;
+    if (!scrollContainer) return;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
 }
 window.visualViewport?.addEventListener("resize", () => {
 
@@ -2515,8 +2951,13 @@ async function checkProfile(user_id) {
         localStorage.getItem("username") ||
         "User"
 
+    if (fullName) {
+        localStorage.setItem("full_name", fullName);
+    }
+
     // ✅ set tên
     document.getElementById("userName").innerText = name
+    updateWelcomeGreeting(name);
 
     // ✅ avatar chữ cái đầu
     const avatarEl = document.getElementById("userAvatar")
@@ -2765,6 +3206,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (uName) uName.innerText = cachedName;
         const uAvatar = document.getElementById("userAvatar");
         if (uAvatar) uAvatar.innerText = cachedName.charAt(0).toUpperCase();
+        updateWelcomeGreeting(cachedName);
     }
 
     const uid = localStorage.getItem("user_id");
@@ -2778,7 +3220,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (document.getElementById("guestLoginBox")) document.getElementById("guestLoginBox").style.display = "none";
         checkProfile(uid);
         loadHistory().then(() => {
-            if (urlCid) {
+            if (urlCid && conversation_id !== urlCid && !window._loadingConversationId) {
                 loadConversation(urlCid, false);
             }
         });
@@ -2877,12 +3319,21 @@ function toggleTheme() {
 
 function updateThemeIcon(theme) {
     const icon = document.getElementById("themeToggleIcon");
-    if (!icon) return;
-    if (theme === "dark") {
-        icon.className = "bi bi-sun-fill text-warning fs-6";
-    } else {
-        icon.className = "bi bi-moon-stars text-secondary fs-6";
+    const toggleBtn = document.getElementById("themeToggleBtn");
+    if (icon) {
+        if (theme === "dark") {
+            icon.className = "bi bi-sun-fill fs-6";
+        } else {
+            icon.className = "bi bi-moon-stars fs-6";
+        }
     }
+    if (toggleBtn) {
+        toggleBtn.title = theme === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối";
+    }
+    const radioDark = document.querySelector('input[name="themeRadio"][value="dark"]');
+    const radioLight = document.querySelector('input[name="themeRadio"][value="light"]');
+    if (theme === "dark" && radioDark) radioDark.checked = true;
+    if (theme === "light" && radioLight) radioLight.checked = true;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -2904,84 +3355,298 @@ document.addEventListener("click", function (e) {
     }
 })
 
-function openProfile() {
-
-    const modal = document.getElementById("profileModal")
+function openProfile(targetTab = 'profile') {
+    const modal = document.getElementById("profileModal");
     if (!modal) {
-        console.error("❌ profileModal not found")
-        return
+        console.error("❌ profileModal not found");
+        return;
     }
-
-    const hasProfile = localStorage.getItem("has_profile") === "1"
-
-    // ✅ mở modal
-    modal.style.display = "flex"
-
-    // ===== UI TEXT =====
-    const title = modal.querySelector(".profile-title")
-    const btn = modal.querySelector(".profile-save-btn") // 🔥 fix selector chuẩn
-
-    if (hasProfile) {
-        if (title) title.innerText = "Chỉnh sửa thông tin"
-        if (btn) btn.innerText = "Lưu thay đổi"
-    } else {
-        if (title) title.innerText = "Hoàn thiện thông tin"
-        if (btn) btn.innerText = "Xác nhận"
-    }
-
-    // ===== LOAD DATA =====
-    loadProfileData()
+    modal.style.display = "flex";
+    switchSettingsTab(targetTab);
+    loadProfileData();
 }
-async function loadProfileData() {
 
-    const user_id = localStorage.getItem("user_id")
-    if (!user_id) return
+function closeProfile() {
+    const modal = document.getElementById("profileModal");
+    if (modal) modal.style.display = "none";
+}
 
-    try {
-
-        const res = await fetch("/ai/api/check_profile.php?user_id=" + user_id)
-        const data = await res.json()
-
-        const nameInput = document.getElementById("pf_name")
-        const dobInput = document.getElementById("pf_dob")
-        const avatarPreview = document.getElementById("avatarPreview")
-
-        // ===== NAME =====
-        if (nameInput) {
-            nameInput.value = data.full_name || ""
-        }
-
-        // ===== DOB =====
-        if (dobInput && data.dob) {
-            const parts = data.dob.split("-")
-            if (parts.length === 3) {
-                dobInput.value = `${parts[2]}/${parts[1]}/${parts[0]}`
+function switchSettingsTab(tabName) {
+    const tabs = ['profile', 'ai', 'data', 'display'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tabBtn-${t}`);
+        const pane = document.getElementById(`tabPane-${t}`);
+        if (btn) {
+            if (t === tabName) {
+                btn.className = "settings-nav-pill active btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5";
+            } else {
+                btn.className = "settings-nav-pill btn btn-sm rounded-pill px-3 py-1.5 text-secondary fw-semibold d-flex align-items-center gap-1.5";
             }
         }
+        if (pane) pane.style.display = (t === tabName) ? "block" : "none";
+    });
+}
 
-        // ===== AVATAR & NAME =====
-        const fullName = data.full_name || localStorage.getItem("username") || "User";
+function appendInstructionChip(text) {
+    const ta = document.getElementById("ai_custom_instructions");
+    if (!ta) return;
+    if (ta.value.trim().length > 0) {
+        ta.value = ta.value.trim() + "\n" + text;
+    } else {
+        ta.value = text;
+    }
+}
+
+function applyLiveTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("appTheme", theme);
+    updateThemeIcon(theme);
+}
+
+function applyLiveFontSize(size) {
+    document.documentElement.style.setProperty("--chat-font-size", `${size}px`);
+    localStorage.setItem("chat_font_size", size);
+}
+
+async function loadProfileData() {
+    const userId = localStorage.getItem("user_id");
+    try {
+        const res = await fetch("/api/account/settings");
+        if (!res.ok) {
+            if (userId) {
+                const fbRes = await fetch("/ai/api/check_profile.php?user_id=" + userId);
+                const fbData = await fbRes.json();
+                if (document.getElementById("pf_name")) document.getElementById("pf_name").value = fbData.full_name || "";
+            }
+            return;
+        }
+
+        const data = await res.json();
+        if (document.getElementById("pf_name")) document.getElementById("pf_name").value = data.full_name || "";
+        if (document.getElementById("pf_email")) document.getElementById("pf_email").value = data.email || "";
+        if (document.getElementById("pf_username")) document.getElementById("pf_username").value = data.username || "";
+        if (document.getElementById("pf_dob")) document.getElementById("pf_dob").value = data.dob || "";
+        if (document.getElementById("pf_bio")) document.getElementById("pf_bio").value = data.bio || "";
+
+        // Avatar
+        const avatarPreview = document.getElementById("avatarPreview");
+        const fullName = data.full_name || data.username || "User";
         const initial = fullName.charAt(0).toUpperCase();
-
-        if (document.getElementById("userName")) document.getElementById("userName").innerText = fullName;
-        if (document.getElementById("sidebarUserName")) document.getElementById("sidebarUserName").innerText = fullName;
-
         if (avatarPreview) {
-            const avatar = data.avatar;
-            if (avatar) {
-                const url = avatar + "?t=" + Date.now();
-                avatarPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%">`;
-                if (document.getElementById("userAvatar")) document.getElementById("userAvatar").innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%">`;
-                if (document.getElementById("sidebarUserAvatar")) document.getElementById("sidebarUserAvatar").innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%">`;
+            if (data.avatar) {
+                avatarPreview.innerHTML = `<img src="${data.avatar}?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
             } else {
                 avatarPreview.innerText = initial;
-                if (document.getElementById("userAvatar")) document.getElementById("userAvatar").innerText = initial;
-                if (document.getElementById("sidebarUserAvatar")) document.getElementById("sidebarUserAvatar").innerText = initial;
             }
+        }
+        if (document.getElementById("userName")) document.getElementById("userName").innerText = fullName;
+
+        // FaceID
+        const badge = document.getElementById("faceIdStatusBadge");
+        const delBtn = document.getElementById("face-delete-btn-profile");
+        if (data.face_enabled) {
+            if (badge) {
+                badge.className = "badge bg-success-subtle text-success extra-small";
+                badge.innerText = "Đã kích hoạt FaceID";
+            }
+            if (delBtn) delBtn.style.display = "flex";
+        } else {
+            if (badge) {
+                badge.className = "badge bg-secondary-subtle text-secondary extra-small";
+                badge.innerText = "Chưa thiết lập";
+            }
+            if (delBtn) delBtn.style.display = "none";
+        }
+
+        // Tab 2: AI Settings
+        if (data.default_model === "btoan-2.5-pro") {
+            const rPro = document.getElementById("radioModelPro");
+            if (rPro) rPro.checked = true;
+        } else {
+            const rFlash = document.getElementById("radioModelFlash");
+            if (rFlash) rFlash.checked = true;
+        }
+
+        if (document.getElementById("ai_custom_instructions")) {
+            document.getElementById("ai_custom_instructions").value = data.custom_instructions || "";
+        }
+        if (data.temperature !== undefined && data.temperature !== null) {
+            const tempEl = document.getElementById("ai_temperature");
+            if (tempEl) tempEl.value = data.temperature;
+            const tempLbl = document.getElementById("tempValueLabel");
+            if (tempLbl) tempLbl.innerText = data.temperature;
+        }
+
+        // Tab 3: Data & Memory
+        if (document.getElementById("ai_long_term_memory")) {
+            document.getElementById("ai_long_term_memory").checked = data.long_term_memory !== false;
+        }
+        if (document.getElementById("ai_rag_enabled")) {
+            document.getElementById("ai_rag_enabled").checked = data.rag_enabled !== false;
+        }
+
+        // Tab 4: Display & Voice
+        if (data.theme === "light") {
+            const rLight = document.querySelector('input[name="themeRadio"][value="light"]');
+            if (rLight) rLight.checked = true;
+        } else {
+            const rDark = document.querySelector('input[name="themeRadio"][value="dark"]');
+            if (rDark) rDark.checked = true;
+        }
+
+        if (data.chat_font_size) {
+            const rf = document.querySelector(`input[name="fontSizeRadio"][value="${data.chat_font_size}"]`);
+            if (rf) rf.checked = true;
+        }
+
+        if (data.tts_speed) {
+            const ttsEl = document.getElementById("tts_speed");
+            if (ttsEl) ttsEl.value = data.tts_speed;
+            const ttsLbl = document.getElementById("ttsSpeedLabel");
+            if (ttsLbl) ttsLbl.innerText = `${data.tts_speed}x`;
         }
 
     } catch (err) {
-        console.error("❌ loadProfileData error:", err)
+        console.error("❌ loadProfileData error:", err);
+    }
+}
+
+async function saveAllSettings() {
+    const statusEl = document.getElementById("settingsStatusMsg");
+    if (statusEl) {
+        statusEl.className = "small fw-semibold text-info";
+        statusEl.innerText = "Đang lưu...";
+    }
+
+    const payload = {
+        full_name: document.getElementById("pf_name")?.value || "",
+        dob: document.getElementById("pf_dob")?.value || "",
+        bio: document.getElementById("pf_bio")?.value || "",
+        default_model: document.querySelector('input[name="defaultModelRadio"]:checked')?.value || "btoan-2.5-flash",
+        custom_instructions: document.getElementById("ai_custom_instructions")?.value || "",
+        temperature: parseFloat(document.getElementById("ai_temperature")?.value || "0.7"),
+        long_term_memory: document.getElementById("ai_long_term_memory")?.checked !== false,
+        rag_enabled: document.getElementById("ai_rag_enabled")?.checked !== false,
+        theme: document.querySelector('input[name="themeRadio"]:checked')?.value || "dark",
+        chat_font_size: parseInt(document.querySelector('input[name="fontSizeRadio"]:checked')?.value || "15", 10),
+        tts_speed: parseFloat(document.getElementById("tts_speed")?.value || "1.0")
+    };
+
+    try {
+        const res = await fetch("/api/account/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && (data.ok || data.success || data.status === "ok" || (data.message && !data.error))) {
+            if (statusEl) {
+                statusEl.className = "small fw-semibold text-success";
+                statusEl.innerText = "✓ " + (data.message || "Đã lưu cài đặt thành công!");
+            }
+            if (payload.full_name) {
+                if (document.getElementById("userName")) document.getElementById("userName").innerText = payload.full_name;
+            }
+            if (payload.theme) {
+                applyLiveTheme(payload.theme);
+            }
+            if (typeof showToastNotification === "function") {
+                showToastNotification("✓ Đã lưu cài đặt tài khoản thành công!");
+            }
+            setTimeout(() => { closeProfile(); }, 1200);
+        } else {
+            if (statusEl) {
+                statusEl.className = "small fw-semibold text-danger";
+                statusEl.innerText = "Lỗi: " + (data.message || data.error || "Không thể lưu");
+            }
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.className = "small fw-semibold text-danger";
+            statusEl.innerText = "Lỗi kết nối máy chủ";
+        }
+    }
+}
+
+async function submitChangePassword() {
+    const oldP = document.getElementById("pwd_old")?.value || "";
+    const newP = document.getElementById("pwd_new")?.value || "";
+    const confirmP = document.getElementById("pwd_confirm")?.value || "";
+    const msgEl = document.getElementById("pwdStatusMsg");
+
+    if (!oldP || !newP) {
+        if (msgEl) { msgEl.className = "extra-small text-danger mt-1"; msgEl.innerText = "Vui lòng nhập đầy đủ mật khẩu"; }
+        return;
+    }
+    if (newP.length < 6) {
+        if (msgEl) { msgEl.className = "extra-small text-danger mt-1"; msgEl.innerText = "Mật khẩu mới tối thiểu 6 ký tự"; }
+        return;
+    }
+    if (newP !== confirmP) {
+        if (msgEl) { msgEl.className = "extra-small text-danger mt-1"; msgEl.innerText = "Xác nhận mật khẩu không khớp"; }
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/account/change-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ old_password: oldP, new_password: newP })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            if (msgEl) {
+                msgEl.className = "extra-small text-success mt-1";
+                msgEl.innerText = "✓ " + data.message;
+            }
+            document.getElementById("pwd_old").value = "";
+            document.getElementById("pwd_new").value = "";
+            document.getElementById("pwd_confirm").value = "";
+        } else {
+            if (msgEl) {
+                msgEl.className = "extra-small text-danger mt-1";
+                msgEl.innerText = "Lỗi: " + (data.message || data.error || "Thất bại");
+            }
+        }
+    } catch (err) {
+        if (msgEl) { msgEl.className = "extra-small text-danger mt-1"; msgEl.innerText = "Lỗi kết nối máy chủ"; }
+    }
+}
+
+async function deleteFaceData() {
+    if (!confirm("Bạn có chắc chắn muốn xóa dữ liệu FaceID khỏi hệ thống?")) return;
+    try {
+        const res = await fetch("/api/account/face-delete", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            alert("✓ " + data.message);
+            loadProfileData();
+        } else {
+            alert("Lỗi: " + (data.message || data.error || "Không thể xóa"));
+        }
+    } catch (err) {
+        alert("Lỗi kết nối máy chủ");
+    }
+}
+
+async function confirmDeleteAllChats() {
+    if (!confirm("CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ các đoạn hội thoại và tin nhắn? Hành động này KHÔNG THỂ khôi phục!")) return;
+    try {
+        const res = await fetch("/api/chat/delete-all", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            alert("✓ " + data.message);
+            const chatEl = document.getElementById("chat");
+            if (chatEl) chatEl.innerHTML = "";
+            const welcomeEl = document.getElementById("welcome-screen");
+            if (welcomeEl) welcomeEl.style.display = "block";
+            loadHistory();
+            closeProfile();
+        } else {
+            alert("Lỗi: " + (data.message || data.error || "Không thể xóa"));
+        }
+    } catch (err) {
+        alert("Lỗi kết nối máy chủ");
     }
 }
 

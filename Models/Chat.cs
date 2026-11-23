@@ -28,5 +28,14 @@ namespace BtoanAiNet.Models
 
         [Column("images")]
         public string? Images { get; set; }
+
+        [Column("model_used")]
+        public string? ModelUsed { get; set; }
+
+        [Column("attachments_json")]
+        public string? AttachmentsJson { get; set; }
+
+        [Column("artifacts_json")]
+        public string? ArtifactsJson { get; set; }
     }
 }

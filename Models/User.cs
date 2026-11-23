@@ -51,5 +51,36 @@ namespace BtoanAiNet.Models
 
         [Column("face_updated_at")]
         public DateTime? FaceUpdatedAt { get; set; }
+
+        [Column("bio")]
+        [StringLength(500)]
+        public string? Bio { get; set; }
+
+        [Column("default_model")]
+        [StringLength(50)]
+        public string? DefaultModel { get; set; } = "Btoan 2.5 Flash";
+
+        [Column("custom_instructions")]
+        public string? CustomInstructions { get; set; }
+
+        [Column("temperature")]
+        public double? Temperature { get; set; } = 0.7;
+
+        [Column("long_term_memory")]
+        public int? LongTermMemory { get; set; } = 1;
+
+        [Column("rag_enabled")]
+        public int? RagEnabled { get; set; } = 1;
+
+        [Column("theme")]
+        [StringLength(20)]
+        public string? Theme { get; set; } = "dark";
+
+        [Column("chat_font_size")]
+        [StringLength(20)]
+        public string? ChatFontSize { get; set; } = "15px";
+
+        [Column("tts_speed")]
+        public double? TtsSpeed { get; set; } = 1.0;
     }
 }

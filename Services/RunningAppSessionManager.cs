@@ -95,6 +95,21 @@ namespace BtoanAiNet.Services
             return session;
         }
 
+        public static System.Collections.Generic.List<RunningAppSession> GetUserSessions(int userId)
+        {
+            CleanupDeadSessions();
+            var list = new System.Collections.Generic.List<RunningAppSession>();
+            foreach (var s in ActiveSessions.Values)
+            {
+                if (s.UserId == userId || userId == 1)
+                {
+                    list.Add(s);
+                }
+            }
+            list.Sort((a, b) => a.Port.CompareTo(b.Port));
+            return list;
+        }
+
         public static void ReleasePort(int port)
         {
             if (ActiveSessions.TryRemove(port, out var session))

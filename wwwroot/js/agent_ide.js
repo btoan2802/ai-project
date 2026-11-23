@@ -210,7 +210,7 @@ async function loadUserProjects() {
         refreshFileTree();
         loadGitStatus();
         if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-            terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
+            terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
         }
     } else {
         const container = document.getElementById("workspaceTreeContainer");
@@ -276,7 +276,7 @@ function onProjectChanged() {
         refreshFileTree();
         loadGitStatus();
         if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-            terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
+            terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
         }
     } else {
         showEmptyWorkspaceState();
@@ -320,7 +320,7 @@ async function switchActiveProject(projName) {
     await refreshFileTree();
     loadGitStatus();
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-        await terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
+        await terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
     }
 }
 window.switchActiveProject = switchActiveProject;
@@ -1128,8 +1128,16 @@ async function loadGitStatus() {
 // ==========================================
 // 6. TERMINAL EXECUTION (XTERM.JS + SIGNALR REALTIME STREAMING)
 // ==========================================
-let xtermInstance = null;
-let fitAddon = null;
+// ==========================================
+// 6. MULTI-TERMINAL & SIGNALR INTERACTIVE SHELL (VS Code Standard)
+// ==========================================
+let terminalSessions = [];
+let activeTerminalSessionId = "term-1";
+let isTerminalSplit = false;
+let terminalSessionCounter = 1;
+
+let xtermInstance = null; // References current active session's xterm
+let fitAddon = null;      // References current active session's fitAddon
 let terminalHubConn = null;
 let terminalInputBuffer = "";
 let terminalCursorPos = 0;
@@ -1139,42 +1147,68 @@ let terminalPrompt = "PS D:\\UserWorkspaces> ";
 let isTerminalProcessRunning = false;
 
 function initXtermTerminal() {
-    const container = document.getElementById("xtermTerminalContainer");
-    if (!container) return;
+    const panesWrapper = document.getElementById("terminalPanesWrapper");
+    if (!panesWrapper) return;
 
     if (typeof Terminal === "undefined") {
         setTimeout(initXtermTerminal, 200);
         return;
     }
 
-    if (xtermInstance) {
-        return;
+    if (terminalSessions.length > 0) return;
+
+    // Create initial term-1 session
+    const term1Pane = document.getElementById("xtermTerminalContainer");
+    createTerminalSessionInstance("term-1", "powershell 1", term1Pane);
+
+    // Connect SignalR
+    initTerminalSignalR();
+}
+
+function getTerminalTheme() {
+    return {
+        background: '#181818',
+        foreground: '#cccccc',
+        cursor: '#ffffff',
+        cursorAccent: '#181818',
+        selectionBackground: 'rgba(255, 255, 255, 0.25)',
+        black: '#181818',
+        red: '#f14c4c',
+        green: '#4ec9b0',
+        yellow: '#dcdcaa',
+        blue: '#264f78',
+        magenta: '#c586c0',
+        cyan: '#4dc4ff',
+        white: '#cccccc',
+        brightBlack: '#666666',
+        brightRed: '#f14c4c',
+        brightGreen: '#4ec9b0',
+        brightYellow: '#dcdcaa',
+        brightBlue: '#3b8eea',
+        brightMagenta: '#d670d6',
+        brightCyan: '#4dc4ff',
+        brightWhite: '#ffffff'
+    };
+}
+
+function createTerminalSessionInstance(sessionId, name, containerEl) {
+    if (!containerEl) {
+        const wrapper = document.getElementById("terminalPanesWrapper");
+        if (!wrapper) return null;
+        containerEl = document.createElement("div");
+        containerEl.id = `terminalPane_${sessionId}`;
+        containerEl.className = "terminal-pane";
+        containerEl.style.width = "100%";
+        containerEl.style.height = "100%";
+        containerEl.style.minHeight = "0";
+        containerEl.style.minWidth = "0";
+        containerEl.style.overflow = "hidden";
+        containerEl.style.display = "none";
+        wrapper.appendChild(containerEl);
     }
 
-    xtermInstance = new Terminal({
-        theme: {
-            background: '#181818',
-            foreground: '#cccccc',
-            cursor: '#ffffff',
-            cursorAccent: '#181818',
-            selectionBackground: 'rgba(255, 255, 255, 0.25)',
-            black: '#181818',
-            red: '#f14c4c',
-            green: '#4ec9b0',
-            yellow: '#dcdcaa',
-            blue: '#264f78',
-            magenta: '#c586c0',
-            cyan: '#4dc4ff',
-            white: '#cccccc',
-            brightBlack: '#666666',
-            brightRed: '#f14c4c',
-            brightGreen: '#4ec9b0',
-            brightYellow: '#dcdcaa',
-            brightBlue: '#3b8eea',
-            brightMagenta: '#d670d6',
-            brightCyan: '#4dc4ff',
-            brightWhite: '#ffffff'
-        },
+    const term = new Terminal({
+        theme: getTerminalTheme(),
         fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
         fontSize: 13,
         lineHeight: 1.25,
@@ -1185,78 +1219,233 @@ function initXtermTerminal() {
         allowTransparency: false
     });
 
+    let fit = null;
     if (typeof FitAddon !== "undefined" && FitAddon.FitAddon) {
-        fitAddon = new FitAddon.FitAddon();
-        xtermInstance.loadAddon(fitAddon);
+        fit = new FitAddon.FitAddon();
+        term.loadAddon(fit);
     }
 
-    xtermInstance.open(container);
-    if (fitAddon) {
-        setTimeout(() => fitAddon.fit(), 100);
+    term.open(containerEl);
+    if (fit) {
+        setTimeout(() => { try { fit.fit(); } catch (e) { } }, 100);
     }
 
-    // Auto-fit on window resize
-    window.addEventListener("resize", () => {
-        try { fitAddon?.fit(); } catch (e) { }
-    });
+    const sessionObj = {
+        id: sessionId,
+        name: name,
+        xterm: term,
+        fitAddon: fit,
+        containerEl: containerEl,
+        inputBuffer: "",
+        cursorPos: 0,
+        history: [],
+        historyIndex: -1,
+        prompt: terminalPrompt
+    };
 
-    // Smart Copy / Paste / Select All via attachCustomKeyEventHandler
-    xtermInstance.attachCustomKeyEventHandler((e) => {
+    term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true;
 
-        // 1. Copy: Ctrl + C or Ctrl + Shift + C
         if ((e.ctrlKey && !e.shiftKey && (e.key === 'c' || e.key === 'C')) ||
             (e.ctrlKey && e.shiftKey && (e.key === 'c' || e.key === 'C'))) {
-            if (xtermInstance.hasSelection()) {
-                const selectedText = xtermInstance.getSelection();
-                navigator.clipboard.writeText(selectedText);
-                xtermInstance.clearSelection();
+            if (term.hasSelection()) {
+                const text = term.getSelection();
+                navigator.clipboard.writeText(text);
+                term.clearSelection();
                 showToastNotification("Copied to clipboard");
-                return false; // Prevent sending SIGINT / KillRunningProcess when copying text
+                return false;
             }
             if (e.shiftKey) return false;
-            // No selection + Ctrl+C -> Pass to onData to send ^C and kill running process
             return true;
         }
 
-        // 2. Paste: Ctrl + V or Ctrl + Shift + V
         if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) {
             e.preventDefault();
-            pasteIntoTerminal();
-            return false; // Prevent double paste
+            pasteIntoActiveTerminal();
+            return false;
         }
 
-        // 3. Select All: Ctrl + Shift + A
         if (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
             e.preventDefault();
-            xtermInstance.selectAll();
+            term.selectAll();
             return false;
         }
 
         return true;
     });
 
-    // Right-click Context Menu on Terminal Container
-    container.addEventListener("contextmenu", (e) => {
-        onTerminalContextMenu(e);
-    });
-
-    // Native paste fallback on container (handles middle click or browser paste)
-    container.addEventListener("paste", (e) => {
+    containerEl.addEventListener("contextmenu", (e) => onTerminalContextMenu(e));
+    containerEl.addEventListener("paste", (e) => {
         e.preventDefault();
         const text = (e.clipboardData || window.clipboardData)?.getData('text');
-        if (text) {
-            insertTextIntoTerminalBuffer(text);
+        if (text) insertTextIntoActiveTerminal(text);
+    });
+
+    term.onData((data) => handleSessionKeyInput(sessionObj, data));
+
+    terminalSessions.push(sessionObj);
+    renderTerminalSessionsSidebar();
+
+    return sessionObj;
+}
+
+function renderTerminalSessionsSidebar() {
+    const listEl = document.getElementById("terminalSessionsList");
+    if (listEl) {
+        listEl.innerHTML = terminalSessions.map(s => `
+            <div class="terminal-session-item ${s.id === activeTerminalSessionId ? 'active' : ''}" onclick="switchTerminalSession('${s.id}')">
+                <div class="d-flex align-items-center gap-1.5 text-truncate">
+                    <i class="bi bi-terminal ${s.id === activeTerminalSessionId ? 'text-info' : 'text-secondary'}" style="font-size: 11px;"></i>
+                    <span class="text-truncate">${s.name}</span>
+                </div>
+                ${terminalSessions.length > 1 ? `
+                <button onclick="event.stopPropagation(); closeTerminalSession('${s.id}')" class="terminal-session-close-btn" title="Close Terminal">
+                    <i class="bi bi-x"></i>
+                </button>` : ''}
+            </div>
+        `).join('');
+    }
+
+    const headerTabsEl = document.getElementById("terminalHeaderTabsContainer");
+    if (headerTabsEl) {
+        headerTabsEl.innerHTML = terminalSessions.map(s => `
+            <div class="terminal-header-tab ${s.id === activeTerminalSessionId ? 'active' : ''}" onclick="switchTerminalSession('${s.id}')" style="cursor: pointer; padding: 2px 8px; border-radius: 4px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid ${s.id === activeTerminalSessionId ? '#388bfd' : 'transparent'}; background: ${s.id === activeTerminalSessionId ? '#1f2937' : 'transparent'}; color: ${s.id === activeTerminalSessionId ? '#58a6ff' : '#94a3b8'};">
+                <i class="bi bi-terminal" style="font-size: 10px;"></i>
+                <span>${s.name}</span>
+                ${terminalSessions.length > 1 ? `<span onclick="event.stopPropagation(); closeTerminalSession('${s.id}')" style="margin-left: 2px; opacity: 0.7; font-size: 13px; cursor: pointer; line-height: 1;" title="Đóng">&times;</span>` : ''}
+            </div>
+        `).join('');
+    }
+
+    const labelEl = document.getElementById("currentActiveSessionLabel");
+    if (labelEl) {
+        const cur = terminalSessions.find(s => s.id === activeTerminalSessionId);
+        labelEl.innerText = cur ? `>_ ${cur.name}` : `>_ powershell`;
+    }
+}
+
+function toggleTerminalSidebarList() {
+    const sb = document.getElementById("terminalSessionsSidebar");
+    if (sb) {
+        const isHidden = (sb.style.display === "none");
+        sb.style.display = isHidden ? "flex" : "none";
+        setTimeout(() => {
+            terminalSessions.forEach(s => s.fitAddon?.fit());
+        }, 50);
+    }
+}
+
+async function createNewTerminalSession() {
+    terminalSessionCounter++;
+    const newId = `term-${terminalSessionCounter}`;
+    const newName = `powershell ${terminalSessionCounter}`;
+
+    const newSession = createTerminalSessionInstance(newId, newName, null);
+    if (!newSession) return;
+
+    switchTerminalSession(newId);
+
+    if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+        try {
+            await terminalHubConn.invoke("InitializeTerminal", activeProjectId || "app", newId);
+        } catch (e) {
+            console.warn("[Terminal] Failed to initialize new terminal session:", e);
+            newSession.xterm.writeln(`\r\n\x1b[33m[Notice] Running in standalone session mode (${newId}).\x1b[0m`);
+            newSession.xterm.write(`\r\n${terminalPrompt}`);
         }
-    });
+    } else {
+        newSession.xterm.writeln(`\r\n\x1b[33m[Notice] Running in standalone session mode (${newId}).\x1b[0m`);
+        newSession.xterm.write(`\r\n${terminalPrompt}`);
+    }
+}
 
-    // Keystroke handling
-    xtermInstance.onData((data) => {
-        handleTerminalKeyInput(data);
-    });
+function switchTerminalSession(sessionId) {
+    activeTerminalSessionId = sessionId;
+    const session = terminalSessions.find(s => s.id === sessionId) || terminalSessions[0];
+    if (!session) return;
 
-    // Connect SignalR
-    initTerminalSignalR();
+    xtermInstance = session.xterm;
+    fitAddon = session.fitAddon;
+    terminalInputBuffer = session.inputBuffer;
+    terminalCursorPos = session.cursorPos;
+    terminalHistory = session.history;
+    terminalHistoryIndex = session.historyIndex;
+    terminalPrompt = session.prompt;
+
+    const wrapper = document.getElementById("terminalPanesWrapper");
+    if (wrapper) {
+        if (isTerminalSplit && terminalSessions.length >= 2) {
+            terminalSessions.forEach((s, idx) => {
+                if (idx < 2) {
+                    s.containerEl.style.display = "block";
+                    s.containerEl.style.flex = "1 1 50%";
+                    s.containerEl.style.borderRight = idx === 0 ? "1px solid #333" : "none";
+                } else {
+                    s.containerEl.style.display = "none";
+                }
+            });
+        } else {
+            terminalSessions.forEach(s => {
+                if (s.id === sessionId) {
+                    s.containerEl.style.display = "block";
+                    s.containerEl.style.flex = "1 1 100%";
+                    s.containerEl.style.borderRight = "none";
+                } else {
+                    s.containerEl.style.display = "none";
+                }
+            });
+        }
+    }
+
+    renderTerminalSessionsSidebar();
+
+    setTimeout(() => {
+        try { session.fitAddon?.fit(); } catch (e) { }
+        try { session.xterm?.focus(); } catch (e) { }
+    }, 50);
+}
+
+function splitTerminalView() {
+    isTerminalSplit = !isTerminalSplit;
+
+    if (isTerminalSplit && terminalSessions.length < 2) {
+        createNewTerminalSession();
+        return;
+    }
+
+    switchTerminalSession(activeTerminalSessionId);
+    showToastNotification(isTerminalSplit ? "Split Terminal enabled" : "Split Terminal disabled");
+}
+
+async function closeTerminalSession(sessionId) {
+    if (terminalSessions.length <= 1) {
+        clearTerminalOutput();
+        return;
+    }
+
+    const idx = terminalSessions.findIndex(s => s.id === sessionId);
+    if (idx === -1) return;
+
+    const s = terminalSessions[idx];
+    if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+        terminalHubConn.invoke("KillRunningProcessInSession", sessionId).catch(() => {});
+    }
+
+    try { s.xterm?.dispose(); } catch (e) { }
+    try { s.containerEl?.remove(); } catch (e) { }
+
+    terminalSessions.splice(idx, 1);
+
+    const nextSession = terminalSessions[Math.max(0, idx - 1)] || terminalSessions[0];
+    if (nextSession) {
+        switchTerminalSession(nextSession.id);
+    } else {
+        renderTerminalSessionsSidebar();
+    }
+}
+
+function closeCurrentTerminalSession() {
+    closeTerminalSession(activeTerminalSessionId);
 }
 
 async function initTerminalSignalR() {
@@ -1270,21 +1459,27 @@ async function initTerminalSignalR() {
         .withAutomaticReconnect([0, 2000, 5000, 10000])
         .build();
 
-    terminalHubConn.on("TerminalOutput", (chunk) => {
-        if (xtermInstance) {
+    terminalHubConn.on("TerminalOutput", (chunk, sId) => {
+        const target = terminalSessions.find(s => s.id === (sId || activeTerminalSessionId)) || terminalSessions[0];
+        if (target && target.xterm) {
+            target.xterm.write(chunk);
+        } else if (xtermInstance) {
             xtermInstance.write(chunk);
         }
     });
 
-    terminalHubConn.on("TerminalClear", () => {
-        if (xtermInstance) {
-            xtermInstance.clear();
-        }
+    terminalHubConn.on("TerminalClear", (sId) => {
+        const target = terminalSessions.find(s => s.id === (sId || activeTerminalSessionId)) || terminalSessions[0];
+        if (target && target.xterm) target.xterm.clear();
     });
 
-    terminalHubConn.on("SessionInitialized", (ok, currentDir) => {
-        if (ok && currentDir) {
-            terminalPrompt = `PS ${currentDir}> `;
+    terminalHubConn.on("SessionInitialized", (ok, currentDir, sId) => {
+        const target = terminalSessions.find(s => s.id === (sId || activeTerminalSessionId)) || terminalSessions[0];
+        if (target && ok && currentDir) {
+            target.prompt = `PS ${currentDir}> `;
+            if (target.id === activeTerminalSessionId) {
+                terminalPrompt = target.prompt;
+            }
         }
     });
 
@@ -1304,6 +1499,7 @@ async function initTerminalSignalR() {
         const btnStop = document.getElementById("tabBtnStopApp");
         if (btnStop) btnStop.classList.remove("d-none");
         showToastNotification(`🟢 Ứng dụng đã sẵn sàng trên cổng :${data.port}!`);
+        loadActivePorts();
     });
 
     terminalHubConn.on("AppPreviewStopped", (data) => {
@@ -1315,11 +1511,10 @@ async function initTerminalSignalR() {
         const btnStop = document.getElementById("tabBtnStopApp");
         if (btnStop) btnStop.classList.add("d-none");
         closeLiveAppPreview();
+        loadActivePorts();
     });
 
-    // Auto-refresh file tree when a terminal command finishes successfully (e.g. dotnet new, ng new)
     terminalHubConn.on("TerminalCommandFinished", (info) => {
-        console.log("[Terminal] Command finished:", info);
         if (!info || info.exitCode === 0) {
             refreshFileTree();
         }
@@ -1327,7 +1522,9 @@ async function initTerminalSignalR() {
 
     terminalHubConn.onreconnected(() => {
         if (activeProjectId) {
-            terminalHubConn.invoke("InitializeTerminal", activeProjectId).catch(console.error);
+            terminalSessions.forEach(s => {
+                terminalHubConn.invoke("InitializeTerminal", activeProjectId, s.id).catch(console.error);
+            });
         }
     });
 
@@ -1335,235 +1532,222 @@ async function initTerminalSignalR() {
         await terminalHubConn.start();
         console.log("[Terminal] Connected to TerminalHub successfully.");
         if (activeProjectId) {
-            await terminalHubConn.invoke("InitializeTerminal", activeProjectId);
+            await terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1");
         }
     } catch (err) {
         console.warn("[Terminal] Could not connect to TerminalHub:", err);
-        if (xtermInstance) {
-            xtermInstance.writeln("\x1b[33m[Notice] Running in standalone terminal mode.\x1b[0m");
-            xtermInstance.write(`\r\n${terminalPrompt}`);
+        const s1 = terminalSessions[0];
+        if (s1 && s1.xterm) {
+            s1.xterm.writeln("\x1b[33m[Notice] Running in standalone terminal mode.\x1b[0m");
+            s1.xterm.write(`\r\n${terminalPrompt}`);
         }
     }
 }
 
-function handleTerminalKeyInput(data) {
-    if (!xtermInstance) return;
+function handleSessionKeyInput(session, data) {
+    if (!session || !session.xterm) return;
 
-    // Ctrl+C: ASCII 3 (\x03)
-    if (data === '\x03') {
+    if (data === '\x03') { // Ctrl+C
         if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-            terminalHubConn.invoke("KillRunningProcess").catch(console.error);
+            terminalHubConn.invoke("KillRunningProcessInSession", session.id).catch(console.error);
         }
-        xtermInstance.write("^C\r\n" + terminalPrompt);
-        terminalInputBuffer = "";
-        terminalCursorPos = 0;
+        session.xterm.write("^C\r\n" + (session.prompt || terminalPrompt));
+        session.inputBuffer = "";
+        session.cursorPos = 0;
         return;
     }
 
-    // Enter: ASCII 13 (\r)
-    if (data === '\r') {
-        xtermInstance.write("\r\n");
-        const cmd = terminalInputBuffer.trim();
-        terminalInputBuffer = "";
-        terminalCursorPos = 0;
+    if (data === '\r') { // Enter
+        session.xterm.write("\r\n");
+        const cmd = session.inputBuffer.trim();
+        session.inputBuffer = "";
+        session.cursorPos = 0;
 
         if (cmd) {
-            terminalHistory.push(cmd);
-            terminalHistoryIndex = terminalHistory.length;
-            sendTerminalCommand(cmd);
+            session.history.push(cmd);
+            session.historyIndex = session.history.length;
+            sendTerminalCommandInSession(session, cmd);
         } else {
-            xtermInstance.write(terminalPrompt);
+            session.xterm.write(session.prompt || terminalPrompt);
         }
         return;
     }
 
-    // Backspace: ASCII 127 (\x7f) or \b
-    if (data === '\x7f' || data === '\b') {
-        if (terminalCursorPos > 0) {
-            terminalInputBuffer = terminalInputBuffer.slice(0, terminalCursorPos - 1) + terminalInputBuffer.slice(terminalCursorPos);
-            terminalCursorPos--;
-            refreshCurrentCommandLine();
+    if (data === '\x7f' || data === '\b') { // Backspace
+        if (session.cursorPos > 0) {
+            session.inputBuffer = session.inputBuffer.slice(0, session.cursorPos - 1) + session.inputBuffer.slice(session.cursorPos);
+            session.cursorPos--;
+            refreshSessionCommandLine(session);
         }
         return;
     }
 
-    // Arrow keys: \x1b[A, \x1b[B, \x1b[C, \x1b[D
-    if (data === '\x1b[A') { // Up arrow
-        if (terminalHistory.length > 0 && terminalHistoryIndex > 0) {
-            terminalHistoryIndex--;
-            terminalInputBuffer = terminalHistory[terminalHistoryIndex];
-            terminalCursorPos = terminalInputBuffer.length;
-            refreshCurrentCommandLine();
+    if (data === '\x1b[A') { // Up
+        if (session.history.length > 0 && session.historyIndex > 0) {
+            session.historyIndex--;
+            session.inputBuffer = session.history[session.historyIndex];
+            session.cursorPos = session.inputBuffer.length;
+            refreshSessionCommandLine(session);
         }
         return;
     }
-    if (data === '\x1b[B') { // Down arrow
-        if (terminalHistoryIndex < terminalHistory.length - 1) {
-            terminalHistoryIndex++;
-            terminalInputBuffer = terminalHistory[terminalHistoryIndex];
-            terminalCursorPos = terminalInputBuffer.length;
-            refreshCurrentCommandLine();
+
+    if (data === '\x1b[B') { // Down
+        if (session.historyIndex < session.history.length - 1) {
+            session.historyIndex++;
+            session.inputBuffer = session.history[session.historyIndex];
+            session.cursorPos = session.inputBuffer.length;
+            refreshSessionCommandLine(session);
         } else {
-            terminalHistoryIndex = terminalHistory.length;
-            terminalInputBuffer = "";
-            terminalCursorPos = 0;
-            refreshCurrentCommandLine();
-        }
-        return;
-    }
-    if (data === '\x1b[C') { // Right arrow
-        if (terminalCursorPos < terminalInputBuffer.length) {
-            terminalCursorPos++;
-            xtermInstance.write(data);
-        }
-        return;
-    }
-    if (data === '\x1b[D') { // Left arrow
-        if (terminalCursorPos > 0) {
-            terminalCursorPos--;
-            xtermInstance.write(data);
+            session.historyIndex = session.history.length;
+            session.inputBuffer = "";
+            session.cursorPos = 0;
+            refreshSessionCommandLine(session);
         }
         return;
     }
 
-    // Normal typing: printable chars (length 1, code >= 32)
-    if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        terminalInputBuffer = terminalInputBuffer.slice(0, terminalCursorPos) + data + terminalInputBuffer.slice(terminalCursorPos);
-        terminalCursorPos++;
-        refreshCurrentCommandLine();
-    } else if (data.length > 1 && !data.startsWith('\x1b')) {
-        // Multi-char paste
-        terminalInputBuffer = terminalInputBuffer.slice(0, terminalCursorPos) + data + terminalInputBuffer.slice(terminalCursorPos);
-        terminalCursorPos += data.length;
-        refreshCurrentCommandLine();
+    if (data === '\x1b[C') { // Right
+        if (session.cursorPos < session.inputBuffer.length) {
+            session.cursorPos++;
+            session.xterm.write(data);
+        }
+        return;
+    }
+
+    if (data === '\x1b[D') { // Left
+        if (session.cursorPos > 0) {
+            session.cursorPos--;
+            session.xterm.write(data);
+        }
+        return;
+    }
+
+    if (data >= ' ' || data === '\t') {
+        session.inputBuffer = session.inputBuffer.slice(0, session.cursorPos) + data + session.inputBuffer.slice(session.cursorPos);
+        session.cursorPos += data.length;
+        refreshSessionCommandLine(session);
     }
 }
 
-function refreshCurrentCommandLine() {
-    if (!xtermInstance) return;
-    xtermInstance.write('\r\x1b[K' + terminalPrompt + terminalInputBuffer);
-    const moveBack = terminalInputBuffer.length - terminalCursorPos;
+function refreshSessionCommandLine(session) {
+    if (!session || !session.xterm) return;
+    const prompt = session.prompt || terminalPrompt;
+    session.xterm.write(`\r\x1b[2K${prompt}${session.inputBuffer}`);
+    const moveBack = session.inputBuffer.length - session.cursorPos;
     if (moveBack > 0) {
-        xtermInstance.write(`\x1b[${moveBack}D`);
+        session.xterm.write(`\x1b[${moveBack}D`);
     }
 }
 
-// Smart Paste into Terminal (with clean multi-line and buffer synchronization)
-async function pasteIntoTerminal() {
-    if (!xtermInstance) return;
-    try {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-            insertTextIntoTerminalBuffer(text);
-        }
-    } catch (err) {
-        console.warn("[Terminal] Clipboard read error:", err);
-    }
-}
-
-let lastPasteTimestamp = 0;
-function insertTextIntoTerminalBuffer(text) {
-    if (!xtermInstance || !text) return;
-    const now = Date.now();
-    if (now - lastPasteTimestamp < 300) return; // Debounce to prevent double paste
-    lastPasteTimestamp = now;
-    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    if (cleanText.includes('\n')) {
-        const lines = cleanText.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            terminalInputBuffer += line;
-            terminalCursorPos = terminalInputBuffer.length;
-            if (i < lines.length - 1) {
-                const cmd = terminalInputBuffer.trim();
-                xtermInstance.write(line + "\r\n");
-                terminalInputBuffer = "";
-                terminalCursorPos = 0;
-                if (cmd) {
-                    terminalHistory.push(cmd);
-                    terminalHistoryIndex = terminalHistory.length;
-                    sendTerminalCommand(cmd);
-                }
-            } else {
-                refreshCurrentCommandLine();
-            }
-        }
-    } else {
-        terminalInputBuffer = terminalInputBuffer.slice(0, terminalCursorPos) + cleanText + terminalInputBuffer.slice(terminalCursorPos);
-        terminalCursorPos += cleanText.length;
-        refreshCurrentCommandLine();
-    }
-}
-
-// Terminal Context Menu
-function onTerminalContextMenu(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    hideExplorerContextMenu();
-
-    const menu = document.getElementById("terminalContextMenu");
-    if (!menu) return;
-
-    const copyItem = document.getElementById("ctxTermCopy");
-    if (copyItem) {
-        if (xtermInstance && xtermInstance.hasSelection()) {
-            copyItem.classList.remove("disabled");
-        } else {
-            copyItem.classList.add("disabled");
-        }
-    }
-
-    menu.style.display = "block";
-    const x = Math.min(e.clientX, window.innerWidth - 210);
-    const y = Math.min(e.clientY, window.innerHeight - 190);
-    menu.style.left = `${Math.max(10, x)}px`;
-    menu.style.top = `${Math.max(10, y)}px`;
-}
-
-function hideTerminalContextMenu() {
-    const menu = document.getElementById("terminalContextMenu");
-    if (menu) menu.style.display = "none";
-}
-
-function terminalContextCopy() {
-    hideTerminalContextMenu();
-    if (xtermInstance && xtermInstance.hasSelection()) {
-        const text = xtermInstance.getSelection();
-        navigator.clipboard.writeText(text);
-        xtermInstance.clearSelection();
-        showToastNotification("Copied to clipboard");
-    }
-}
-
-function terminalContextPaste() {
-    hideTerminalContextMenu();
-    pasteIntoTerminal();
-}
-
-function terminalContextSelectAll() {
-    hideTerminalContextMenu();
-    if (xtermInstance) {
-        xtermInstance.selectAll();
-    }
-}
-
-function terminalContextClear() {
-    hideTerminalContextMenu();
-    clearTerminalOutput();
-}
-
-async function sendTerminalCommand(cmd) {
+async function sendTerminalCommandInSession(session, cmd) {
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
         try {
-            await terminalHubConn.invoke("ExecuteCommand", activeProjectId || "my-project", cmd);
+            await terminalHubConn.invoke("ExecuteCommandInSession", activeProjectId || "my-project", cmd, session.id);
+            return;
         } catch (err) {
-            xtermInstance.writeln(`\r\n\x1b[31m[Error] ${err.message}\x1b[0m`);
-            xtermInstance.write(`\r\n${terminalPrompt}`);
+            session.xterm.writeln(`\r\n\x1b[31m[Error] ${err.message}\x1b[0m`);
+            session.xterm.write(`\r\n${session.prompt || terminalPrompt}`);
+            return;
         }
-    } else {
-        await runCustomTerminalCmd(cmd);
+    }
+    await runCustomTerminalCmd(cmd);
+}
+
+function pasteIntoActiveTerminal() {
+    navigator.clipboard.readText().then(text => {
+        if (text) insertTextIntoActiveTerminal(text);
+    }).catch(err => {
+        console.warn("Clipboard read failed:", err);
+    });
+}
+
+function insertTextIntoActiveTerminal(text) {
+    const session = terminalSessions.find(s => s.id === activeTerminalSessionId) || terminalSessions[0];
+    if (!session || !session.xterm) return;
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    session.inputBuffer = session.inputBuffer.slice(0, session.cursorPos) + cleanText + session.inputBuffer.slice(session.cursorPos);
+    session.cursorPos += cleanText.length;
+    refreshSessionCommandLine(session);
+}
+
+// Global active ports loader & renderer
+async function loadActivePorts() {
+    try {
+        const res = await fetch(`/api/ide/ports?project=${encodeURIComponent(activeProjectId || "")}`, {
+            headers: getApiHeaders()
+        });
+        const data = await res.json();
+        const container = document.getElementById("portsListTableContainer");
+        const countBadge = document.getElementById("portsActiveCount");
+        const headerBadge = document.getElementById("portsBadge");
+
+        if (data.ok && Array.isArray(data.ports) && data.ports.length > 0) {
+            if (countBadge) countBadge.textContent = `${data.ports.length} Active`;
+            if (headerBadge) {
+                headerBadge.textContent = data.ports.length;
+                headerBadge.classList.remove("d-none");
+            }
+
+            container.innerHTML = `
+                <div class="ports-table-wrapper">
+                    <table class="ports-table">
+                        <thead>
+                            <tr>
+                                <th>Port</th>
+                                <th>Forwarded URL</th>
+                                <th>Project</th>
+                                <th>PID</th>
+                                <th>Status</th>
+                                <th style="text-align: right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.ports.map(p => `
+                                <tr>
+                                    <td><span class="font-mono text-info fw-bold">:${p.port}</span></td>
+                                    <td>
+                                        <a href="/ide-preview/${p.port}/" target="_blank" class="text-light text-decoration-none font-mono">
+                                            http://127.0.0.1:${p.port} <i class="bi bi-box-arrow-up-right extra-small text-secondary"></i>
+                                        </a>
+                                    </td>
+                                    <td><span class="text-warning">${p.projectName || activeProjectId}</span></td>
+                                    <td><span class="text-secondary font-mono">${p.processId || '-'}</span></td>
+                                    <td><span class="port-badge-running">● Running</span></td>
+                                    <td style="text-align: right;">
+                                        <button onclick="openLiveAppPortPreview(${p.port})" class="btn btn-sm btn-outline-info py-0 px-2 extra-small me-1">
+                                            <i class="bi bi-globe me-1"></i>Preview
+                                        </button>
+                                        <button onclick="stopRunningPort(${p.port})" class="btn btn-sm btn-outline-danger py-0 px-2 extra-small">
+                                            <i class="bi bi-stop-fill me-1"></i>Stop
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } else {
+            if (countBadge) countBadge.textContent = "0 Active";
+            if (headerBadge) headerBadge.classList.add("d-none");
+            container.innerHTML = `<div class="text-secondary p-3 text-center">Chưa có ứng dụng nào đang chạy trên cổng động (5200–5299). Bấm Run App để khởi động.</div>`;
+        }
+    } catch (e) {
+        console.warn("[IDE] Error loading active ports:", e);
     }
 }
+
+function openLiveAppPortPreview(port) {
+    currentLiveAppPort = port;
+    openLiveAppPreview(port);
+}
+
+async function stopRunningPort(port) {
+    await stopRunningApp();
+    setTimeout(loadActivePorts, 400);
+}
+
 
 function switchBottomTab(tabName) {
     const bottomPanel = document.getElementById("bottomPanel");
@@ -1574,10 +1758,10 @@ function switchBottomTab(tabName) {
         if (resizer) resizer.style.display = "block";
     }
 
-    ['bottomTabBtnTerminal', 'bottomTabBtnProblems', 'bottomTabBtnOutput'].forEach(id => {
+    ['bottomTabBtnTerminal', 'bottomTabBtnProblems', 'bottomTabBtnOutput', 'bottomTabBtnPorts'].forEach(id => {
         document.getElementById(id)?.classList.remove("active");
     });
-    ['bottomTabTerminalBody', 'bottomTabProblemsBody', 'bottomTabOutputBody'].forEach(id => {
+    ['bottomTabTerminalBody', 'bottomTabProblemsBody', 'bottomTabOutputBody', 'bottomTabPortsBody'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = "none";
     });
@@ -1595,6 +1779,11 @@ function switchBottomTab(tabName) {
     } else if (tabName === 'output') {
         document.getElementById('bottomTabBtnOutput')?.classList.add("active");
         document.getElementById('bottomTabOutputBody').style.display = "block";
+    } else if (tabName === 'ports') {
+        document.getElementById('bottomTabBtnPorts')?.classList.add("active");
+        const portsBody = document.getElementById('bottomTabPortsBody');
+        if (portsBody) portsBody.style.display = "block";
+        loadActivePorts();
     }
     triggerEditorLayout();
 }
@@ -1657,18 +1846,26 @@ async function resetTerminalSession() {
 
 function detectProjectType() {
     const files = Array.isArray(workspaceFilesList) ? workspaceFilesList : [];
-    const hasAngular = files.some(f => f.path.includes("angular.json") || (f.path.includes("package.json") && f.path.includes("frontend")));
-    const hasDotnet = files.some(f => f.path.endsWith(".csproj") || f.path.endsWith(".sln") || f.path === "Program.cs" || f.path.endsWith("/Program.cs"));
-    const hasPackageJson = files.some(f => f.path.endsWith("package.json"));
-    const hasPython = files.some(f => f.path.endsWith(".py") || f.path.endsWith("requirements.txt"));
+    const hasRootAngular = files.some(f => (f.path === "angular.json" || f.path === "./angular.json" || f.path === "/angular.json"));
+    const hasFrontendAngular = files.some(f => (f.path.startsWith("frontend/") || f.path.startsWith("frontend\\")) && f.path.includes("angular.json"));
+    const inFrontend = hasFrontendAngular && !hasRootAngular;
+    const hasAngular = hasRootAngular || hasFrontendAngular 
+        || files.some(f => f.path.includes("angular.json") || (f.path.includes("package.json") && f.path.includes("frontend"))) 
+        || (activeProjectId && activeProjectId.toLowerCase().includes("angular"));
     
     if (hasAngular) {
-        const inFrontend = files.some(f => f.path.startsWith("frontend/") || f.path.startsWith("frontend\\"));
-        return { type: "angular", inFrontend };
+        return { type: "angular", inFrontend: inFrontend };
     }
+
+    const hasDotnet = files.some(f => f.path.endsWith(".csproj") || f.path.endsWith(".sln"));
     if (hasDotnet) return { type: "dotnet" };
+
+    const hasPackageJson = files.some(f => f.path.endsWith("package.json"));
     if (hasPackageJson) return { type: "node" };
+
+    const hasPython = files.some(f => f.path.endsWith(".py") || f.path.endsWith("requirements.txt"));
     if (hasPython) return { type: "python" };
+
     return { type: "unknown" };
 }
 
@@ -1691,7 +1888,9 @@ async function fetchDynamicPortAndRun(type, prefix = "") {
         runCustomTerminalCmd(`dotnet run --urls http://127.0.0.1:${port}`);
     } else if (type === "angular") {
         showToastNotification(`Đang khởi chạy Angular trên cổng động :${port}...`);
-        runCustomTerminalCmd(`${prefix}ng serve --port ${port}`);
+        const projInfo = detectProjectType();
+        const navCmd = projInfo.inFrontend ? `cd frontend; npx ng serve --port ${port}` : `npx ng serve --port ${port}`;
+        runCustomTerminalCmd(navCmd);
     }
 }
 
@@ -1702,13 +1901,13 @@ function runSmartAction() {
 
     // 1. Angular Project
     if (projInfo.type === 'angular') {
-        const prefix = projInfo.inFrontend ? 'cd frontend && ' : '';
         if (activeFilePath && activeFilePath.endsWith('.spec.ts')) {
             showToastNotification("Running Angular Tests (ng test)...");
-            runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
+            const testCmd = projInfo.inFrontend ? `cd frontend; npx ng test` : `npx ng test`;
+            runCustomTerminalCmd(testCmd);
         } else {
             showToastNotification("Starting Angular App...");
-            fetchDynamicPortAndRun("angular", prefix);
+            fetchDynamicPortAndRun("angular");
         }
         return;
     }
@@ -1757,7 +1956,7 @@ function runBuildInTerminal() {
     switchBottomTab('terminal');
     const projInfo = detectProjectType();
     if (projInfo.type === 'angular') {
-        const prefix = projInfo.inFrontend ? 'cd frontend && ' : '';
+        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
         runCustomTerminalCmd(`${prefix}npx ng build`);
     } else if (projInfo.type === 'node') {
         runCustomTerminalCmd("npm run build");
@@ -1770,8 +1969,8 @@ function runTestInTerminal() {
     switchBottomTab('terminal');
     const projInfo = detectProjectType();
     if (projInfo.type === 'angular') {
-        const prefix = projInfo.inFrontend ? 'cd frontend && ' : '';
-        runCustomTerminalCmd(`${prefix}npx ng test --watch=false`);
+        const prefix = projInfo.inFrontend ? 'cd frontend; ' : '';
+        runCustomTerminalCmd(`${prefix}npx ng test`);
     } else if (projInfo.type === 'node') {
         runCustomTerminalCmd("npm test");
     } else {
@@ -3684,7 +3883,7 @@ async function confirmDeleteTargetItem() {
 }
 
 // ==========================================
-// 18. TOAST NOTIFICATION (VS CODE STYLE)
+// 18. TOAST NOTIFICATION (TOP-CENTER NON-BLOCKING)
 // ==========================================
 function showToastNotification(msg) {
     let container = document.getElementById("ideToastContainer");
@@ -3692,31 +3891,34 @@ function showToastNotification(msg) {
         container = document.createElement("div");
         container.id = "ideToastContainer";
         container.style.position = "fixed";
-        container.style.bottom = "32px";
-        container.style.right = "16px";
+        container.style.top = "42px";
+        container.style.left = "50%";
+        container.style.transform = "translateX(-50%)";
         container.style.zIndex = "99999";
         container.style.display = "flex";
         container.style.flexDirection = "column";
-        container.style.gap = "8px";
+        container.style.alignItems = "center";
+        container.style.gap = "6px";
         container.style.pointerEvents = "none";
         document.body.appendChild(container);
     }
 
     const toast = document.createElement("div");
-    toast.style.background = "#252526";
-    toast.style.color = "#cccccc";
-    toast.style.border = "1px solid #3c3c3c";
-    toast.style.borderRadius = "4px";
-    toast.style.padding = "8px 14px";
+    toast.style.background = "#1e2433";
+    toast.style.color = "#f1f5f9";
+    toast.style.border = "1px solid rgba(99,102,241,0.4)";
+    toast.style.borderRadius = "6px";
+    toast.style.padding = "6px 14px";
     toast.style.fontSize = "12px";
-    toast.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
+    toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.6)";
     toast.style.display = "flex";
     toast.style.alignItems = "center";
     toast.style.gap = "8px";
+    toast.style.pointerEvents = "auto";
     toast.style.transition = "all 0.25s ease";
     toast.style.opacity = "0";
-    toast.style.transform = "translateY(10px)";
-    toast.innerHTML = `<i class="bi bi-info-circle text-info"></i> <span>${escapeHtml(msg)}</span>`;
+    toast.style.transform = "translateY(-10px)";
+    toast.innerHTML = `<i class="bi bi-info-circle text-info"></i> <span>${escapeHtml(msg)}</span> <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;margin-left:6px;line-height:1;" title="Đóng">&times;</button>`;
 
     container.appendChild(toast);
     setTimeout(() => {
@@ -3726,9 +3928,9 @@ function showToastNotification(msg) {
 
     setTimeout(() => {
         toast.style.opacity = "0";
-        toast.style.transform = "translateY(10px)";
+        toast.style.transform = "translateY(-10px)";
         setTimeout(() => toast.remove(), 250);
-    }, 2500);
+    }, 4000);
 }
 
 // ==========================================

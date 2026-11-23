@@ -331,16 +331,17 @@ body{
 
 
 
-.message-content mjx-container{
-
-  margin: 8px 0 !important;
-
+.message-content mjx-container:not([display="true"]){
+  display: inline-block !important;
+  margin: 0 3px !important;
+  vertical-align: middle !important;
+}
+.message-content mjx-container[display="true"]{
+  margin: 10px 0 !important;
   max-width: 100% !important;
-
   overflow-x: auto !important;
-
   overflow-y: hidden !important;
-
+  display: block !important;
 }
 
 
@@ -413,18 +414,17 @@ pre code{
 
 /* MathJax */
 
-.bot mjx-container{
-
+.bot mjx-container:not([display="true"]){
+  display: inline-block !important;
+  margin: 0 3px !important;
+  vertical-align: middle !important;
+}
+.bot mjx-container[display="true"]{
   max-width: 100% !important;
-
   overflow-x: auto !important;
-
   overflow-y: hidden !important;
-
-  display:block;
-
+  display: block !important;
   -webkit-overflow-scrolling: touch;
-
 }
 
 
@@ -2091,16 +2091,17 @@ color:white;
 
 
 
-.message-content mjx-container{
-
-  margin: 8px 0 !important;
-
+.message-content mjx-container:not([display="true"]){
+  display: inline-block !important;
+  margin: 0 3px !important;
+  vertical-align: middle !important;
+}
+.message-content mjx-container[display="true"]{
+  margin: 10px 0 !important;
   max-width: 100% !important;
-
   overflow-x: auto !important;
-
   overflow-y: hidden !important;
-
+  display: block !important;
 }
 
 .code-entry-btn {

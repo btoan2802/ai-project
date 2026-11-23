@@ -1742,3 +1742,79 @@ body.agent-ide-body {
 .live-app-preview-panel {
     background: #1e1e1e;
 }
+
+/* Multi-Terminal Sessions Sidebar & Split Styles */
+.terminal-sessions-sidebar {
+    user-select: none;
+}
+.terminal-session-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-radius: 3px;
+    color: #999;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.terminal-session-item:hover {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+.terminal-session-item.active {
+    background: #37373d;
+    color: #ffffff;
+    font-weight: 500;
+}
+.terminal-session-close-btn {
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: transparent;
+    border: none;
+    color: #888;
+    padding: 0 2px;
+}
+.terminal-session-item:hover .terminal-session-close-btn {
+    opacity: 1;
+}
+.terminal-session-close-btn:hover {
+    color: #ff6b6b;
+}
+
+/* Ports Table */
+.ports-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+.ports-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+.ports-table th {
+    background: #252526;
+    color: #858585;
+    padding: 6px 12px;
+    border-bottom: 1px solid #333;
+    font-weight: 600;
+    text-align: left;
+}
+.ports-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #282828;
+    color: #ccc;
+    vertical-align: middle;
+}
+.ports-table tr:hover td {
+    background: #202020;
+}
+.port-badge-running {
+    background: rgba(46, 204, 113, 0.15);
+    color: #2ecc71;
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+}

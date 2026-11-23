@@ -6,7 +6,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BtoanAiNet - Antigravity IDE</title>
+    <title>Btoan Studio IDE - Btoan Agent</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Bootstrap 5 & Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -33,8 +34,8 @@
     <!-- Monaco Editor AMD Loader -->
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
-    <!-- Antigravity IDE Dark Modern CSS -->
-    <link rel="stylesheet" href="~/css/agent_ide.css" asp-append-version="true" />
+    <!-- Btoan Studio IDE Dark Modern CSS -->
+    <link rel="stylesheet" href="~/css/agent_ide.css?v=3.0.0" asp-append-version="true" />
 </head>
 <body class="agent-ide-body">
 
@@ -216,7 +217,7 @@
                             <span class="dropdown-shortcut">Ctrl+J</span>
                         </div>
                         <div class="top-bar-dropdown-item" onclick="toggleRightAgentPanel(); closeAllTopMenus();">
-                            <span><i class="bi bi-stars me-2 text-info"></i>Toggle Antigravity Agent</span>
+                            <span><i class="bi bi-stars me-2 text-info"></i>Toggle Btoan Agent</span>
                         </div>
                         <div class="top-bar-dropdown-divider"></div>
                         <div class="top-bar-dropdown-item" onclick="toggleWordWrap(); closeAllTopMenus();">
@@ -330,7 +331,7 @@
                         </div>
                         <div class="top-bar-dropdown-divider"></div>
                         <div class="top-bar-dropdown-item" onclick="showHelpAbout(); closeAllTopMenus();">
-                            <span><i class="bi bi-info-circle me-2 text-warning"></i>About Antigravity IDE</span>
+                            <span><i class="bi bi-info-circle me-2 text-warning"></i>About Btoan Studio IDE</span>
                         </div>
                     </div>
                 </div>
@@ -345,7 +346,7 @@
         <div class="d-flex align-items-center justify-content-center flex-grow-1 px-2">
             <div class="top-bar-center-pill" onclick="openQuickOpenModal()">
                 <i class="bi bi-folder2-open text-primary me-1.5"></i>
-                <span id="topBarTitle">Antigravity IDE</span>
+                <span id="topBarTitle">Btoan Studio IDE</span>
                 <select id="projectSelect" onchange="onProjectChanged()" class="top-bar-project-select ms-2" onclick="event.stopPropagation()">
                     <option value="">-- Chưa có dự án --</option>
                 </select>
@@ -365,7 +366,7 @@
             <div class="d-flex align-items-center gap-0.5 text-secondary">
                 <button class="btn-top-action" onclick="toggleLeftSidebar()" title="Toggle Primary Sidebar (Ctrl+B)"><i class="bi bi-layout-sidebar"></i></button>
                 <button class="btn-top-action" onclick="toggleBottomPanel()" title="Toggle Bottom Panel (Ctrl+J)"><i class="bi bi-layout-split"></i></button>
-                <button class="btn-top-action" onclick="toggleRightAgentPanel()" title="Toggle Antigravity Agent"><i class="bi bi-layout-sidebar-reverse"></i></button>
+                <button class="btn-top-action" onclick="toggleRightAgentPanel()" title="Toggle Btoan Agent"><i class="bi bi-layout-sidebar-reverse"></i></button>
             </div>
 
             <div class="top-bar-divider"></div>
@@ -397,10 +398,10 @@
                 <button id="actBtnRun" onclick="switchActivityTab('run')" class="activity-btn" title="Run & Debug (Ctrl+Shift+D)">
                     <i class="bi bi-play-circle fs-5"></i>
                 </button>
-                <button id="actBtnExtensions" onclick="alert('Antigravity Extensions Marketplace')" class="activity-btn" title="Extensions">
+                <button id="actBtnExtensions" onclick="alert('Btoan Studio Extensions Marketplace')" class="activity-btn" title="Extensions">
                     <i class="bi bi-grid-fill fs-5"></i>
                 </button>
-                <button id="actBtnAgent" onclick="toggleRightAgentPanel()" class="activity-btn" title="Antigravity Agent (Ctrl+Shift+A)">
+                <button id="actBtnAgent" onclick="toggleRightAgentPanel()" class="activity-btn" title="Btoan Agent (Ctrl+Shift+A)">
                     <i class="bi bi-stars fs-5 text-info"></i>
                 </button>
             </div>
@@ -408,7 +409,7 @@
                 <button onclick="location.href='/?login=1'" class="activity-btn" title="Accounts">
                     <i class="bi bi-person-circle fs-5"></i>
                 </button>
-                <button onclick="alert('Antigravity IDE v2.5 - Powered by Monaco & Gemini 2.5 Flash')" class="activity-btn" title="Settings">
+                <button onclick="alert('Btoan Studio IDE v3.0 - Powered by Monaco & Btoan 2.5')" class="activity-btn" title="Settings">
                     <i class="bi bi-gear fs-5"></i>
                 </button>
             </div>
@@ -587,8 +588,8 @@
                         <div class="ide-empty-logo mb-3">
                             <i class="bi bi-stars text-info fs-1"></i>
                         </div>
-                        <h4 class="fw-bold text-white mb-2">Btoan Antigravity Web IDE</h4>
-                        <p class="text-secondary small mb-4">Chào mừng bạn đến với Cloud IDE. Hãy bắt đầu bằng cách tạo dự án mới, tải lên mã nguồn có sẵn hoặc để Antigravity Agent xây dựng nguyên một dự án cho bạn.</p>
+                        <h4 class="fw-bold text-white mb-2">Btoan Studio Web IDE</h4>
+                        <p class="text-secondary small mb-4">Chào mừng bạn đến với Cloud IDE. Hãy bắt đầu bằng cách tạo dự án mới, tải lên mã nguồn có sẵn hoặc để Btoan Agent xây dựng nguyên một dự án cho bạn.</p>
                         
                         <div class="d-flex flex-column gap-2.5 ide-empty-btn-group">
                             <button onclick="openCreateProjectModal()" class="btn btn-primary btn-sm d-flex align-items-center justify-content-center gap-2 py-2">
@@ -670,22 +671,38 @@
                         </button>
                         <button id="bottomTabBtnOutput" onclick="switchBottomTab('output')" class="panel-tab-btn">Output</button>
                         <button id="bottomTabBtnTerminal" onclick="switchBottomTab('terminal')" class="panel-tab-btn active">Terminal</button>
+                        <button id="bottomTabBtnPorts" onclick="switchBottomTab('ports')" class="panel-tab-btn">
+                            Ports <span id="portsBadge" class="panel-badge-circle d-none">0</span>
+                        </button>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <div class="d-flex align-items-center text-secondary extra-small me-1">
-                            <i class="bi bi-terminal text-info me-1"></i>
-                            <span class="text-secondary extra-small font-mono">&gt;_ powershell</span>
-                        </div>
-                        <button onclick="resetTerminalSession()" class="btn-icon text-secondary" title="New / Reset Terminal Session"><i class="bi bi-plus-lg"></i></button>
-                        <button onclick="clearTerminalOutput()" class="btn-icon text-secondary" title="Clear Console (cls)"><i class="bi bi-trash"></i></button>
+                        <!-- Dynamic Terminal Session Tabs in Header -->
+                        <div id="terminalHeaderTabsContainer" class="d-flex align-items-center gap-1 me-2 overflow-x-auto" style="max-width: 320px;"></div>
+                        <button onclick="createNewTerminalSession()" class="btn-icon text-secondary" title="New Terminal Session"><i class="bi bi-plus-lg"></i></button>
+                        <button onclick="splitTerminalView()" class="btn-icon text-secondary" title="Split Terminal"><i class="bi bi-layout-split"></i></button>
+                        <button onclick="closeCurrentTerminalSession()" class="btn-icon text-secondary" title="Kill Terminal Session"><i class="bi bi-trash"></i></button>
+                        <button onclick="toggleTerminalSidebarList()" class="btn-icon text-secondary" title="Toggle Terminal Sidebar"><i class="bi bi-list-ul"></i></button>
                         <button onclick="toggleBottomPanelHeight()" class="btn-icon text-secondary" title="Maximize/Restore Height"><i class="bi bi-chevron-up"></i></button>
                         <button onclick="closeBottomPanel()" class="btn-icon text-secondary" title="Close Panel"><i class="bi bi-x-lg"></i></button>
                     </div>
                 </div>
 
-                <!-- Tab 1: Terminal Body (xterm.js Interactive Shell) -->
-                <div id="bottomTabTerminalBody" class="flex-grow-1 d-flex flex-column terminal-body-bg" style="min-height: 0; height: calc(100% - 28px); overflow: hidden; background: #181818; padding: 2px;">
-                    <div id="xtermTerminalContainer" style="width: 100%; height: 100%; min-height: 0; flex: 1 1 auto; overflow: hidden;"></div>
+                <!-- Tab 1: Terminal Body (xterm.js Interactive Shell - Multi Session + Split + Sidebar) -->
+                <div id="bottomTabTerminalBody" class="flex-grow-1 d-flex flex-row terminal-body-bg" style="min-height: 0; height: calc(100% - 28px); overflow: hidden; background: #181818;">
+                    <!-- Main Panes Container (Hỗ trợ Single / Split) -->
+                    <div id="terminalPanesWrapper" class="d-flex flex-row flex-grow-1" style="height: 100%; min-width: 0; width: 100%; overflow: hidden; padding: 2px;">
+                        <div id="xtermTerminalContainer" class="terminal-pane flex-grow-1" style="width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden;"></div>
+                    </div>
+                    <!-- Right Sessions Sidebar (ẩn mặc định để xterm rộng 100%, có thể bật/tắt) -->
+                    <div id="terminalSessionsSidebar" class="terminal-sessions-sidebar" style="display: none; width: 140px; min-width: 140px; border-left: 1px solid #282828; background: #1a1a1a; flex-direction: column;">
+                        <div class="px-2 py-1 text-secondary extra-small fw-semibold border-bottom border-dark-subtle d-flex justify-content-between align-items-center">
+                            <span>TERMINALS</span>
+                            <button onclick="createNewTerminalSession()" class="btn-icon text-secondary p-0" title="New Terminal"><i class="bi bi-plus"></i></button>
+                        </div>
+                        <div id="terminalSessionsList" class="d-flex flex-column gap-0.5 p-1 overflow-y-auto flex-grow-1">
+                            <!-- Dynamic session items -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Tab 2: Problems Body -->
@@ -699,6 +716,20 @@
                 <div id="bottomTabOutputBody" class="p-2 font-mono extra-small flex-grow-1 overflow-y-auto terminal-body-bg text-light" style="display: none; min-height: 0;">
                     <div id="outputLog">[Output channel ready]</div>
                 </div>
+
+                <!-- Tab 4: Ports Body (Dynamic Port Forwarding 5200-5299) -->
+                <div id="bottomTabPortsBody" class="p-2 font-mono extra-small flex-grow-1 overflow-y-auto terminal-body-bg" style="display: none; min-height: 0;">
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-dark-subtle">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-secondary fw-semibold">FORWARDED PORTS (5200–5299)</span>
+                            <span class="badge bg-secondary extra-small" id="portsActiveCount">0 Active</span>
+                        </div>
+                        <button onclick="loadActivePorts()" class="btn btn-sm btn-dark py-0.5 px-2 extra-small border-secondary text-info"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+                    </div>
+                    <div id="portsListTableContainer">
+                        <div class="text-secondary p-3 text-center">Chưa có ứng dụng nào đang chạy trên cổng động (5200–5299). Bấm Run App để khởi động.</div>
+                    </div>
+                </div>
             </div>
         </main>
 
@@ -711,7 +742,7 @@
             <div class="agent-panel-header">
                 <div class="d-flex align-items-center gap-1.5">
                     <i class="bi bi-stars text-info fs-6"></i>
-                    <span class="agent-header-title">ANTIGRAVITY AGENT</span>
+                    <span class="agent-header-title">BTOAN AGENT</span>
                 </div>
                 <div class="d-flex align-items-center gap-1 text-secondary">
                     <button class="btn-top-action" onclick="resetAgentChat()" title="New Task / Reset Chat"><i class="bi bi-plus-lg"></i></button>
@@ -724,7 +755,7 @@
                 <div class="copilot-sparkle-icon">
                     <i class="bi bi-stars"></i>
                 </div>
-                <div class="chat-splash-title">Antigravity Coding Agent</div>
+                <div class="chat-splash-title">Btoan AI Agent</div>
                 <div class="chat-splash-sub">Yêu cầu tạo nguyên dự án, sinh mã nguồn, tự tạo hình ảnh minh họa cho Web/App</div>
                 
                 <div class="d-flex flex-column gap-2 mt-3 w-100 px-2">
@@ -784,12 +815,12 @@
                             </button>
                             <div class="position-relative">
                                 <div id="agentModelPill" class="agent-model-pill" onclick="toggleModelDropdown(event)" title="Choose Model">
-                                    <span id="currentModelLabel">Gemini 2.5 Flash</span>
+                                    <span id="currentModelLabel">⚡ Btoan 2.5 Flash</span>
                                     <i class="bi bi-chevron-down text-secondary" style="font-size: 10px;"></i>
                                 </div>
                                 <div id="agentModelDropdown" class="agent-model-dropdown" style="display: none;">
-                                    <div class="agent-model-dropdown-item active" data-model="gemini-2.5-flash" onclick="selectAgentModel('gemini-2.5-flash', 'Gemini 2.5 Flash')">Gemini 2.5 Flash</div>
-                                    <div class="agent-model-dropdown-item" data-model="gemini-2.5-pro" onclick="selectAgentModel('gemini-2.5-pro', 'Gemini 2.5 Pro')">Gemini 2.5 Pro</div>
+                                    <div class="agent-model-dropdown-item active" data-model="gemini-2.5-flash" onclick="selectAgentModel('gemini-2.5-flash', '⚡ Btoan 2.5 Flash')">⚡ Btoan 2.5 Flash</div>
+                                    <div class="agent-model-dropdown-item" data-model="gemini-2.5-pro" onclick="selectAgentModel('gemini-2.5-pro', '🧠 Btoan 2.5 Pro')">🧠 Btoan 2.5 Pro</div>
                                 </div>
                                 <input type="hidden" id="agentModelSelect" value="gemini-2.5-flash">
                                 <input type="hidden" id="agentModeSelect" value="fast">
@@ -834,8 +865,8 @@
             <div class="status-bar-item">
                 <span class="text-secondary me-1">{ }</span> <span id="statusLanguage">C#</span>
             </div>
-            <div class="status-bar-item text-info fw-semibold" title="Powered by Google Antigravity">
-                Antigravity
+            <div class="status-bar-item text-info fw-semibold" title="Btoan Agent & Studio IDE">
+                Btoan Agent
             </div>
             <div class="status-bar-item"><i class="bi bi-bell"></i></div>
         </div>
@@ -1034,11 +1065,11 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content bg-dark text-light border-secondary">
                 <div class="modal-header border-secondary py-2.5 px-3" style="background-color: #252526;">
-                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-book text-primary me-2"></i> Chào mừng đến với Btoan Antigravity IDE</h5>
+                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-book text-primary me-2"></i> Chào mừng đến với Btoan Studio IDE</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-3 small">
-                    <p class="text-light mb-2">Môi trường phát triển trực tuyến đám mây kết hợp Trí tuệ Nhân tạo Antigravity Agent:</p>
+                    <p class="text-light mb-2">Môi trường phát triển trực tuyến đám mây kết hợp Trí tuệ Nhân tạo Btoan Agent:</p>
                     <ul class="text-secondary mb-3 extra-small">
                         <li class="mb-1"><b class="text-white">Workspace riêng biệt:</b> Dữ liệu dự án của mỗi tài khoản được cô lập an toàn trong thư mục riêng.</li>
                         <li class="mb-1"><b class="text-white">Full-Project Scaffolding:</b> Ra lệnh cho Agent tạo nguyên dự án với nhiều file và thư mục cùng lúc.</li>
@@ -1069,7 +1100,7 @@
                     </div>
                     <div class="d-flex justify-content-between py-1.5 border-bottom border-dark-subtle">
                         <span class="text-secondary">AI Agent Model:</span>
-                        <span class="text-info fw-semibold">Gemini 2.5 Flash / Pro</span>
+                        <span class="text-info fw-semibold">Btoan 2.5 Flash / Pro</span>
                     </div>
                     <div class="d-flex justify-content-between py-1.5">
                         <span class="text-secondary">Active Workspace:</span>
@@ -1085,9 +1116,9 @@
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content bg-dark text-light border-secondary text-center p-3">
                 <div class="my-2"><i class="bi bi-stars text-info fs-1"></i></div>
-                <h5 class="fw-bold text-white mb-1">Btoan Antigravity IDE</h5>
-                <div class="extra-small text-secondary mb-3">Phiên bản 2.5.0 (Dark Modern)</div>
-                <p class="extra-small text-secondary mb-3">Xây dựng trên nền tảng .NET 10, Monaco Editor và Google Gemini Agent.</p>
+                <h5 class="fw-bold text-white mb-1">Btoan Studio IDE</h5>
+                <div class="extra-small text-secondary mb-3">Phiên bản 3.0.0 (Dark Modern)</div>
+                <p class="extra-small text-secondary mb-3">Xây dựng trên nền tảng .NET 10, Monaco Editor và Btoan AI Agent.</p>
                 <button type="button" class="btn btn-sm btn-outline-secondary extra-small w-100" data-bs-dismiss="modal">Đóng</button>
             </div>
         </div>
@@ -1201,6 +1232,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=2.7.5" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=3.0.0" asp-append-version="true"></script>
 </body>
 </html>

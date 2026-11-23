@@ -12,7 +12,7 @@
   <!-- 2. Title + Icon -->
   <title>Btoan AI</title>
   <base href="/">
-  <link rel="icon" href="favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
   <!-- 3. CSS Library -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -26,7 +26,7 @@
   <!-- 4. CSS Local -->
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=21">
-  <link rel="stylesheet" href="css/main_style.css?v=21">
+  <link rel="stylesheet" href="css/main_style.css?v=26">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -471,6 +471,38 @@
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    // Early inline definitions to prevent ReferenceError before app.js is ready
+    window.toggleTheme = function() {
+      const cur = document.documentElement.getAttribute("data-theme") || "light";
+      const next = cur === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("appTheme", next);
+      const icon = document.getElementById("themeToggleIcon");
+      if (icon) icon.className = next === "dark" ? "bi bi-sun-fill fs-6" : "bi bi-moon-stars fs-6";
+      const btn = document.getElementById("themeToggleBtn");
+      if (btn) btn.title = next === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối";
+    };
+    window.toggleUserMenu = function() {
+      const m = document.getElementById("userMenu");
+      if (m) m.style.display = m.style.display === "block" ? "none" : "block";
+    };
+    window.closeUserMenu = function() {
+      const m = document.getElementById("userMenu");
+      if (m) m.style.display = "none";
+    };
+    window.triggerGoogleSignIn = function() {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        google.accounts.id.initialize({
+          client_id: "988870371741-2qt9rtkb37oo71dmtst492j2unvfo569.apps.googleusercontent.com",
+          callback: window.handleGoogleLogin || function(r){ console.log("GSI response", r); }
+        });
+        google.accounts.id.prompt();
+      } else {
+        alert("Google Sign-In đang khởi tạo hoặc không khả dụng trên môi trường cục bộ.");
+      }
+    };
+  </script>
 </head>
 
 <body>
@@ -499,11 +531,11 @@
           <div id="face-login-status"></div>
           <div class="switch-auth">Chưa có tài khoản? <span onclick="showRegisterForm()">Đăng ký</span></div>
           <p>or login with social platforms</p>
-          <div class="social-icons">
-            <div id="g_id_onload"
-              data-client_id="988870371741-2qt9rtkb37oo71dmtst492j2unvfo569.apps.googleusercontent.com"
-              data-callback="handleGoogleLogin" data-auto_prompt="false"></div>
-            <div class="g_id_signin" data-type="standard" data-size="large"></div>
+          <div class="social-icons d-flex justify-content-center">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 extra-small d-inline-flex align-items-center gap-2" onclick="triggerGoogleSignIn()">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+              <span>Đăng nhập với Google</span>
+            </button>
           </div>
         </form>
       </div>
@@ -527,11 +559,11 @@
           <button type="submit" class="btn">Register</button>
           <div class="switch-auth">Đã có tài khoản? <span onclick="showLoginForm()">Đăng nhập</span></div>
           <p>or register with social platforms</p>
-          <div class="social-icons">
-            <div id="g_id_onload"
-              data-client_id="988870371741-2qt9rtkb37oo71dmtst492j2unvfo569.apps.googleusercontent.com"
-              data-callback="handleGoogleLogin" data-auto_prompt="false"></div>
-            <div class="g_id_signin" data-type="standard" data-size="large"></div>
+          <div class="social-icons d-flex justify-content-center">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 extra-small d-inline-flex align-items-center gap-2" onclick="triggerGoogleSignIn()">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+              <span>Đăng nhập với Google</span>
+            </button>
           </div>
         </form>
       </div>
@@ -561,9 +593,7 @@
           <!-- BRAND LOGO -->
           <div class="sidebar-brand-wrapper d-flex align-items-center justify-content-between mb-3">
             <div class="sidebar-brand d-flex align-items-center gap-2.5">
-              <div class="brand-badge d-flex align-items-center justify-content-center">
-                <i class="bi bi-cpu-fill"></i>
-              </div>
+              <img src="/favicon.svg" alt="Btoan AI" width="30" height="30" style="filter: drop-shadow(0 2px 8px rgba(99,102,241,0.5));">
               <span class="brand-title fw-bold text-nowrap">Btoan AI</span>
             </div>
             <button class="icon-toggle-btn d-md-none border-0 bg-transparent text-muted" onclick="toggleSidebar()" title="Đóng sidebar">
@@ -577,66 +607,50 @@
             <span>+ Chat mới</span>
           </button>
 
-          <!-- NAV MENU (AI AGENT, CODE, IMAGE, KNOWLEDGE) -->
+          <!-- NAV MENU (BTOAN AGENT, STUDIO IDE, IMAGE, KNOWLEDGE) -->
           <div class="sidebar-menu-nav d-flex flex-column gap-1 mb-2">
-            <!-- AI AGENT COLLAPSIBLE MENU -->
+            <!-- BTOAN AI AGENT COLLAPSIBLE MENU -->
             <div class="nav-item-group">
-              <a href="/agent" class="nav-item d-flex align-items-center justify-content-between px-3 py-2 rounded-3 hover-bg-light text-decoration-none">
+              <a href="/agent" class="nav-item d-flex align-items-center justify-content-between px-3 py-2 rounded-3 text-decoration-none">
                 <div class="d-flex align-items-center gap-2.5">
                   <i class="bi bi-robot text-indigo fs-5"></i>
-                  <span class="fw-semibold small text-dark">🤖 Cursor AI Agent</span>
+                  <span class="fw-semibold small sidebar-item-title">Btoan AI Agent</span>
                 </div>
                 <span class="badge bg-indigo-50 text-indigo extra-small">IDE</span>
               </a>
               <div class="collapse ms-3 mt-1 show" id="aiAgentSubmenu">
                 <div class="d-flex flex-column gap-1 border-start ps-2">
-                  <a href="/agent" class="nav-subitem px-2.5 py-1.5 rounded-2 text-secondary small hover-text-indigo text-decoration-none">📌 Sửa code & Build thật</a>
-                  <a href="/agent" class="nav-subitem px-2.5 py-1.5 rounded-2 text-secondary small hover-text-indigo text-decoration-none">📊 Project Explorer IDE</a>
-                  <a href="/agent" class="nav-subitem px-2.5 py-1.5 rounded-2 text-secondary small hover-text-indigo text-decoration-none">⚡ Quét Diff & Auto-Fix</a>
+                  <a href="/agent" class="nav-subitem px-2.5 py-1.5 rounded-2 small text-decoration-none"><i class="bi bi-code-slash me-1"></i>Sửa code & Build thật</a>
+                  <a href="/agent" class="nav-subitem px-2.5 py-1.5 rounded-2 small text-decoration-none"><i class="bi bi-folder2-open me-1"></i>Project Explorer IDE</a>
+                  <a href="/agent" class="nav-subitem px-2.5 py-1.5 rounded-2 small text-decoration-none"><i class="bi bi-lightning-charge me-1"></i>Quét Diff & Auto-Fix</a>
                 </div>
               </div>
             </div>
 
-            <!-- CODE ASSISTANT -->
-            <a href="/agent" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 hover-bg-light text-decoration-none">
-              <i class="bi bi-code-square text-indigo fs-5"></i>
-              <span class="fw-semibold small text-dark">💻 Agent Studio IDE</span>
+            <!-- BTOAN STUDIO IDE -->
+            <a href="/agent" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none">
+              <i class="bi bi-terminal text-indigo fs-5"></i>
+              <span class="fw-semibold small sidebar-item-title">Btoan Studio IDE</span>
             </a>
 
             <!-- IMAGE CREATOR -->
-            <a href="#" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 hover-bg-light text-decoration-none" onclick="quickPrompt('Tạo ảnh AI từ mô tả: ')">
+            <a href="#" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none" onclick="quickPrompt('Tạo ảnh AI từ mô tả: ')">
               <i class="bi bi-palette text-indigo fs-5"></i>
-              <span class="fw-semibold small text-dark">🖼 Image Creator</span>
+              <span class="fw-semibold small sidebar-item-title">Tạo ảnh AI</span>
             </a>
 
             <!-- KNOWLEDGE BASE -->
-            <a href="#" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 hover-bg-light text-decoration-none" onclick="quickPrompt('Tra cứu thông tin tài liệu và kiến thức')">
+            <a href="#" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none" onclick="quickPrompt('Tra cứu thông tin tài liệu và kiến thức')">
               <i class="bi bi-journal-text text-indigo fs-5"></i>
-              <span class="fw-semibold small text-dark">📚 Knowledge Base</span>
+              <span class="fw-semibold small sidebar-item-title">Kho tri thức & Tài liệu</span>
             </a>
           </div>
         </div>
 
         <!-- CHAT HISTORY LIST SECTION -->
         <div class="sidebar-history-container flex-grow-1 d-flex flex-column overflow-hidden px-2 border-top pt-2">
-          <div class="sidebar-title px-3 py-1.5 text-muted fw-bold extra-small text-uppercase tracking-wider">Lịch sử chat</div>
+          <div class="sidebar-title px-3 py-1.5 fw-bold extra-small text-uppercase tracking-wider">Lịch sử chat</div>
           <div id="historyList" class="history-list-wrapper flex-grow-1 overflow-y-auto px-1"></div>
-        </div>
-
-        <!-- SIDEBAR FOOTER (USER PROFILE CARD) -->
-        <div class="sidebar-footer border-top p-2 mt-auto">
-          <div class="sidebar-user-card d-flex align-items-center justify-content-between p-2 rounded-3" onclick="handleUserCardClick()">
-            <div class="d-flex align-items-center gap-2.5 overflow-hidden">
-              <div id="sidebarUserAvatar" class="user-avatar-circle fw-bold flex-shrink-0">U</div>
-              <div class="user-meta overflow-hidden">
-                <div id="sidebarUserName" class="user-name-text fw-semibold text-truncate text-nowrap">User</div>
-                <div id="sidebarUserRole" class="user-role-text text-muted text-nowrap">Btoan AI Member</div>
-              </div>
-            </div>
-            <button id="sidebarLogoutBtn" class="btn-logout-sidebar border-0 bg-transparent text-muted p-1" onclick="event.stopPropagation(); handleSidebarAction();" title="Đăng xuất">
-              <i class="bi bi-box-arrow-right fs-5"></i>
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -645,62 +659,54 @@
       <!-- MAIN CONTENT AREA (flex: 1) -->
       <div class="main-content-container chat-main flex-grow-1 d-flex flex-column h-100 overflow-hidden">
         
-        <!-- HEADER (FIXED 70px) -->
+        <!-- HEADER (FIXED 56px) -->
         <header class="topbar">
-          <div class="topbar-left">
+          <div class="topbar-left d-flex align-items-center gap-2">
             <button class="icon-toggle-btn border-0 bg-transparent text-secondary p-1 rounded-3 d-md-none" id="openSidebarBtn" onclick="toggleSidebar()" title="Mở sidebar">
               <i class="bi bi-layout-sidebar fs-5"></i>
             </button>
-            <div class="d-flex align-items-center gap-2">
-              <div class="brand-badge d-flex align-items-center justify-content-center" style="width:28px; height:28px; font-size:14px;">
-                <i class="bi bi-cpu-fill"></i>
-              </div>
+            <div id="headerBrandLogo" class="d-flex align-items-center gap-2 header-brand-logo me-1">
+              <img src="/favicon.svg" alt="Btoan AI" width="26" height="26" style="filter: drop-shadow(0 2px 6px rgba(99,102,241,0.5));">
               <span class="brand-text">Btoan AI</span>
             </div>
-          </div>
 
-          <div class="topbar-center d-flex align-items-center gap-2">
-            <!-- MODEL SELECTOR DROPDOWN PILL -->
+            <!-- MODEL SELECTOR DROPDOWN PILL (LEFT SIDE) -->
             <div class="dropdown d-inline-block">
               <button class="model-selector-btn btn btn-light border btn-sm rounded-pill" id="modelSelectorBtn" data-bs-toggle="dropdown" aria-expanded="false">
                 <span id="modeStatus" class="mode-status-span">
-                  <img src="img/fast_logo.png?v=10" class="mode-icon">
-                  <span class="mode-text">⚡ Fast</span>
+                  <span class="mode-text fw-semibold">⚡ Btoan 2.5 Flash</span>
                 </span>
-                <i class="bi bi-chevron-down text-muted ms-1" style="font-size: 0.75rem;"></i>
+                <i class="bi bi-chevron-down dropdown-chevron-icon ms-1" style="font-size: 0.75rem;"></i>
               </button>
               <ul class="dropdown-menu shadow-lg border-0 rounded-4 p-2 mt-1">
                 <li>
                   <button class="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-3" onclick="setMode('fast')">
-                    <img src="img/fast_logo.png?v=10" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
+                    <span class="fs-5">⚡</span>
                     <div>
-                      <div class="fw-semibold text-dark small text-nowrap">⚡ Btoan AI Fast</div>
-                      <div class="text-muted" style="font-size: 0.7rem;">Phản hồi tức thì, phù hợp giao tiếp hàng ngày</div>
+                      <div class="fw-semibold text-dark small text-nowrap">⚡ Btoan 2.5 Flash</div>
+                      <div class="text-muted" style="font-size: 0.7rem;">Phản hồi tức thì (&lt; 1s), tối ưu giao tiếp hàng ngày</div>
                     </div>
                   </button>
                 </li>
                 <li>
                   <button class="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-3 mt-1" onclick="setMode('thinking')">
-                    <img src="img/thinking_logo.png?v=10" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;">
+                    <span class="fs-5">🧠</span>
                     <div>
-                      <div class="fw-semibold text-dark small text-nowrap">🧠 Btoan AI Thinking</div>
-                      <div class="text-muted" style="font-size: 0.7rem;">Suy luận chuyên sâu, bài toán phức tạp</div>
+                      <div class="fw-semibold text-dark small text-nowrap">🧠 Btoan 2.5 Pro</div>
+                      <div class="text-muted" style="font-size: 0.7rem;">Suy luận chuyên sâu, lập trình & bài toán phức tạp</div>
                     </div>
                   </button>
                 </li>
               </ul>
             </div>
-
-            <!-- DARK / LIGHT MODE TOGGLE BUTTON -->
-            <button id="themeToggleBtn" onclick="toggleTheme()" class="btn btn-light border btn-sm rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Chuyển chế độ Sáng / Tối">
-              <i id="themeToggleIcon" class="bi bi-moon-stars text-secondary fs-6"></i>
-            </button>
-
-            <!-- UPDATE VERSION BADGE -->
-            <span id="updateVersionBadge" class="badge rounded-pill bg-danger text-white px-2 py-1 fw-bold shadow-sm" style="font-size: 0.85rem;" title="Phiên bản cập nhật">8</span>
           </div>
 
-          <div class="topbar-right">
+          <div class="topbar-right d-flex align-items-center gap-2">
+            <!-- SLEEK THEME TOGGLE ICON BUTTON -->
+            <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-circle-btn" title="Chuyển đổi giao diện Sáng / Tối">
+              <i id="themeToggleIcon" class="bi bi-moon-stars"></i>
+            </button>
+
             <div id="guestLoginBox" class="guest-login-box">
               <button onclick="openLoginModal()" class="btn btn-primary btn-sm rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5 shadow-sm" style="font-size: 0.85rem;">
                 <i class="bi bi-box-arrow-in-right fs-6"></i>
@@ -711,15 +717,23 @@
               <div class="user-info" onclick="toggleUserMenu()">
                 <div id="userAvatar" class="avatar-sm">U</div>
                 <span id="userName" class="user-name">User</span>
-                <i class="bi bi-chevron-down text-muted small ms-1"></i>
+                <i class="bi bi-chevron-down dropdown-chevron-icon small ms-1"></i>
               </div>
-              <div id="userMenu" class="user-menu shadow-lg border-0 rounded-4 p-2 position-absolute end-0 mt-1 bg-white" style="display:none; z-index:1050; min-width: 180px;">
-                <div class="menu-item-premium d-flex align-items-center gap-2 py-2 px-3 rounded-3 hover-bg-light cursor-pointer" onclick="openProfile()">
-                  <i class="bi bi-person text-indigo fs-6"></i>
+              <div id="userMenu" class="user-menu shadow-lg border-0 rounded-4 p-2 position-absolute end-0 mt-1" style="display:none; z-index:1050; min-width: 210px;">
+                <div class="menu-item-premium d-flex align-items-center gap-2" onclick="closeUserMenu(); openProfile('profile')">
+                  <i class="bi bi-person-gear fs-6"></i>
                   <span class="text-nowrap">Hồ sơ cá nhân</span>
                 </div>
+                <div class="menu-item-premium d-flex align-items-center gap-2" onclick="closeUserMenu(); openProfile('ai')">
+                  <i class="bi bi-sliders fs-6"></i>
+                  <span class="text-nowrap">Cá nhân hóa AI</span>
+                </div>
+                <div class="menu-item-premium d-flex align-items-center gap-2" onclick="closeUserMenu(); openProfile('display')">
+                  <i class="bi bi-palette fs-6"></i>
+                  <span class="text-nowrap">Giao diện & Cài đặt</span>
+                </div>
                 <div class="menu-item-divider my-1 border-top"></div>
-                <div class="menu-item-premium text-danger d-flex align-items-center gap-2 py-2 px-3 rounded-3 hover-bg-light cursor-pointer" onclick="logout()">
+                <div class="menu-item-premium menu-item-logout d-flex align-items-center gap-2" onclick="closeUserMenu(); logout()">
                   <i class="bi bi-box-arrow-right fs-6"></i>
                   <span class="text-nowrap">Đăng xuất</span>
                 </div>
@@ -728,59 +742,66 @@
           </div>
         </header>
 
-        <!-- CHAT STREAM AREA & WELCOME SCREEN -->
-        <main id="chat" class="chat-viewport flex-grow-1 p-3 p-md-4 overflow-y-auto">
+        <!-- CHAT STREAM AREA & WELCOME SCREEN (100% WIDTH SCROLLBAR AT RIGHT EDGE) -->
+        <div id="chatScrollWrapper" class="chat-scroll-wrapper flex-grow-1 w-100 overflow-y-auto">
           <!-- WELCOME SCREEN (SHOWN WHEN NO MESSAGES YET) -->
-          <div id="welcome-screen" class="welcome-container text-center my-auto py-4 px-2">
-            <div class="welcome-badge d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill mb-3">
-              <i class="bi bi-sparkles text-indigo"></i>
-              <span class="small fw-semibold text-indigo">Trợ lý AI thế hệ mới</span>
+          <div id="welcome-screen" class="welcome-container text-center my-auto py-5 px-3">
+            <div class="welcome-hero-logo mb-3">
+              <div class="hero-logo-glow mx-auto d-inline-flex align-items-center justify-content-center p-3 rounded-4 shadow-sm" style="background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, rgba(124,58,237,0.08) 70%, transparent 100%);">
+                <img src="/favicon.svg" alt="Btoan AI" width="48" height="48" style="filter: drop-shadow(0 4px 16px rgba(99,102,241,0.55));">
+              </div>
             </div>
-            <h1 class="welcome-title fw-bold text-dark mb-2">Chào mừng đến Btoan AI</h1>
+            <div class="welcome-badge d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill mb-2">
+              <i class="bi bi-sparkles text-indigo"></i>
+              <span class="small fw-semibold text-indigo">Btoan AI 2.5 — Trợ lý Thông minh</span>
+            </div>
+            <h1 id="welcomeGreetingTitle" class="welcome-title fw-bold mb-2">Xin chào bạn, hôm nay mình giúp gì được cho bạn?</h1>
             <p class="welcome-subtitle text-muted mb-4 fs-6">
-              Hệ thống hỗ trợ Lập trình, Tạo ảnh AI, Phân tích dữ liệu & Tự động hóa tác vụ.
+              Hệ thống hỗ trợ Lập trình Senior, Tạo ảnh AI chân thực, Phân tích dữ liệu & Tự động hóa tác vụ.
             </p>
 
             <div class="welcome-cards-grid row g-3 justify-content-center mx-auto" style="max-width: 720px;">
               <div class="col-6 col-md-6">
-                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Viết giúp tôi một hàm JavaScript sắp xếp mảng bất đồng bộ')">
+                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Giải thích và tối ưu thuật toán tìm kiếm nhị phân bằng C#', true)">
                   <div class="card-icon-wrapper mb-2 rounded-3 bg-indigo-50 text-indigo d-inline-flex align-items-center justify-content-center p-2">
                     <i class="bi bi-code-slash fs-4"></i>
                   </div>
-                  <div class="fw-bold text-dark small mb-1">💻 Coding</div>
-                  <div class="text-muted extra-small">Viết code, debug & tối ưu thuật toán</div>
+                  <div class="fw-bold small mb-1 card-title">💡 Lập trình &amp; Fix lỗi code</div>
+                  <div class="text-muted extra-small card-desc">Giải thích và tối ưu thuật toán tìm kiếm nhị phân bằng C#</div>
                 </div>
               </div>
               <div class="col-6 col-md-6">
-                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Tạo ảnh một con mèo phi hành gia bơi trong không gian vũ trụ nghệ thuật digital art')">
+                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Viết bản kế hoạch kinh doanh ngắn gọn cho một ứng dụng AI', true)">
+                  <div class="card-icon-wrapper mb-2 rounded-3 bg-indigo-50 text-indigo d-inline-flex align-items-center justify-content-center p-2">
+                    <i class="bi bi-file-earmark-bar-graph fs-4"></i>
+                  </div>
+                  <div class="fw-bold small mb-1 card-title">📊 Phân tích &amp; Viết tài liệu</div>
+                  <div class="text-muted extra-small card-desc">Viết bản kế hoạch kinh doanh ngắn gọn cho một ứng dụng AI</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-6">
+                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Vẽ một thành phố tương lai cyberpunk rực rỡ dưới mưa ban đêm', true)">
                   <div class="card-icon-wrapper mb-2 rounded-3 bg-indigo-50 text-indigo d-inline-flex align-items-center justify-content-center p-2">
                     <i class="bi bi-palette-fill fs-4"></i>
                   </div>
-                  <div class="fw-bold text-dark small mb-1">🖼 Image Generation</div>
-                  <div class="text-muted extra-small">Vẽ ảnh AI bằng tiếng Việt chân thực</div>
+                  <div class="fw-bold small mb-1 card-title">🎨 Sáng tạo hình ảnh AI</div>
+                  <div class="text-muted extra-small card-desc">Vẽ một thành phố tương lai cyberpunk rực rỡ dưới mưa ban đêm</div>
                 </div>
               </div>
               <div class="col-6 col-md-6">
-                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Lập kế hoạch phân tích dữ liệu kinh doanh và tự động hóa tác vụ')">
+                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Tạo bảng theo dõi chi tiêu cá nhân chi tiết hàng tháng', true)">
                   <div class="card-icon-wrapper mb-2 rounded-3 bg-indigo-50 text-indigo d-inline-flex align-items-center justify-content-center p-2">
-                    <i class="bi bi-robot fs-4"></i>
+                    <i class="bi bi-table fs-4"></i>
                   </div>
-                  <div class="fw-bold text-dark small mb-1">🤖 AI Agent</div>
-                  <div class="text-muted extra-small">Tự động phân tích & lập lịch làm việc</div>
-                </div>
-              </div>
-              <div class="col-6 col-md-6">
-                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Tóm tắt kiến thức quan trọng về trí tuệ nhân tạo và Machine Learning')">
-                  <div class="card-icon-wrapper mb-2 rounded-3 bg-indigo-50 text-indigo d-inline-flex align-items-center justify-content-center p-2">
-                    <i class="bi bi-journal-bookmark-fill fs-4"></i>
-                  </div>
-                  <div class="fw-bold text-dark small mb-1">📚 Learning</div>
-                  <div class="text-muted extra-small">Hỏi đáp kiến thức & tóm tắt tài liệu</div>
+                  <div class="fw-bold small mb-1 card-title">📈 Bảng tính &amp; Báo cáo</div>
+                  <div class="text-muted extra-small card-desc">Tạo bảng theo dõi chi tiêu cá nhân chi tiết hàng tháng</div>
                 </div>
               </div>
             </div>
           </div>
-        </main>
+
+          <main id="chat" class="chat-viewport"></main>
+        </div>
 
         <!-- Scroll to Bottom Button -->
         <button id="scrollToBottomBtn" class="scroll-bottom-btn" title="Cuộn xuống dưới">
@@ -799,7 +820,7 @@
               <input id="fileDoc" type="file" accept=".txt,.md,.csv,.json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
 
               <div class="dropdown">
-                <button class="btn btn-attach-plus text-muted rounded-circle p-2 d-flex align-items-center justify-content-center" data-bs-toggle="dropdown" title="Tính năng đính kèm">
+                <button class="btn btn-attach-plus rounded-circle p-2 d-flex align-items-center justify-content-center" data-bs-toggle="dropdown" title="Tính năng đính kèm">
                   <i class="bi bi-plus-lg fs-5"></i>
                 </button>
                 <ul class="dropdown-menu shadow-lg border-0 rounded-4 p-2 mb-2">
@@ -826,12 +847,22 @@
 
               <textarea id="msg" class="form-control border-0 bg-transparent px-2 py-1 chat-input-textarea" placeholder="Hỏi Btoan AI bất kỳ điều gì..." rows="1"></textarea>
 
+              <button id="micBtn" type="button" class="btn btn-mic-circle rounded-circle d-flex align-items-center justify-content-center" onclick="toggleVoiceInput()" title="Nhập bằng giọng nói (Voice Input)">
+                <svg id="micSvg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+                <i id="micIcon" class="bi bi-mic fs-5 d-none"></i>
+              </button>
+
               <button id="send" class="btn btn-send-circle rounded-circle d-flex align-items-center justify-content-center" title="Gửi tin nhắn">
                 <i class="bi bi-arrow-up-short fs-3"></i>
               </button>
             </div>
           </div>
-          <div class="input-disclaimer text-center text-muted small mt-1">
+          <div class="input-disclaimer text-center small mt-1">
             Btoan AI có thể mắc lỗi. Hãy kiểm tra thông tin quan trọng. Mọi thắc mắc liên hệ <a style="color: #4f46e5; text-decoration: none;" href="https://github.com/btoan2802" target="_blank">Admin</a>
           </div>
         </div>
@@ -871,23 +902,296 @@
     </div>
   </div>
 
-  <!-- C. PROFILE MODAL -->
-  <div id="profileModal" class="profile-modal" style="display:none">
-    <div class="profile-card">
-      <div class="avatar-upload">
-        <div id="avatarPreview" class="avatar-preview">U</div>
-        <input type="file" id="avatarInput" accept="image/*" style="display:none">
-        <button onclick="document.getElementById('avatarInput').click()" class="btn btn-light btn-sm mt-2">Đổi ảnh</button>
+  <!-- C. SETTINGS & PROFILE MODAL (760px, 4 TABS) -->
+  <div id="profileModal" class="profile-modal" style="display:none;" onclick="if(event.target===this) closeProfile();">
+    <div class="settings-modal-card bg-white rounded-4 shadow-lg position-relative overflow-hidden" style="width: 760px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column;">
+      
+      <!-- Modal Header -->
+      <div class="modal-header-tabs px-4 py-3 border-bottom d-flex align-items-center justify-content-between bg-body-tertiary flex-shrink-0">
+        <div class="d-flex align-items-center gap-2.5">
+          <img src="/favicon.svg" width="28" height="28" alt="Btoan AI" style="filter: drop-shadow(0 2px 8px rgba(99,102,241,0.4));">
+          <div>
+            <div class="fw-bold fs-6 text-dark profile-title" style="line-height:1.2;">Cài đặt & Hồ sơ Btoan AI</div>
+            <div class="text-muted extra-small" style="font-size:0.75rem;">Quản lý tài khoản, cá nhân hóa AI & giao diện</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close" onclick="closeProfile()" title="Đóng"></button>
       </div>
-      <div class="profile-title">Thông tin cá nhân</div>
-      <div id="profileMsg" class="text-danger mb-2"></div>
-      <input id="pf_name" class="form-control mb-2" placeholder="Họ và tên">
-      <input id="pf_dob" class="form-control mb-3" placeholder="dd/mm/yyyy">
-      <button type="button" id="face-enroll-btn-profile" class="btn btn-face-enroll w-100 mb-3"
-        style="background: #edf2ff; color: #7494ec; border: none; font-size: 14px; height: 40px;">
-        <i class='bx bx-face'></i> Thiết lập khuôn mặt (FaceID)
-      </button>
-      <button onclick="saveProfile()" class="btn btn-primary w-100">Lưu thay đổi</button>
+
+      <!-- 4 Tabs Nav -->
+      <div class="settings-tab-nav px-4 pt-2 border-bottom bg-white d-flex gap-2 overflow-x-auto flex-shrink-0">
+        <button type="button" id="tabBtn-profile" class="settings-nav-pill active btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5" onclick="switchSettingsTab('profile')">
+          <i class="bi bi-person-badge"></i>
+          <span>Hồ sơ & Bảo mật</span>
+        </button>
+        <button type="button" id="tabBtn-ai" class="settings-nav-pill btn btn-sm rounded-pill px-3 py-1.5 text-secondary fw-semibold d-flex align-items-center gap-1.5" onclick="switchSettingsTab('ai')">
+          <i class="bi bi-cpu"></i>
+          <span>Cá nhân hóa AI</span>
+        </button>
+        <button type="button" id="tabBtn-data" class="settings-nav-pill btn btn-sm rounded-pill px-3 py-1.5 text-secondary fw-semibold d-flex align-items-center gap-1.5" onclick="switchSettingsTab('data')">
+          <i class="bi bi-database"></i>
+          <span>Bộ nhớ & Dữ liệu</span>
+        </button>
+        <button type="button" id="tabBtn-display" class="settings-nav-pill btn btn-sm rounded-pill px-3 py-1.5 text-secondary fw-semibold d-flex align-items-center gap-1.5" onclick="switchSettingsTab('display')">
+          <i class="bi bi-sliders"></i>
+          <span>Giao diện & Giọng nói</span>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="settings-modal-body p-4 overflow-y-auto flex-grow-1" style="min-height: 380px;">
+        
+        <!-- Tab 1: Profile & Security -->
+        <div id="tabPane-profile" class="settings-tab-pane">
+          <div class="row g-3">
+            <div class="col-md-4 text-center border-end pe-md-3">
+              <div class="avatar-upload mx-auto mb-2">
+                <div id="avatarPreview" class="avatar-preview shadow-sm" style="width: 90px; height: 90px; border-radius: 50%; font-size: 32px; display: flex; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; margin: 0 auto; overflow: hidden; border: 3px solid #6366f1;">U</div>
+                <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="previewAvatar(this)">
+                <button type="button" onclick="document.getElementById('avatarInput').click()" class="btn btn-outline-primary btn-sm rounded-pill mt-2 px-3 extra-small">
+                  <i class="bi bi-camera me-1"></i>Đổi ảnh
+                </button>
+              </div>
+              <div class="text-muted extra-small mt-1">Ảnh vuông JPG/PNG, tối đa 2MB</div>
+            </div>
+
+            <div class="col-md-8 ps-md-3">
+              <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary mb-1">Họ và tên</label>
+                <input id="pf_name" class="form-control form-control-sm rounded-3" placeholder="Nguyễn Văn A">
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary mb-1">Email tài khoản</label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-light border-end-0"><i class="bi bi-lock-fill text-muted"></i></span>
+                  <input id="pf_email" class="form-control form-control-sm border-start-0 bg-light" placeholder="email@example.com" readonly>
+                </div>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label small fw-semibold text-secondary mb-1">Ngày sinh</label>
+                  <input id="pf_dob" class="form-control form-control-sm rounded-3" placeholder="dd/mm/yyyy">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small fw-semibold text-secondary mb-1">Tên đăng nhập</label>
+                  <input id="pf_username" class="form-control form-control-sm rounded-3 bg-light" readonly>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary mb-1">Giới thiệu ngắn (Bio)</label>
+                <textarea id="pf_bio" class="form-control form-control-sm rounded-3" rows="2" placeholder="Ví dụ: Sinh viên CNTT, đam mê AI & Fullstack..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <!-- Security Subsections -->
+          <div class="row g-3">
+            <!-- Password Change -->
+            <div class="col-md-6 border-end pe-md-3">
+              <div class="fw-bold small text-dark mb-2 d-flex align-items-center gap-1.5">
+                <i class="bi bi-shield-lock text-primary"></i>Đổi mật khẩu
+              </div>
+              <div class="mb-2">
+                <input id="pwd_old" type="password" class="form-control form-control-sm rounded-3" placeholder="Mật khẩu hiện tại">
+              </div>
+              <div class="mb-2">
+                <input id="pwd_new" type="password" class="form-control form-control-sm rounded-3" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)">
+              </div>
+              <div class="mb-2">
+                <input id="pwd_confirm" type="password" class="form-control form-control-sm rounded-3" placeholder="Xác nhận mật khẩu mới">
+              </div>
+              <button type="button" onclick="submitChangePassword()" class="btn btn-dark btn-sm rounded-pill px-3 extra-small">
+                <i class="bi bi-key me-1"></i>Cập nhật mật khẩu
+              </button>
+              <div id="pwdStatusMsg" class="extra-small mt-1"></div>
+            </div>
+
+            <!-- FaceID -->
+            <div class="col-md-6 ps-md-3">
+              <div class="fw-bold small text-dark mb-2 d-flex align-items-center justify-content-between">
+                <span class="d-flex align-items-center gap-1.5"><i class="bi bi-person-bounding-box text-success"></i>Xác thực khuôn mặt (FaceID)</span>
+                <span id="faceIdStatusBadge" class="badge bg-secondary-subtle text-secondary extra-small">Chưa bật</span>
+              </div>
+              <p class="text-muted extra-small mb-3">Đăng nhập nhanh không cần mật khẩu bằng camera khuôn mặt có đối chiếu AI.</p>
+              <div class="d-flex flex-column gap-2">
+                <button type="button" id="face-enroll-btn-profile" class="btn btn-outline-success btn-sm rounded-pill px-3 extra-small d-flex align-items-center justify-content-center gap-1.5">
+                  <i class="bi bi-camera-video"></i><span>Thiết lập / Quét lại FaceID</span>
+                </button>
+                <button type="button" id="face-delete-btn-profile" onclick="deleteFaceData()" class="btn btn-outline-danger btn-sm rounded-pill px-3 extra-small d-flex align-items-center justify-content-center gap-1.5" style="display:none;">
+                  <i class="bi bi-trash"></i><span>Xóa dữ liệu FaceID</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: AI Personalization -->
+        <div id="tabPane-ai" class="settings-tab-pane" style="display:none;">
+          <div class="mb-4">
+            <label class="form-label small fw-bold text-dark mb-1">Mô hình AI mặc định khi mở chat</label>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="model-choice-card border rounded-3 p-3 d-flex align-items-center gap-2 cursor-pointer w-100" id="cardModelFlash">
+                  <input type="radio" name="defaultModelRadio" value="btoan-2.5-flash" id="radioModelFlash" class="form-check-input mt-0" checked>
+                  <div>
+                    <div class="fw-bold small text-dark">⚡ Btoan 2.5 Flash</div>
+                    <div class="text-muted extra-small">Tốc độ cực nhanh (&lt; 1s), tối ưu giao tiếp hàng ngày</div>
+                  </div>
+                </label>
+              </div>
+              <div class="col-6">
+                <label class="model-choice-card border rounded-3 p-3 d-flex align-items-center gap-2 cursor-pointer w-100" id="cardModelPro">
+                  <input type="radio" name="defaultModelRadio" value="btoan-2.5-pro" id="radioModelPro" class="form-check-input mt-0">
+                  <div>
+                    <div class="fw-bold small text-dark">🧠 Btoan 2.5 Pro</div>
+                    <div class="text-muted extra-small">Suy luận sâu, giải quyết bài toán & code phức tạp</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-bold text-dark mb-0">Hướng dẫn tùy chỉnh (Custom Instructions)</label>
+              <span class="text-muted extra-small">AI sẽ luôn tuân thủ nguyên tắc này</span>
+            </div>
+            <textarea id="ai_custom_instructions" class="form-control rounded-3 font-monospace small" rows="4" placeholder="Ví dụ: Luôn trả lời súc tích, ưu tiên code C# / .NET 10 và TypeScript. Xưng hô là 'bạn - tôi'..."></textarea>
+            
+            <!-- Quick Chips -->
+            <div class="d-flex flex-wrap gap-1.5 mt-2">
+              <span class="badge bg-light text-secondary border cursor-pointer hover-shadow extra-small py-1 px-2" onclick="appendInstructionChip('Luôn trả lời ngắn gọn, đi thẳng vào vấn đề, không giải thích dài dòng.')">🎯 Ngắn gọn & Súc tích</span>
+              <span class="badge bg-light text-secondary border cursor-pointer hover-shadow extra-small py-1 px-2" onclick="appendInstructionChip('Ưu tiên viết mã nguồn C# .NET 10 và clean architecture chuẩn senior.')">💻 Senior C# / .NET</span>
+              <span class="badge bg-light text-secondary border cursor-pointer hover-shadow extra-small py-1 px-2" onclick="appendInstructionChip('Giải thích từng bước dễ hiểu bằng ví dụ minh họa trực quan.')">📚 Giải thích sư phạm</span>
+              <span class="badge bg-light text-secondary border cursor-pointer hover-shadow extra-small py-1 px-2" onclick="appendInstructionChip('Ưu tiên định dạng bảng số liệu và Markdown phân cấp rõ ràng.')">📊 Bảng biểu & Báo cáo</span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-bold text-dark mb-0">Độ sáng tạo / Nhiệt độ (Temperature)</label>
+              <span id="tempValueLabel" class="badge bg-indigo-subtle text-indigo fw-bold">0.7</span>
+            </div>
+            <input type="range" class="form-range" id="ai_temperature" min="0.1" max="1.0" step="0.05" value="0.7" oninput="document.getElementById('tempValueLabel').innerText = this.value">
+            <div class="d-flex justify-content-between text-muted extra-small">
+              <span>0.1 (Chính xác, Logic, Nghiêm túc)</span>
+              <span>1.0 (Sáng tạo, Biến hóa linh hoạt)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Memory & Data -->
+        <div id="tabPane-data" class="settings-tab-pane" style="display:none;">
+          <div class="card p-3 rounded-3 border mb-3 bg-light-subtle">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div>
+                <div class="fw-bold small text-dark"><i class="bi bi-clock-history text-indigo me-1.5"></i>Bộ nhớ dài hạn (Long-term Memory)</div>
+                <div class="text-muted extra-small">Cho phép AI ghi nhớ các thông tin và ngữ cảnh của bạn qua nhiều phiên chat khác nhau.</div>
+              </div>
+              <div class="form-check form-switch fs-5 mb-0">
+                <input class="form-check-input" type="checkbox" id="ai_long_term_memory" checked>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 rounded-3 border mb-4 bg-light-subtle">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div>
+                <div class="fw-bold small text-dark"><i class="bi bi-search text-info me-1.5"></i>Kho tri thức & RAG Vector Database</div>
+                <div class="text-muted extra-small">Tự động tìm kiếm trong cơ sở tri thức để bổ trợ câu trả lời chuyên sâu.</div>
+              </div>
+              <div class="form-check form-switch fs-5 mb-0">
+                <input class="form-check-input" type="checkbox" id="ai_rag_enabled" checked>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 rounded-3 border mb-3">
+            <div class="fw-bold small text-dark mb-1"><i class="bi bi-file-earmark-arrow-down text-primary me-1.5"></i>Xuất / Sao lưu dữ liệu</div>
+            <p class="text-muted extra-small mb-3">Tải toàn bộ các đoạn hội thoại và tin nhắn của bạn dưới định dạng JSON về máy tính cá nhân.</p>
+            <a href="/api/chat/export-all" class="btn btn-outline-primary btn-sm rounded-pill px-3 extra-small d-inline-flex align-items-center gap-1.5" download>
+              <i class="bi bi-download"></i><span>Tải xuống bản sao lưu (.JSON)</span>
+            </a>
+          </div>
+
+          <div class="card p-3 rounded-3 border border-danger-subtle bg-danger-subtle bg-opacity-10">
+            <div class="fw-bold small text-danger mb-1"><i class="bi bi-exclamation-triangle-fill me-1.5"></i>Vùng nguy hiểm (Danger Zone)</div>
+            <p class="text-muted extra-small mb-3">Xóa vĩnh viễn toàn bộ các đoạn chat và tin nhắn của bạn. Hành động này không thể hoàn tác.</p>
+            <button type="button" onclick="confirmDeleteAllChats()" class="btn btn-danger btn-sm rounded-pill px-3 extra-small d-inline-flex align-items-center gap-1.5">
+              <i class="bi bi-trash"></i><span>Xóa toàn bộ lịch sử trò chuyện</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 4: Display & Voice -->
+        <div id="tabPane-display" class="settings-tab-pane" style="display:none;">
+          <div class="mb-4">
+            <label class="form-label small fw-bold text-dark mb-2">Chế độ giao diện (Theme)</label>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="border rounded-3 p-3 d-flex align-items-center gap-2 cursor-pointer w-100" id="cardThemeDark">
+                  <input type="radio" name="themeRadio" value="dark" class="form-check-input mt-0" checked onchange="applyLiveTheme('dark')">
+                  <div>
+                    <div class="fw-bold small text-dark">🌙 Dark Modern</div>
+                    <div class="text-muted extra-small">Bảng màu đêm dịu mắt (#0B0F19)</div>
+                  </div>
+                </label>
+              </div>
+              <div class="col-6">
+                <label class="border rounded-3 p-3 d-flex align-items-center gap-2 cursor-pointer w-100" id="cardThemeLight">
+                  <input type="radio" name="themeRadio" value="light" class="form-check-input mt-0" onchange="applyLiveTheme('light')">
+                  <div>
+                    <div class="fw-bold small text-dark">☀️ Light Clean</div>
+                    <div class="text-muted extra-small">Sáng sủa, thanh lịch, trang nhã</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label small fw-bold text-dark mb-1">Cỡ chữ tin nhắn chat</label>
+            <div class="btn-group w-100" role="group">
+              <input type="radio" class="btn-check" name="fontSizeRadio" id="fsize14" value="14" onchange="applyLiveFontSize(14)">
+              <label class="btn btn-outline-secondary btn-sm" for="fsize14">Nhỏ (14px)</label>
+
+              <input type="radio" class="btn-check" name="fontSizeRadio" id="fsize15" value="15" checked onchange="applyLiveFontSize(15)">
+              <label class="btn btn-outline-secondary btn-sm" for="fsize15">Chuẩn (15px)</label>
+
+              <input type="radio" class="btn-check" name="fontSizeRadio" id="fsize16" value="16" onchange="applyLiveFontSize(16)">
+              <label class="btn btn-outline-secondary btn-sm" for="fsize16">Lớn (16px)</label>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-bold text-dark mb-0">Tốc độ đọc giọng nói AI (TTS Speed)</label>
+              <span id="ttsSpeedLabel" class="badge bg-secondary-subtle text-secondary fw-bold">1.0x</span>
+            </div>
+            <input type="range" class="form-range" id="tts_speed" min="0.75" max="1.5" step="0.05" value="1.0" oninput="document.getElementById('ttsSpeedLabel').innerText = this.value + 'x'">
+            <div class="d-flex justify-content-between text-muted extra-small">
+              <span>0.75x (Chậm rãi)</span>
+              <span>1.0x (Tự nhiên)</span>
+              <span>1.5x (Nhanh)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer px-4 py-3 bg-light border-top d-flex justify-content-between align-items-center">
+        <div id="settingsStatusMsg" class="small fw-semibold text-muted"></div>
+        <div class="d-flex gap-2 align-items-center flex-shrink-0">
+          <button type="button" class="btn btn-light rounded-pill px-4 btn-sm" onclick="closeProfile()">Đóng</button>
+          <button type="button" class="btn btn-primary rounded-pill px-4 btn-sm fw-semibold shadow-sm text-nowrap" style="white-space: nowrap; min-width: 140px;" onclick="saveAllSettings()">
+            <i class="bi bi-check-lg me-1"></i>Lưu cài đặt
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -924,7 +1228,7 @@
   <script src="https://js.puter.com/v2/"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20"></script>
   <script src="js/artifact_studio.js?v=1"></script>
-  <script src="js/app.js?v=48"></script>
+  <script src="js/app.js?v=56"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">
@@ -992,11 +1296,36 @@
   </div>
 
   <script>
-    function quickPrompt(text) {
+    if (typeof window.toggleTheme !== "function") {
+      window.toggleTheme = function() {
+        const cur = document.documentElement.getAttribute("data-theme") || "light";
+        const next = cur === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("appTheme", next);
+        const icon = document.getElementById("themeToggleIcon");
+        if (icon) icon.className = next === "dark" ? "bi bi-sun-fill fs-6" : "bi bi-moon-stars fs-6";
+        const btn = document.getElementById("themeToggleBtn");
+        if (btn) btn.title = next === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối";
+      };
+    }
+    if (typeof window.toggleUserMenu !== "function") {
+      window.toggleUserMenu = function() {
+        const m = document.getElementById("userMenu");
+        if (m) m.style.display = m.style.display === "block" ? "none" : "block";
+      };
+    }
+
+    function quickPrompt(text, autoSend = false) {
       const msgEl = document.getElementById("msg");
       if (msgEl) {
         msgEl.value = text;
         msgEl.focus();
+        if (autoSend) {
+          setTimeout(() => {
+            const sendBtn = document.getElementById("send");
+            if (sendBtn) sendBtn.click();
+          }, 50);
+        }
       }
     }
 

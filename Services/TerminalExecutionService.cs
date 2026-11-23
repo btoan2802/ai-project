@@ -269,19 +269,31 @@ namespace BtoanAiNet.Services
                 IsSandboxed = false
             };
 
-            string shell = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh";
-            string args = OperatingSystem.IsWindows() ? $"/c \"{command}\"" : $"-c \"{command.Replace("\"", "\\\"")}\"";
-
             var psi = new ProcessStartInfo
             {
-                FileName = shell,
-                Arguments = args,
                 WorkingDirectory = workingDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
             };
+
+            if (OperatingSystem.IsWindows())
+            {
+                string script = $"$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;\n{command}";
+                byte[] bytes = Encoding.Unicode.GetBytes(script);
+                string encoded = Convert.ToBase64String(bytes);
+
+                psi.FileName = "powershell.exe";
+                psi.Arguments = $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}";
+            }
+            else
+            {
+                psi.FileName = "/bin/sh";
+                psi.Arguments = $"-c \"{command.Replace("\"", "\\\"")}\"";
+            }
 
             using var proc = new Process { StartInfo = psi };
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_options.ExecutionTimeoutSeconds));

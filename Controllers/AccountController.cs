@@ -500,5 +500,152 @@ namespace BtoanAiNet.Controllers
                 face_image_url = targetUser.FaceImageUrl
             });
         }
+
+        // ==========================================
+        // 4-TAB SETTINGS & PROFILE MANAGEMENT APIS
+        // ==========================================
+
+        [HttpGet("api/account/settings")]
+        public async Task<IActionResult> GetSettings()
+        {
+            int uid = CurrentUserId ?? 1;
+            var user = await _userRepository.GetByIdAsync(uid);
+            if (user == null)
+            {
+                return Json(new { ok = false, error = "Người dùng không tồn tại" });
+            }
+
+            return Json(new
+            {
+                ok = true,
+                user = new
+                {
+                    id = user.Id,
+                    username = user.Username ?? "",
+                    full_name = user.FullName ?? "",
+                    email = user.Email ?? "",
+                    dob = user.Dob?.ToString("yyyy-MM-dd") ?? "",
+                    avatar = user.Avatar ?? "",
+                    bio = user.Bio ?? "",
+                    face_enabled = (user.FaceEnabled == 1 && !string.IsNullOrEmpty(user.FaceDescriptor)),
+                    face_updated_at = user.FaceUpdatedAt?.ToString("dd/MM/yyyy HH:mm") ?? "",
+                    default_model = string.IsNullOrWhiteSpace(user.DefaultModel) ? "Btoan 2.5 Flash" : user.DefaultModel,
+                    custom_instructions = user.CustomInstructions ?? "",
+                    temperature = user.Temperature ?? 0.7,
+                    long_term_memory = user.LongTermMemory ?? 1,
+                    rag_enabled = user.RagEnabled ?? 1,
+                    theme = string.IsNullOrWhiteSpace(user.Theme) ? "dark" : user.Theme,
+                    chat_font_size = string.IsNullOrWhiteSpace(user.ChatFontSize) ? "15px" : user.ChatFontSize,
+                    tts_speed = user.TtsSpeed ?? 1.0
+                }
+            });
+        }
+
+        public class UpdateSettingsModel
+        {
+            public string? FullName { get; set; }
+            public string? Dob { get; set; }
+            public string? Bio { get; set; }
+            public string? DefaultModel { get; set; }
+            public string? CustomInstructions { get; set; }
+            public double? Temperature { get; set; }
+            public int? LongTermMemory { get; set; }
+            public int? RagEnabled { get; set; }
+            public string? Theme { get; set; }
+            public string? ChatFontSize { get; set; }
+            public double? TtsSpeed { get; set; }
+        }
+
+        [HttpPost("api/account/settings")]
+        public async Task<IActionResult> UpdateSettings([FromBody] UpdateSettingsModel model)
+        {
+            int uid = CurrentUserId ?? 1;
+            var user = await _userRepository.GetByIdAsync(uid);
+            if (user == null)
+            {
+                return Json(new { ok = false, error = "Không tìm thấy người dùng" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.FullName)) user.FullName = model.FullName.Trim();
+            if (!string.IsNullOrWhiteSpace(model.Dob) && DateOnly.TryParse(model.Dob, out var parsedDob))
+            {
+                user.Dob = parsedDob;
+            }
+            if (model.Bio != null) user.Bio = model.Bio.Trim();
+            if (!string.IsNullOrWhiteSpace(model.DefaultModel)) user.DefaultModel = model.DefaultModel.Trim();
+            if (model.CustomInstructions != null) user.CustomInstructions = model.CustomInstructions.Trim();
+            if (model.Temperature.HasValue) user.Temperature = Math.Clamp(model.Temperature.Value, 0.1, 1.0);
+            if (model.LongTermMemory.HasValue) user.LongTermMemory = model.LongTermMemory.Value;
+            if (model.RagEnabled.HasValue) user.RagEnabled = model.RagEnabled.Value;
+            if (!string.IsNullOrWhiteSpace(model.Theme)) user.Theme = model.Theme.Trim();
+            if (!string.IsNullOrWhiteSpace(model.ChatFontSize)) user.ChatFontSize = model.ChatFontSize.Trim();
+            if (model.TtsSpeed.HasValue) user.TtsSpeed = Math.Clamp(model.TtsSpeed.Value, 0.5, 2.0);
+
+            await _userRepository.UpdateAsync(user);
+
+            return Json(new { ok = true, success = true, message = "Đã lưu cài đặt thành công!" });
+        }
+
+        public class ChangePasswordModel
+        {
+            public string? CurrentPassword { get; set; }
+            public string? NewPassword { get; set; }
+            public string? ConfirmPassword { get; set; }
+        }
+
+        [HttpPost("api/account/change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordModel model)
+        {
+            int uid = CurrentUserId ?? 1;
+            var user = await _userRepository.GetByIdAsync(uid);
+            if (user == null)
+            {
+                return Json(new { ok = false, error = "Người dùng không tồn tại" });
+            }
+
+            if (string.IsNullOrWhiteSpace(model.CurrentPassword) || string.IsNullOrWhiteSpace(model.NewPassword))
+            {
+                return Json(new { ok = false, error = "Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới" });
+            }
+
+            if (model.NewPassword != model.ConfirmPassword)
+            {
+                return Json(new { ok = false, error = "Mật khẩu mới và xác nhận mật khẩu không trùng khớp" });
+            }
+
+            if (model.NewPassword.Length < 6)
+            {
+                return Json(new { ok = false, error = "Mật khẩu mới phải có ít nhất 6 ký tự" });
+            }
+
+            if (!string.IsNullOrEmpty(user.Password) && user.Password != model.CurrentPassword)
+            {
+                return Json(new { ok = false, error = "Mật khẩu hiện tại không chính xác" });
+            }
+
+            user.Password = model.NewPassword;
+            await _userRepository.UpdateAsync(user);
+
+            return Json(new { ok = true, message = "Đổi mật khẩu thành công!" });
+        }
+
+        [HttpPost("api/account/face-delete")]
+        public async Task<IActionResult> DeleteFace()
+        {
+            int uid = CurrentUserId ?? 1;
+            var user = await _userRepository.GetByIdAsync(uid);
+            if (user == null)
+            {
+                return Json(new { ok = false, error = "Người dùng không tồn tại" });
+            }
+
+            user.FaceDescriptor = null;
+            user.FaceEnabled = 0;
+            user.FaceImageUrl = null;
+            user.FaceUpdatedAt = DateTime.UtcNow;
+            await _userRepository.UpdateAsync(user);
+
+            return Json(new { ok = true, message = "Đã xóa dữ liệu khuôn mặt thành công" });
+        }
     }
 }

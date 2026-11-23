@@ -24,7 +24,9 @@ namespace BtoanAiNet.Controllers
 
         private static readonly HashSet<string> WhitelistedCommands = new(StringComparer.OrdinalIgnoreCase)
         {
-            "dotnet", "npm", "node", "python", "git", "dir", "ls", "echo", "pwd", "whoami", "cat", "type"
+            "dotnet", "npm", "node", "npx", "ng", "yarn", "pnpm", "vite", "tsc", "python", "py", "pip",
+            "git", "dir", "ls", "echo", "pwd", "whoami", "cat", "type", "cls", "clear", "where",
+            "if", "powershell", "pwsh", "test-path", "get-childitem", "write-output"
         };
 
         private static readonly HashSet<string> IgnoredDirs = new(StringComparer.OrdinalIgnoreCase)
@@ -211,6 +213,19 @@ namespace BtoanAiNet.Controllers
                 else if (string.Equals(model?.Template, "dotnet-webapi", StringComparison.OrdinalIgnoreCase))
                 {
                     GenerateWebApiStarterTemplate(projectPath, cleanName);
+                }
+                else if (string.Equals(model?.Template, "angular", StringComparison.OrdinalIgnoreCase))
+                {
+                    GenerateAngularStarterTemplate(projectPath, cleanName);
+                }
+                else if (string.Equals(model?.Template, "fullstack", StringComparison.OrdinalIgnoreCase))
+                {
+                    string bePath = Path.Combine(projectPath, "backend");
+                    string fePath = Path.Combine(projectPath, "frontend");
+                    Directory.CreateDirectory(bePath);
+                    Directory.CreateDirectory(fePath);
+                    GenerateWebApiStarterTemplate(bePath, $"{cleanName}Api");
+                    GenerateAngularStarterTemplate(fePath, $"{cleanName}Web");
                 }
                 else if (string.Equals(model?.Template, "html5", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(model?.Template, "web", StringComparison.OrdinalIgnoreCase))
@@ -639,6 +654,345 @@ app.MapControllers();
 
 app.Run();";
             System.IO.File.WriteAllText(Path.Combine(projectPath, "Program.cs"), program, Encoding.UTF8);
+        }
+
+        private static void GenerateAngularStarterTemplate(string projectPath, string projectName)
+        {
+            Directory.CreateDirectory(Path.Combine(projectPath, "src", "app", "pages", "admin-products"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "public"));
+
+            string packageJson = $@"{{
+  ""name"": ""{projectName.ToLowerInvariant()}"",
+  ""version"": ""0.0.0"",
+  ""scripts"": {{
+    ""ng"": ""ng"",
+    ""start"": ""ng serve"",
+    ""build"": ""ng build"",
+    ""watch"": ""ng build --watch --configuration development"",
+    ""test"": ""ng test""
+  }},
+  ""private"": true,
+  ""dependencies"": {{
+    ""@angular/animations"": ""^19.0.0"",
+    ""@angular/common"": ""^19.0.0"",
+    ""@angular/compiler"": ""^19.0.0"",
+    ""@angular/core"": ""^19.0.0"",
+    ""@angular/forms"": ""^19.0.0"",
+    ""@angular/platform-browser"": ""^19.0.0"",
+    ""@angular/platform-browser-dynamic"": ""^19.0.0"",
+    ""@angular/router"": ""^19.0.0"",
+    ""rxjs"": ""~7.8.0"",
+    ""tslib"": ""^2.3.0"",
+    ""zone.js"": ""~0.15.0""
+  }},
+  ""devDependencies"": {{
+    ""@angular-devkit/build-angular"": ""^19.0.0"",
+    ""@angular/cli"": ""^19.0.0"",
+    ""@angular/compiler-cli"": ""^19.0.0"",
+    ""typescript"": ""~5.6.2""
+  }}
+}}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "package.json"), packageJson, Encoding.UTF8);
+
+            string angularJson = $@"{{
+  ""$schema"": ""./node_modules/@angular/cli/lib/config/schema.json"",
+  ""version"": 1,
+  ""newProjectRoot"": ""projects"",
+  ""projects"": {{
+    ""{projectName.ToLowerInvariant()}"": {{
+      ""projectType"": ""application"",
+      ""schematics"": {{}},
+      ""root"": """",
+      ""sourceRoot"": ""src"",
+      ""prefix"": ""app"",
+      ""architect"": {{
+        ""build"": {{
+          ""builder"": ""@angular-devkit/build-angular:application"",
+          ""options"": {{
+            ""outputPath"": ""dist/{projectName.ToLowerInvariant()}"",
+            ""index"": ""src/index.html"",
+            ""browser"": ""src/main.ts"",
+            ""polyfills"": [""zone.js""],
+            ""tsConfig"": ""tsconfig.app.json"",
+            ""assets"": [""src/favicon.ico"", ""src/assets""],
+            ""styles"": [""src/styles.css""],
+            ""scripts"": []
+          }}
+        }},
+        ""serve"": {{
+          ""builder"": ""@angular-devkit/build-angular:dev-server"",
+          ""configurations"": {{
+            ""production"": {{
+              ""buildTarget"": ""{projectName.ToLowerInvariant()}:build:production""
+            }},
+            ""development"": {{
+              ""buildTarget"": ""{projectName.ToLowerInvariant()}:build:development""
+            }}
+          }},
+          ""defaultConfiguration"": ""development""
+        }}
+      }}
+    }}
+  }}
+}}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "angular.json"), angularJson, Encoding.UTF8);
+
+            string tsconfig = @"{
+  ""compileOnSave"": false,
+  ""compilerOptions"": {
+    ""outDir"": ""./dist/out-tsc"",
+    ""strict"": true,
+    ""noImplicitOverride"": true,
+    ""noPropertyAccessFromIndexSignature"": true,
+    ""noImplicitReturns"": true,
+    ""noFallthroughCasesInSwitch"": true,
+    ""skipLibCheck"": true,
+    ""isolatedModules"": true,
+    ""esModuleInterop"": true,
+    ""experimentalDecorators"": true,
+    ""moduleResolution"": ""bundler"",
+    ""importHelpers"": true,
+    ""target"": ""ES2022"",
+    ""module"": ""ES2022""
+  }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "tsconfig.json"), tsconfig, Encoding.UTF8);
+
+            string indexHtml = $@"<!doctype html>
+<html lang=""en"">
+<head>
+  <meta charset=""utf-8"">
+  <title>{projectName} - Btoan Studio App</title>
+  <base href=""/"">
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">
+  <link rel=""icon"" type=""image/x-icon"" href=""favicon.ico"">
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "index.html"), indexHtml, Encoding.UTF8);
+
+            string stylesCss = @"/* Global Application Styles */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #121212;
+  color: #e0e0e0;
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "styles.css"), stylesCss, Encoding.UTF8);
+
+            string mainTs = @"import { bootstrapApplication } from '@angular/platform-browser';
+import { appConfig } from './app/app.config';
+import { AppComponent } from './app/app.component';
+
+bootstrapApplication(AppComponent, appConfig)
+  .catch((err) => console.error(err));";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "main.ts"), mainTs, Encoding.UTF8);
+
+            string appConfig = @"import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { routes } from './app.routes';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes)
+  ]
+};";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.config.ts"), appConfig, Encoding.UTF8);
+
+            string appRoutes = @"import { Routes } from '@angular/router';
+import { AdminProducts } from './pages/admin-products/admin-products';
+
+export const routes: Routes = [
+  { path: '', component: AdminProducts },
+  { path: 'admin-products', component: AdminProducts }
+];";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.routes.ts"), appRoutes, Encoding.UTF8);
+
+            string appComponent = @"import { Component } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [RouterOutlet],
+  templateUrl: './app.component.html',
+  styleUrl: './app.component.css'
+})
+export class AppComponent {
+  title = '" + projectName + @"';
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.component.ts"), appComponent, Encoding.UTF8);
+
+            string appComponentHtml = @"<main class=""main"">
+  <router-outlet></router-outlet>
+</main>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.component.html"), appComponentHtml, Encoding.UTF8);
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.component.css"), "/* App Component CSS */", Encoding.UTF8);
+
+            // AdminProducts Component
+            string adminProductsTs = @"import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
+export interface ProductItem {
+  id: number;
+  name: string;
+  price: number;
+  stock: number;
+  category: string;
+}
+
+@Component({
+  selector: 'app-admin-products',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './admin-products.html',
+  styleUrl: './admin-products.css'
+})
+export class AdminProducts {
+  products: ProductItem[] = [
+    { id: 1, name: 'Bàn phím cơ Custom Btoan AI', price: 1850000, stock: 25, category: 'Gaming Gear' },
+    { id: 2, name: 'Chuột không dây Ultra-Light 4K', price: 1250000, stock: 40, category: 'Gaming Gear' },
+    { id: 3, name: 'Màn hình 27 inch 2K 165Hz IPS', price: 5400000, stock: 12, category: 'Màn hình' },
+    { id: 4, name: 'Tai nghe chụp tai chống ồn ANC', price: 2100000, stock: 18, category: 'Audio' }
+  ];
+
+  selectedProduct: ProductItem | null = null;
+
+  selectProduct(p: ProductItem) {
+    this.selectedProduct = p;
+  }
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.ts"), adminProductsTs, Encoding.UTF8);
+
+            string adminProductsHtml = @"<div class=""admin-container"">
+  <header class=""admin-header"">
+    <h1>📦 Quản lý Sản phẩm (Admin Products)</h1>
+    <span class=""badge"">Angular Standalone Component</span>
+  </header>
+
+  <div class=""product-grid"">
+    <div class=""card"" *ngFor=""let p of products"" (click)=""selectProduct(p)"">
+      <div class=""card-header"">
+        <span class=""cat-tag"">{{ p.category }}</span>
+        <span class=""stock-tag"">Kho: {{ p.stock }}</span>
+      </div>
+      <h3>{{ p.name }}</h3>
+      <p class=""price"">{{ p.price | number }} VNĐ</p>
+      <button class=""btn-action"">Xem Chi Tiết</button>
+    </div>
+  </div>
+
+  <div class=""details-box"" *ngIf=""selectedProduct"">
+    <h3>Đã chọn: {{ selectedProduct.name }}</h3>
+    <p>Giá niêm yết: {{ selectedProduct.price | number }} VNĐ — Tồn kho: {{ selectedProduct.stock }} cái</p>
+  </div>
+</div>";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.html"), adminProductsHtml, Encoding.UTF8);
+
+            string adminProductsCss = @".admin-container {
+  padding: 30px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #333;
+  padding-bottom: 15px;
+  margin-bottom: 25px;
+}
+.admin-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #61dafb;
+}
+.badge {
+  background: #282c34;
+  color: #98c379;
+  padding: 5px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  border: 1px solid #98c379;
+}
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+.card {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 16px;
+  transition: transform 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: #61dafb;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.cat-tag { color: #e5c07b; }
+.stock-tag { color: #abb2bf; }
+.price {
+  font-size: 18px;
+  font-weight: bold;
+  color: #98c379;
+  margin: 12px 0;
+}
+.btn-action {
+  width: 100%;
+  padding: 8px;
+  background: #007acc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.details-box {
+  margin-top: 30px;
+  background: #252526;
+  border-left: 4px solid #61dafb;
+  padding: 15px 20px;
+  border-radius: 4px;
+}";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.css"), adminProductsCss, Encoding.UTF8);
+
+            string adminProductsSpec = @"import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { AdminProducts } from './admin-products';
+
+describe('AdminProducts', () => {
+  let component: AdminProducts;
+  let fixture: ComponentFixture<AdminProducts>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AdminProducts]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AdminProducts);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('should create the component', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should have initial products list', () => {
+    expect(component.products.length).toBeGreaterThan(0);
+  });
+});";
+            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.spec.ts"), adminProductsSpec, Encoding.UTF8);
         }
 
         // DELETE /api/ide/projects/{name} and POST /api/ide/projects/delete
@@ -1087,85 +1441,461 @@ app.Run();";
             });
         }
 
-        // GET /api/ide/git-status?project=...
+        // ==========================================
+        // GIT SOURCE CONTROL APIS
+        // ==========================================
+
+        private static async Task<(int exitCode, string stdout, string stderr)> RunGitCommandAsync(string workingDir, params string[] args)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+            foreach (var arg in args)
+            {
+                psi.ArgumentList.Add(arg);
+            }
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return (-1, "", "Failed to start git process");
+
+            string stdout = await proc.StandardOutput.ReadToEndAsync();
+            string stderr = await proc.StandardError.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+            return (proc.ExitCode, stdout.Trim(), stderr.Trim());
+        }
+
+        // GET /api/ide/git/status and GET /api/ide/git-status
+        [HttpGet("git/status")]
         [HttpGet("git-status")]
         public async Task<IActionResult> GetGitStatus([FromQuery] string? project)
         {
             if (!IsAuthenticated)
             {
-                return Ok(new { ok = true, branch = "main", count = 0, files = Array.Empty<object>() });
+                return Ok(new { ok = true, isRepo = false, branch = "main", staged = Array.Empty<object>(), unstaged = Array.Empty<object>(), count = 0, files = Array.Empty<object>() });
             }
 
             string root = ResolveWorkspacePath(project);
-            if (!Directory.Exists(root))
+            if (!Directory.Exists(root) || !Directory.Exists(Path.Combine(root, ".git")))
             {
-                return Ok(new { ok = true, branch = "main", count = 0, files = Array.Empty<object>() });
+                return Ok(new { ok = true, isRepo = false, branch = "", staged = Array.Empty<object>(), unstaged = Array.Empty<object>(), count = 0, files = Array.Empty<object>() });
             }
 
-            string branch = "main";
-            var modifiedFiles = new List<object>();
+            var (_, branchOut, _) = await RunGitCommandAsync(root, "rev-parse", "--abbrev-ref", "HEAD");
+            string branch = string.IsNullOrWhiteSpace(branchOut) ? "main" : branchOut;
 
-            try
+            var (_, statusOut, _) = await RunGitCommandAsync(root, "status", "--porcelain=v1", "-uall");
+            var staged = new List<object>();
+            var unstaged = new List<object>();
+            var allModified = new List<object>();
+
+            if (!string.IsNullOrWhiteSpace(statusOut))
             {
-                var psi = new ProcessStartInfo
+                var lines = statusOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var l in lines)
                 {
-                    FileName = "git",
-                    Arguments = "status --porcelain",
-                    WorkingDirectory = root,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
+                    if (l.Length < 3) continue;
+                    char col0 = l[0];
+                    char col1 = l[1];
+                    string filePath = l.Substring(3).Trim(' ', '"');
 
-                using var proc = Process.Start(psi);
-                if (proc != null)
-                {
-                    string output = await proc.StandardOutput.ReadToEndAsync();
-                    await proc.WaitForExitAsync();
-
-                    if (proc.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                    if (col0 != ' ' && col0 != '?')
                     {
-                        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var l in lines)
-                        {
-                            if (l.Length >= 4)
-                            {
-                                string status = l.Substring(0, 2).Trim();
-                                string filePath = l.Substring(3).Trim();
-                                modifiedFiles.Add(new { path = filePath, status = status });
-                            }
-                        }
+                        staged.Add(new { path = filePath, status = col0.ToString() });
                     }
-                }
-
-                var psiBranch = new ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = "rev-parse --abbrev-ref HEAD",
-                    WorkingDirectory = root,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var procB = Process.Start(psiBranch);
-                if (procB != null)
-                {
-                    string bOut = await procB.StandardOutput.ReadToEndAsync();
-                    await procB.WaitForExitAsync();
-                    if (!string.IsNullOrWhiteSpace(bOut)) branch = bOut.Trim();
+                    if (col1 != ' ')
+                    {
+                        unstaged.Add(new { path = filePath, status = col1 == '?' ? "U" : col1.ToString() });
+                    }
+                    allModified.Add(new { path = filePath, status = (col0 != ' ' ? col0 : col1).ToString() });
                 }
             }
-            catch { }
 
             return Ok(new
             {
                 ok = true,
+                isRepo = true,
                 branch,
-                count = modifiedFiles.Count,
-                files = modifiedFiles
+                staged,
+                unstaged,
+                count = staged.Count + unstaged.Count,
+                files = allModified
             });
+        }
+
+        [HttpPost("git/init")]
+        public async Task<IActionResult> GitInit([FromBody] GitProjectRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root)) return NotFound("Workspace not found");
+
+            await RunGitCommandAsync(root, "init", "-b", "main");
+            await RunGitCommandAsync(root, "config", "user.name", "Btoan AI Developer");
+            await RunGitCommandAsync(root, "config", "user.email", "dev@ai.btoan.com");
+
+            return Ok(new { ok = true, message = "Initialized Git repository successfully." });
+        }
+
+        [HttpPost("git/stage")]
+        public async Task<IActionResult> GitStage([FromBody] GitStageRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root)) return NotFound("Workspace not found");
+
+            if (model?.All == true)
+            {
+                await RunGitCommandAsync(root, "add", "-A");
+            }
+            else if (!string.IsNullOrWhiteSpace(model?.Path))
+            {
+                await RunGitCommandAsync(root, "add", "--", model.Path);
+            }
+
+            return Ok(new { ok = true });
+        }
+
+        [HttpPost("git/unstage")]
+        public async Task<IActionResult> GitUnstage([FromBody] GitStageRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root)) return NotFound("Workspace not found");
+
+            if (model?.All == true)
+            {
+                await RunGitCommandAsync(root, "restore", "--staged", ".");
+            }
+            else if (!string.IsNullOrWhiteSpace(model?.Path))
+            {
+                await RunGitCommandAsync(root, "restore", "--staged", "--", model.Path);
+            }
+
+            return Ok(new { ok = true });
+        }
+
+        [HttpPost("git/discard")]
+        public async Task<IActionResult> GitDiscard([FromBody] GitStageRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root) || string.IsNullOrWhiteSpace(model?.Path)) return BadRequest();
+
+            string fullPath = Path.Combine(root, model.Path);
+            if (System.IO.File.Exists(fullPath))
+            {
+                var (code, _, _) = await RunGitCommandAsync(root, "restore", "--", model.Path);
+                if (code != 0)
+                {
+                    await RunGitCommandAsync(root, "clean", "-f", "--", model.Path);
+                }
+            }
+
+            return Ok(new { ok = true });
+        }
+
+        [HttpGet("git/diff")]
+        public async Task<IActionResult> GitDiff([FromQuery] string? project, [FromQuery] string? path, [FromQuery] bool staged)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(project);
+            if (!Directory.Exists(root) || string.IsNullOrWhiteSpace(path)) return BadRequest();
+
+            string original = "";
+            string current = "";
+
+            if (staged)
+            {
+                var (_, origOut, _) = await RunGitCommandAsync(root, "show", $"HEAD:{path}");
+                var (_, curOut, _) = await RunGitCommandAsync(root, "show", $":{path}");
+                original = origOut;
+                current = curOut;
+            }
+            else
+            {
+                var (_, origOut, _) = await RunGitCommandAsync(root, "show", $":{path}");
+                if (string.IsNullOrEmpty(origOut))
+                {
+                    var (_, headOut, _) = await RunGitCommandAsync(root, "show", $"HEAD:{path}");
+                    origOut = headOut;
+                }
+                original = origOut;
+
+                string fullPath = Path.Combine(root, path);
+                if (System.IO.File.Exists(fullPath))
+                {
+                    current = await System.IO.File.ReadAllTextAsync(fullPath);
+                }
+            }
+
+            return Ok(new { ok = true, path, original, current });
+        }
+
+        [HttpPost("git/commit")]
+        public async Task<IActionResult> GitCommit([FromBody] GitCommitRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root)) return NotFound("Workspace not found");
+
+            string msg = model?.Message?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(msg)) return BadRequest(new { ok = false, error = "Vui lòng nhập commit message." });
+
+            var (code, stdout, stderr) = await RunGitCommandAsync(root, "commit", "-m", msg);
+            if (code == 0)
+            {
+                return Ok(new { ok = true, message = stdout });
+            }
+            return BadRequest(new { ok = false, error = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr });
+        }
+
+        [HttpGet("git/branches")]
+        public async Task<IActionResult> GitBranches([FromQuery] string? project)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(project);
+            if (!Directory.Exists(root)) return NotFound();
+
+            var (_, bOut, _) = await RunGitCommandAsync(root, "branch", "--list");
+            var branches = new List<string>();
+            string current = "main";
+
+            if (!string.IsNullOrWhiteSpace(bOut))
+            {
+                var lines = bOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var l in lines)
+                {
+                    string trimmed = l.Trim();
+                    if (trimmed.StartsWith("*"))
+                    {
+                        current = trimmed.TrimStart('*', ' ');
+                        branches.Add(current);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(trimmed))
+                    {
+                        branches.Add(trimmed);
+                    }
+                }
+            }
+
+            return Ok(new { ok = true, current, branches });
+        }
+
+        [HttpPost("git/checkout")]
+        public async Task<IActionResult> GitCheckout([FromBody] GitCheckoutRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root) || string.IsNullOrWhiteSpace(model?.Branch)) return BadRequest();
+
+            (int code, string stdout, string stderr) res;
+            if (model.CreateNew)
+            {
+                res = await RunGitCommandAsync(root, "checkout", "-b", model.Branch.Trim());
+            }
+            else
+            {
+                res = await RunGitCommandAsync(root, "checkout", model.Branch.Trim());
+            }
+
+            if (res.code == 0)
+            {
+                return Ok(new { ok = true, message = $"Switched to branch '{model.Branch}'." });
+            }
+            return BadRequest(new { ok = false, error = res.stderr });
+        }
+
+        [HttpPost("git/push")]
+        public async Task<IActionResult> GitPush([FromBody] GitPushRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string root = ResolveWorkspacePath(model?.Project);
+            if (!Directory.Exists(root)) return NotFound();
+
+            string remoteUrl = model?.RemoteUrl?.Trim() ?? "";
+            string token = model?.Token?.Trim() ?? "";
+            string branch = string.IsNullOrWhiteSpace(model?.Branch) ? "main" : model.Branch.Trim();
+
+            if (!string.IsNullOrWhiteSpace(remoteUrl))
+            {
+                string targetRemote = remoteUrl;
+                if (!string.IsNullOrWhiteSpace(token) && targetRemote.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    string hostAndPath = targetRemote.Substring(8);
+                    if (hostAndPath.Contains('@')) hostAndPath = hostAndPath.Substring(hostAndPath.IndexOf('@') + 1);
+                    targetRemote = $"https://{Uri.EscapeDataString(token)}@{hostAndPath}";
+                }
+
+                var (codeCheck, _, _) = await RunGitCommandAsync(root, "remote", "get-url", "origin");
+                if (codeCheck == 0)
+                {
+                    await RunGitCommandAsync(root, "remote", "set-url", "origin", targetRemote);
+                }
+                else
+                {
+                    await RunGitCommandAsync(root, "remote", "add", "origin", targetRemote);
+                }
+            }
+
+            var (pushCode, pushOut, pushErr) = await RunGitCommandAsync(root, "push", "-u", "origin", branch);
+            if (pushCode == 0)
+            {
+                return Ok(new { ok = true, message = "Đã đẩy mã nguồn lên GitHub thành công!" });
+            }
+            return BadRequest(new { ok = false, error = string.IsNullOrWhiteSpace(pushErr) ? pushOut : pushErr });
+        }
+
+        // ==========================================
+        // GLOBAL SEARCH & REPLACE API
+        // ==========================================
+
+        [HttpPost("replace")]
+        public async Task<IActionResult> GlobalReplace([FromBody] GlobalReplaceRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            if (model == null || string.IsNullOrWhiteSpace(model.Query))
+            {
+                return BadRequest(new { ok = false, error = "Cần cung cấp từ khóa tìm kiếm." });
+            }
+
+            string root = ResolveWorkspacePath(model.Project);
+            if (!Directory.Exists(root)) return NotFound("Workspace not found");
+
+            int filesChanged = 0;
+            int replacementsCount = 0;
+            string replaceWith = model.ReplaceWith ?? string.Empty;
+
+            var allFiles = Directory.GetFiles(root, "*.*", SearchOption.AllDirectories)
+                .Where(f => !IgnoredDirs.Any(d => f.Contains(Path.DirectorySeparatorChar + d + Path.DirectorySeparatorChar) || f.EndsWith(Path.DirectorySeparatorChar + d)))
+                .ToList();
+
+            foreach (var f in allFiles)
+            {
+                try
+                {
+                    string content = await System.IO.File.ReadAllTextAsync(f);
+                    string newContent;
+                    int count = 0;
+
+                    if (model.IsRegex)
+                    {
+                        var regexOptions = model.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase;
+                        var reg = new Regex(model.Query, regexOptions);
+                        count = reg.Matches(content).Count;
+                        newContent = reg.Replace(content, replaceWith);
+                    }
+                    else
+                    {
+                        var comparison = model.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+                        int idx = 0;
+                        while ((idx = content.IndexOf(model.Query, idx, comparison)) >= 0)
+                        {
+                            count++;
+                            idx += model.Query.Length;
+                        }
+                        newContent = model.MatchCase ? content.Replace(model.Query, replaceWith) : Regex.Replace(content, Regex.Escape(model.Query), replaceWith, RegexOptions.IgnoreCase);
+                    }
+
+                    if (count > 0 && newContent != content)
+                    {
+                        await System.IO.File.WriteAllTextAsync(f, newContent, Encoding.UTF8);
+                        filesChanged++;
+                        replacementsCount += count;
+                    }
+                }
+                catch { }
+            }
+
+            return Ok(new
+            {
+                ok = true,
+                filesChanged,
+                replacementsCount,
+                message = $"Đã thay thế {replacementsCount} vị trí trong {filesChanged} tệp tin."
+            });
+        }
+
+        // ==========================================
+        // SECRETS MANAGEMENT APIS
+        // ==========================================
+
+        private string GetProjectSecretsFilePath(string projectName)
+        {
+            string cleanProj = SanitizeProjectName(projectName);
+            string userRoot = GetUserRootPath();
+            string secretsDir = Path.Combine(userRoot, ".secrets");
+            if (!Directory.Exists(secretsDir)) Directory.CreateDirectory(secretsDir);
+            return Path.Combine(secretsDir, $"{cleanProj}.json");
+        }
+
+        public static Dictionary<string, string> LoadProjectSecrets(string userRoot, string projectName)
+        {
+            try
+            {
+                string cleanProj = SanitizeProjectName(projectName);
+                string path = Path.Combine(userRoot, ".secrets", $"{cleanProj}.json");
+                if (System.IO.File.Exists(path))
+                {
+                    string json = System.IO.File.ReadAllText(path);
+                    var list = JsonSerializer.Deserialize<List<SecretPairModel>>(json);
+                    if (list != null)
+                    {
+                        return list.Where(s => !string.IsNullOrWhiteSpace(s.Key))
+                                   .ToDictionary(s => s.Key.Trim(), s => s.Value ?? "", StringComparer.OrdinalIgnoreCase);
+                    }
+                }
+            }
+            catch { }
+            return new Dictionary<string, string>();
+        }
+
+        [HttpGet("secrets")]
+        public async Task<IActionResult> GetProjectSecrets([FromQuery] string? project)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string filePath = GetProjectSecretsFilePath(project ?? "default");
+            var list = new List<SecretPairModel>();
+            if (System.IO.File.Exists(filePath))
+            {
+                try
+                {
+                    string json = await System.IO.File.ReadAllTextAsync(filePath);
+                    list = JsonSerializer.Deserialize<List<SecretPairModel>>(json) ?? new();
+                }
+                catch { }
+            }
+            return Ok(new { ok = true, secrets = list });
+        }
+
+        [HttpPost("secrets")]
+        public async Task<IActionResult> SaveProjectSecrets([FromBody] ProjectSecretsRequestModel model)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            string filePath = GetProjectSecretsFilePath(model?.Project ?? "default");
+            var list = model?.Secrets ?? new();
+            string json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+            await System.IO.File.WriteAllTextAsync(filePath, json, Encoding.UTF8);
+            return Ok(new { ok = true, message = "Đã lưu bí mật dự án (.env secrets) an toàn." });
+        }
+
+        // ==========================================
+        // ACTIVE PORTS LIST API
+        // ==========================================
+
+        [HttpGet("ports")]
+        public IActionResult GetActivePorts([FromQuery] string? project)
+        {
+            if (!IsAuthenticated) return Unauthorized();
+            var sessions = RunningAppSessionManager.GetUserSessions(CurrentUserId);
+            return Ok(new { ok = true, ports = sessions });
         }
 
         // GET /api/ide/file?project=...&path=...
@@ -1274,7 +2004,7 @@ app.Run();";
   <circle cx=""{width/2 - 8}"" cy=""{height/2 - 8}"" r=""3"" fill=""#60a5fa""/>
   <path d=""M{width/2 - 18} {height/2 + 2}l10-10 8 8 6-6 12 12"" fill=""none"" stroke=""#60a5fa"" stroke-width=""2""/>
   <text x=""50%"" y=""{height/2 + 45}"" font-family=""'Inter',-apple-system,sans-serif"" font-size=""16"" font-weight=""600"" fill=""#e2e8f0"" text-anchor=""middle"">{cleanTitle}</text>
-  <text x=""50%"" y=""{height/2 + 70}"" font-family=""'Inter',-apple-system,sans-serif"" font-size=""12"" fill=""#94a3b8"" text-anchor=""middle"">Generated with Antigravity AI</text>
+  <text x=""50%"" y=""{height/2 + 70}"" font-family=""'Inter',-apple-system,sans-serif"" font-size=""12"" fill=""#94a3b8"" text-anchor=""middle"">Generated with Btoan AI</text>
 </svg>";
         }
 
@@ -1868,23 +2598,23 @@ app.Run();";
 
             // Strict sandbox & command injection prevention
             if (rawCmd.Contains("..") || rawCmd.Contains("cd /") || rawCmd.Contains("cd \\") ||
-                rawCmd.Contains("&&") || rawCmd.Contains(";") || rawCmd.Contains("|") || rawCmd.Contains(">") || rawCmd.Contains("<"))
+                rawCmd.Contains("rm -rf /") || rawCmd.Contains("del /s") || rawCmd.Contains("format "))
             {
                 return BadRequest(new
                 {
                     ok = false,
-                    error = "Lệnh chứa ký tự điều hướng hoặc ống dẫn không được phép trong sandbox."
+                    error = "Lệnh chứa ký tự điều hướng hoặc thao tác nguy hiểm không được phép trong sandbox."
                 });
             }
 
-            string binary = rawCmd.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].ToLowerInvariant();
+            string binary = rawCmd.Split(new[] { ' ', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)[0].ToLowerInvariant().Trim('(', '{', '$', '"', '\'');
 
             if (!WhitelistedCommands.Contains(binary))
             {
                 return BadRequest(new
                 {
                     ok = false,
-                    error = $"Lệnh '{binary}' không nằm trong danh sách an toàn (dotnet, node, python, npm, git, dir, ls, echo, pwd, whoami, cat, type)."
+                    error = $"Lệnh '{binary}' không nằm trong danh sách an toàn."
                 });
             }
 
@@ -1899,14 +2629,29 @@ app.Run();";
                 bool isWindows = OperatingSystem.IsWindows();
                 var psi = new ProcessStartInfo
                 {
-                    FileName = isWindows ? "cmd.exe" : "/bin/bash",
-                    Arguments = isWindows ? $"/c {rawCmd}" : $"-c \"{rawCmd.Replace("\"", "\\\"")}\"",
                     WorkingDirectory = root,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
+
+                if (isWindows)
+                {
+                    string script = $"$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;\n{rawCmd}";
+                    byte[] bytes = Encoding.Unicode.GetBytes(script);
+                    string encoded = Convert.ToBase64String(bytes);
+
+                    psi.FileName = "powershell.exe";
+                    psi.Arguments = $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}";
+                }
+                else
+                {
+                    psi.FileName = "/bin/bash";
+                    psi.Arguments = $"-c \"{rawCmd.Replace("\"", "\\\"")}\"";
+                }
 
                 using var proc = Process.Start(psi);
                 if (proc == null)
@@ -1941,7 +2686,7 @@ app.Run();";
         }
 
         // ==========================================
-        // 5. ANTIGRAVITY AGENT FULL-PROJECT CHAT & RUN
+        // 5. BTOAN AGENT FULL-PROJECT CHAT & RUN
         // ==========================================
 
         // POST /api/ide/agent-chat and /api/ide/agent-run
@@ -2007,7 +2752,7 @@ app.Run();";
             }
 
             string systemPrompt = @"
-Bạn là Antigravity Coding Agent - Trợ lý lập trình siêu cấp trong Btoan Antigravity Web IDE.
+Bạn là Btoan AI Agent - Trợ lý lập trình siêu cấp trong Btoan Studio IDE.
 Nhiệm vụ của bạn:
 1. Nếu người dùng yêu cầu sửa đổi/giải thích một file hiện tại: Phân tích file và trả về các thay đổi (action: 'edit').
 2. Nếu người dùng yêu cầu TẠO NGUYÊN MỘT DỰ ÁN MỚI:
@@ -2604,5 +3349,59 @@ QUY TẮC QUAN TRỌNG:
         public string? Project { get; set; }
         public string? Path { get; set; }
         public string? Sql { get; set; }
+    }
+
+    public class GitProjectRequestModel
+    {
+        public string? Project { get; set; }
+    }
+
+    public class GitStageRequestModel
+    {
+        public string? Project { get; set; }
+        public string? Path { get; set; }
+        public bool All { get; set; }
+    }
+
+    public class GitCommitRequestModel
+    {
+        public string? Project { get; set; }
+        public string? Message { get; set; }
+    }
+
+    public class GitCheckoutRequestModel
+    {
+        public string? Project { get; set; }
+        public string? Branch { get; set; }
+        public bool CreateNew { get; set; }
+    }
+
+    public class GitPushRequestModel
+    {
+        public string? Project { get; set; }
+        public string? RemoteUrl { get; set; }
+        public string? Branch { get; set; }
+        public string? Token { get; set; }
+    }
+
+    public class GlobalReplaceRequestModel
+    {
+        public string? Project { get; set; }
+        public string Query { get; set; } = string.Empty;
+        public string? ReplaceWith { get; set; }
+        public bool IsRegex { get; set; }
+        public bool MatchCase { get; set; }
+    }
+
+    public class SecretPairModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+    }
+
+    public class ProjectSecretsRequestModel
+    {
+        public string? Project { get; set; }
+        public List<SecretPairModel> Secrets { get; set; } = new();
     }
 }

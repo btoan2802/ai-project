@@ -13,5 +13,7 @@ namespace BtoanAiNet.Repositories
         Task<List<Chat>> GetChatHistoryAsync(int conversationId, int userId, int limit = 20);
         Task<List<Chat>> GetMessagesByConversationIdAsync(int conversationId);
         Task<Chat> AddChatAsync(Chat chat);
+        Task DeleteAllByUserIdAsync(int userId);
+        Task<List<object>> GetAllWithChatsByUserIdAsync(int userId);
     }
 }

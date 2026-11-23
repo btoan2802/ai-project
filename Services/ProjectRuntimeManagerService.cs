@@ -194,8 +194,8 @@ namespace BtoanAiNet.Services
                         cmdArgs = $"run --urls=http://localhost:{instance.Port}";
                         break;
                     case "NodeJS":
-                        cmdName = isWindows ? "cmd.exe" : "npm";
-                        cmdArgs = isWindows ? $"/c \"npm run dev -- --port {instance.Port}\"" : $"run dev -- --port {instance.Port}";
+                        cmdName = isWindows ? "powershell.exe" : "npm";
+                        cmdArgs = isWindows ? $"-NoProfile -ExecutionPolicy Bypass -Command \"npm run dev -- --port {instance.Port}\"" : $"run dev -- --port {instance.Port}";
                         break;
                     case "Python":
                         cmdName = "python";
