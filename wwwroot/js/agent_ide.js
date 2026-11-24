@@ -2448,7 +2448,7 @@ async function sendAgentTask() {
     agentMsg.innerHTML = `
         <div class="task-running-pill">
             <div class="spinner-border spinner-border-sm text-info" style="width: 12px; height: 12px;"></div>
-            <span>Antigravity Agent is inspecting workspace and synthesizing solution...</span>
+            <span>Đang phân tích cấu trúc dự án & tìm kiếm tệp...</span>
         </div>
     `;
     container.appendChild(agentMsg);
@@ -2457,10 +2457,32 @@ async function sendAgentTask() {
     const model = document.getElementById("agentModelSelect")?.value || "gemini-2.5-flash";
     const mode = document.getElementById("agentModeSelect")?.value || "fast";
 
+    // Animated Live Progress Ticker
+    let elapsedSec = 0;
+    const progressStages = [
+        "Đang phân tích cấu trúc dự án & tìm kiếm tệp...",
+        "Đang tự động viết mã nguồn & tạo Views/Controllers...",
+        "Đang biên dịch kiểm tra mã nguồn (dotnet build)...",
+        "Đang rà soát và hoàn tất giải pháp..."
+    ];
+    let stageIdx = 0;
+    const pillSpan = agentMsg.querySelector(".task-running-pill span");
+    const ticker = setInterval(() => {
+        elapsedSec += 2;
+        stageIdx = (stageIdx + 1) % progressStages.length;
+        if (pillSpan) {
+            pillSpan.innerText = `${progressStages[stageIdx]} (${elapsedSec}s)`;
+        }
+    }, 2000);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 85000);
+
     try {
         const res = await fetch('/api/ide/agent-run', {
             method: 'POST',
             headers: getApiHeaders(),
+            signal: controller.signal,
             body: JSON.stringify({
                 project: activeProjectId,
                 activeFile: activeFilePath,
@@ -2469,6 +2491,7 @@ async function sendAgentTask() {
                 model: model
             })
         });
+        clearTimeout(timeoutId);
         const data = await res.json();
 
         if (data.ok) {
@@ -2491,10 +2514,14 @@ async function sendAgentTask() {
                 }
             }
         } else {
-            agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${data.message || "Agent execution failed"}</div>`;
+            agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${data.message || data.error || "Agent execution failed"}</div>`;
         }
     } catch (err) {
-        agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ Error: ${err.message}</div>`;
+        clearTimeout(timeoutId);
+        const isAbort = err.name === 'AbortError';
+        agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 85s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
+    } finally {
+        clearInterval(ticker);
     }
 }
 

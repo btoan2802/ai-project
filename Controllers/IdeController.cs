@@ -157,6 +157,27 @@ namespace BtoanAiNet.Controllers
             catch { }
         }
 
+        public static void AutoFixMapStaticAssets(string projectPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
+                string progPath = Path.Combine(projectPath, "Program.cs");
+                if (System.IO.File.Exists(progPath))
+                {
+                    string pContent = System.IO.File.ReadAllText(progPath, Encoding.UTF8);
+                    if (pContent.Contains("MapStaticAssets") || pContent.Contains("WithStaticAssets"))
+                    {
+                        pContent = pContent.Replace("app.MapStaticAssets();", "app.UseStaticFiles();")
+                                           .Replace("MapStaticAssets()", "UseStaticFiles()")
+                                           .Replace(".WithStaticAssets()", "");
+                        System.IO.File.WriteAllText(progPath, pContent, Encoding.UTF8);
+                    }
+                }
+            }
+            catch { }
+        }
+
         private static string SanitizeProjectName(string? name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "project-1";
@@ -299,6 +320,10 @@ namespace BtoanAiNet.Controllers
                         CleanupEmptyDir(projectPath);
                         return StatusCode(400, new { ok = false, error = $"Khởi tạo dự án ASP.NET Core MVC thất bại: {res.output}" });
                     }
+
+                    // Tự động thay thế MapStaticAssets() bằng UseStaticFiles() để tránh lỗi thiếu staticwebassets manifest
+                    AutoFixMapStaticAssets(projectPath);
+
                     primaryFile = "Program.cs";
                 }
                 else if (template == "dotnet-webapi" || template == "webapi")
@@ -2365,6 +2390,22 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
 
             var sbContext = new StringBuilder();
+            AutoFixMapStaticAssets(projectPath);
+
+            // Pre-populate project file tree so AI knows structure immediately without wasting turns on list_files
+            try
+            {
+                var allEntries = Directory.GetFileSystemEntries(projectPath, "*", SearchOption.AllDirectories)
+                    .Where(p => !p.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                !p.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
+                                !p.Contains(Path.DirectorySeparatorChar + ".git" + Path.DirectorySeparatorChar))
+                    .Select(p => Path.GetRelativePath(projectPath, p).Replace('\\', '/'))
+                    .Take(120);
+                sbContext.AppendLine("[PROJECT FILE TREE]:");
+                sbContext.AppendLine(string.Join("\n", allEntries));
+            }
+            catch { }
+
             if (!string.IsNullOrWhiteSpace(model.OpenFilePath) || !string.IsNullOrWhiteSpace(model.ActiveFile))
             {
                 string openPath = !string.IsNullOrWhiteSpace(model.OpenFilePath) ? model.OpenFilePath : model.ActiveFile!;
@@ -2385,27 +2426,18 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             string agentSystemInstruction = $@"Bạn là Btoan AI Autonomous Coding Agent trong Btoan Studio IDE.
 Bạn đang làm việc trực tiếp trên thư mục dự án: '{cleanProj}'.
 
-CÁC CÔNG CỤ THỰC THI THẬT BẠN ĐƯỢC CẤP:
-- list_files(directory): Xem danh sách tệp/thư mục.
-- read_file(path): Đọc mã nguồn tệp.
+CÁC CÔNG CỤ THỰC THI BẠN ĐƯỢC CẤP:
+- read_file(path): Đọc mã nguồn tệp nếu cần xem trước.
 - write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%.
 - edit_file(path, target, replacement): Sửa đoạn code trong tệp.
 - delete_file(path): Xóa tệp.
-- run_command(command): Chạy lệnh shell (dotnet build, dotnet add package, v.v.) tại thư mục dự án.
+- run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build') tại thư mục dự án.
 
-QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
-1. BẮT BUỘC PHẢI DÙNG CÔNG CỤ:
-   - Khi người dùng yêu cầu sửa đổi, thêm chức năng, sửa cơ sở dữ liệu: Bạn BẮT BUỘC phải dùng read_file, write_file, edit_file hoặc run_command để trực tiếp đọc và sửa file thật trên ổ đĩa.
-   - TUYỆT ĐỐI KHÔNG ĐƯỢC CHỈ TRẢ LỜI BẰNG CHỮ HAY IN RA JSON PLAN mà không gọi tool! Mọi kế hoạch phải được bạn TỰ ĐỘNG THỰC THI NGAY LẬP TỨC.
-2. NẾU CẦN THÊM DATABASE HAY PACKAGE NUGET:
-   - Dùng run_command chạy: dotnet add package Microsoft.EntityFrameworkCore.Sqlite --version 10.0.0
-   - Tạo Model trong thư mục Models/, tạo AppDbContext trong Data/, cập nhật Program.cs và appsettings.json.
-3. SAU KHI SỬA HOẶC TẠO FILE XONG:
-   - Nếu dự án có file .csproj (.NET): Bạn BẮT BUỘC phải gọi tool run_command chạy 'dotnet build' để kiểm tra kết quả biên dịch.
-   - Nếu kết quả build có lỗi (Error), đọc kỹ lỗi và tự động dùng edit_file / write_file để sửa code cho đến khi build đạt 0 Error.
-4. CÂU TRẢ LỜI CUỐI CÙNG:
-   - Khi đã thực hiện xong mọi công cụ và build thành công, hãy trả lời bằng tiếng Việt tự nhiên, tóm tắt rõ ràng các file bạn đã tạo/sửa và kết quả build.
-   - TUYỆT ĐỐI KHÔNG in ra chuỗi JSON kế hoạch thô vào câu trả lời!";
+QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢN HỒI):
+1. ĐÃ CÓ CÂY THƯ MỤC DỰ ÁN: Toàn bộ danh sách tệp dự án đã được nạp sẵn ở [PROJECT FILE TREE]. Bạn hãy dùng ngay write_file hoặc edit_file để tạo/sửa code cho Controller, View hoặc Model.
+2. BATCH HÓA CODE ĐẦY ĐỦ: Viết mã nguồn hoàn chỉnh 100%, không để TODO hay cắt xén.
+3. BIÊN DỊCH KIỂM TRA: Sau khi sửa đổi/tạo file xong, gọi run_command(""dotnet build"") 1 lần duy nhất để kiểm tra.
+4. KẾT THÚC NGAY KHI BUILD THÀNH CÔNG: Khi dotnet build đã thành công (0 Error), bạn đã hoàn thành nhiệm vụ! Trả lời tóm tắt kết quả bằng tiếng Việt tự nhiên và dừng lại ngay, tuyệt đối không gọi thêm tool.";
 
             var toolsDefinition = new JsonArray
             {
@@ -2413,23 +2445,6 @@ QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
                 {
                     ["functionDeclarations"] = new JsonArray
                     {
-                        new JsonObject
-                        {
-                            ["name"] = "list_files",
-                            ["description"] = "Liệt kê danh sách các tệp và thư mục trong dự án.",
-                            ["parameters"] = new JsonObject
-                            {
-                                ["type"] = "OBJECT",
-                                ["properties"] = new JsonObject
-                                {
-                                    ["directory"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối trong dự án (ví dụ: '.' hoặc 'Controllers' hoặc 'Views')."
-                                    }
-                                }
-                            }
-                        },
                         new JsonObject
                         {
                             ["name"] = "read_file",
@@ -2561,7 +2576,7 @@ QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
             bool buildPassed = false;
             string finalExplanation = "";
 
-            int maxTurns = 15;
+            int maxTurns = 6;
             int currentTurn = 0;
 
             try
@@ -2842,10 +2857,12 @@ QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
                         string command = args?["command"]?.ToString() ?? "";
                         if (string.IsNullOrWhiteSpace(command)) return "Error: command is required";
                         executedCommands.Add(command);
+                        AutoFixMapStaticAssets(projectPath);
                         var (ok, output) = await RunCliProcessAsync(projectPath, command, "", 60);
                         if (command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase) && ok)
                         {
                             setBuildPassed(true);
+                            return $"ExitCode: 0\nOutput:\n{output}\n\n[SYSTEM NOTICE: dotnet build SUCCEEDED with 0 Errors! All requested files and build verification are complete. DO NOT call any more tools. Provide your final explanation in natural Vietnamese now.]";
                         }
                         return $"ExitCode: {(ok ? 0 : 1)}\nOutput:\n{output}";
                     }

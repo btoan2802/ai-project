@@ -146,6 +146,7 @@ namespace BtoanAiNet.Hubs
             }
 
             string rootPath = ResolveProjectRoot(userId, project);
+            Controllers.IdeController.AutoFixMapStaticAssets(rootPath);
             var session = new TerminalInteractiveSession
             {
                 ConnectionId = Context.ConnectionId,
@@ -199,6 +200,11 @@ namespace BtoanAiNet.Hubs
             }
 
             string trimmedCmd = rawCommand?.Trim() ?? string.Empty;
+            if (session == null) return;
+            if (!string.IsNullOrWhiteSpace(session.ProjectRootPath))
+            {
+                Controllers.IdeController.AutoFixMapStaticAssets(session.ProjectRootPath);
+            }
             if (string.IsNullOrWhiteSpace(trimmedCmd))
             {
                 await Clients.Caller.SendAsync("TerminalOutput", $"\r\nPS {session.CurrentDirectory}> ", sId);
