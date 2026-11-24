@@ -16,9 +16,13 @@ let gitChangesCache = [];
 
 function getApiHeaders() {
     const headers = { 'Content-Type': 'application/json' };
-    const uid = localStorage.getItem("user_id");
+    const uid = localStorage.getItem("user_id") || "1";
     if (uid && uid !== "0") {
         headers['X-User-Id'] = uid;
+    }
+    const uname = localStorage.getItem("username") || localStorage.getItem("user_name");
+    if (uname) {
+        headers['X-Username'] = encodeURIComponent(uname);
     }
     return headers;
 }
@@ -2781,10 +2785,11 @@ async function submitCreateProject() {
     }
 
     try {
+        const uid = localStorage.getItem("user_id") || "1";
         const res = await fetch('/api/ide/create-project', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name, template })
+            body: JSON.stringify({ name, template, userId: parseInt(uid) || 1 })
         });
         const data = await res.json();
         if (data.ok) {

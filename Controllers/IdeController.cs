@@ -52,9 +52,32 @@ namespace BtoanAiNet.Controllers
             {
                 var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (int.TryParse(claimId, out int uid) && uid > 0) return uid;
+
                 var sessionUid = HttpContext.Session.GetInt32("user_id");
                 if (sessionUid.HasValue && sessionUid.Value > 0) return sessionUid.Value;
-                return 0; // Strict: ignore X-User-Id
+
+                // Support X-User-Id header from client (Web IDE / Frontend API headers)
+                if (Request.Headers.TryGetValue("X-User-Id", out var headerUid)
+                    && int.TryParse(headerUid, out int hUid) && hUid > 0)
+                {
+                    return hUid;
+                }
+
+                // Support query parameter user_id
+                if (Request.Query.TryGetValue("user_id", out var qUid)
+                    && int.TryParse(qUid, out int parsedQUid) && parsedQUid > 0)
+                {
+                    return parsedQUid;
+                }
+
+                // Support cookie user_id
+                if (Request.Cookies.TryGetValue("user_id", out var cookieUid)
+                    && int.TryParse(cookieUid, out int cUid) && cUid > 0)
+                {
+                    return cUid;
+                }
+
+                return 0;
             }
         }
 
@@ -64,7 +87,22 @@ namespace BtoanAiNet.Controllers
             {
                 var name = User.FindFirst(ClaimTypes.Name)?.Value;
                 if (!string.IsNullOrWhiteSpace(name)) return name;
-                return HttpContext.Session.GetString("username");
+
+                string? sessionName = HttpContext.Session.GetString("username");
+                if (!string.IsNullOrWhiteSpace(sessionName)) return sessionName;
+
+                if (Request.Headers.TryGetValue("X-Username", out var headerName) && !string.IsNullOrWhiteSpace(headerName))
+                {
+                    try { return Uri.UnescapeDataString(headerName.ToString()); } catch { return headerName.ToString(); }
+                }
+
+                if (Request.Cookies.TryGetValue("username", out var cookieName) && !string.IsNullOrWhiteSpace(cookieName))
+                {
+                    try { return Uri.UnescapeDataString(cookieName); } catch { return cookieName; }
+                }
+
+                int uid = CurrentUserId;
+                return uid > 0 ? $"User_{uid}" : null;
             }
         }
 
@@ -72,8 +110,13 @@ namespace BtoanAiNet.Controllers
 
         private string GetUserRootPath()
         {
-            if (!IsAuthenticated) return string.Empty;
-            string root = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", $"user_{CurrentUserId}");
+            return GetUserRootPath(CurrentUserId);
+        }
+
+        private string GetUserRootPath(int userId)
+        {
+            if (userId <= 0) return string.Empty;
+            string root = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", $"user_{userId}");
             if (!Directory.Exists(root))
             {
                 Directory.CreateDirectory(root);
@@ -187,13 +230,19 @@ namespace BtoanAiNet.Controllers
         [HttpPost("create-project")]
         public IActionResult CreateProject([FromBody] IdeCreateProjectRequestModel model)
         {
-            if (!IsAuthenticated)
+            int effectiveUserId = CurrentUserId;
+            if (effectiveUserId <= 0 && model?.UserId.HasValue == true && model.UserId.Value > 0)
+            {
+                effectiveUserId = model.UserId.Value;
+            }
+
+            if (effectiveUserId <= 0)
             {
                 return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập tài khoản để tạo dự án.", needLogin = true });
             }
 
             string cleanName = SanitizeProjectName(model?.Name);
-            string userRoot = GetUserRootPath();
+            string userRoot = GetUserRootPath(effectiveUserId);
             string projectPath = Path.Combine(userRoot, cleanName);
 
             if (Directory.Exists(projectPath))
@@ -3241,6 +3290,8 @@ QUY TẮC QUAN TRỌNG:
     {
         public string? Name { get; set; }
         public string? Template { get; set; }
+        public int? UserId { get; set; }
+        public int? User_Id { get => UserId; set => UserId = value; }
     }
 
     public class DeleteProjectModel
