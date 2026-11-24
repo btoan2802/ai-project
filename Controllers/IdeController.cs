@@ -2278,23 +2278,17 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return BadRequest(new { ok = false, error = "Prompt is required" });
             }
 
-            if (string.IsNullOrWhiteSpace(model.OpenFilePath) && !string.IsNullOrWhiteSpace(model.ActiveFile))
+            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            string cleanProj = SanitizeProjectName(model.Project);
+            string projectPath = ResolveWorkspacePath(cleanProj);
+            if (!Directory.Exists(projectPath))
             {
-                model.OpenFilePath = model.ActiveFile;
+                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
+                if (Directory.Exists(user1Path)) projectPath = user1Path;
             }
-
-            if (string.IsNullOrWhiteSpace(model.OpenFileContent) && !string.IsNullOrWhiteSpace(model.OpenFilePath))
+            if (!Directory.Exists(projectPath))
             {
-                try
-                {
-                    string root = ResolveWorkspacePath(model.Project);
-                    string fPath = Path.Combine(root, model.OpenFilePath.TrimStart('/', '\\'));
-                    if (System.IO.File.Exists(fPath))
-                    {
-                        model.OpenFileContent = await System.IO.File.ReadAllTextAsync(fPath);
-                    }
-                }
-                catch { }
+                return BadRequest(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
             }
 
             string selectedModel = !string.IsNullOrWhiteSpace(model.Model) ? model.Model : "gemini-2.5-flash";
@@ -2310,284 +2304,497 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
 
             var sbContext = new StringBuilder();
-            if (!string.IsNullOrWhiteSpace(model.OpenFilePath) && !string.IsNullOrWhiteSpace(model.OpenFileContent))
+            if (!string.IsNullOrWhiteSpace(model.OpenFilePath) || !string.IsNullOrWhiteSpace(model.ActiveFile))
             {
-                sbContext.AppendLine($"--- CURRENT OPEN FILE: {model.OpenFilePath} ---");
-                sbContext.AppendLine(model.OpenFileContent);
-                sbContext.AppendLine("--- END FILE ---");
-            }
-
-            if (model.ContextFiles != null && model.ContextFiles.Count > 0)
-            {
-                foreach (var cf in model.ContextFiles)
+                string openPath = !string.IsNullOrWhiteSpace(model.OpenFilePath) ? model.OpenFilePath : model.ActiveFile!;
+                string fPath = Path.Combine(projectPath, openPath.TrimStart('/', '\\'));
+                if (System.IO.File.Exists(fPath))
                 {
-                    if (cf != null && !string.IsNullOrWhiteSpace(cf.Path))
+                    try
                     {
-                        sbContext.AppendLine($"--- CONTEXT FILE: {cf.Path} ---");
-                        sbContext.AppendLine(cf.Content ?? "");
+                        string openContent = await System.IO.File.ReadAllTextAsync(fPath, Encoding.UTF8);
+                        sbContext.AppendLine($"--- CURRENT OPEN FILE: {openPath} ---");
+                        sbContext.AppendLine(openContent);
                         sbContext.AppendLine("--- END FILE ---");
                     }
+                    catch { }
                 }
             }
 
-            string systemPrompt = @"
-Bạn là Btoan AI Agent - Trợ lý lập trình siêu cấp trong Btoan Studio IDE.
-Nhiệm vụ của bạn:
-1. Nếu người dùng yêu cầu sửa đổi/giải thích một file hiện tại: Phân tích file và trả về các thay đổi (action: 'edit').
-2. Nếu người dùng yêu cầu TẠO NGUYÊN MỘT DỰ ÁN MỚI:
-   - Đặt một tên dự án ngắn gọn bằng tiếng Anh/không dấu (ví dụ: 'shop-fullstack', 'my-webapi', 'love-letter', 'admin-dashboard').
-   - QUY TẮC DÙNG CLI SCAFFOLDING ('setupCommands'):
-     + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài). Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite --version 10.0.0' (không dùng 11.x để tránh NU1202).
-     + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'. Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite --version 10.0.0' (không dùng 11.x để tránh NU1202).
-     + QUY TẮC .NET CSPROJ & CHẶN CẢNH BÁO NUGET AUDIT (NU1902, NU1903):
-       * Mọi dự án .NET / C# khi tạo hoặc chỉnh sửa file .csproj BẮT BUỘC phải chứa thẻ <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn> bên trong <PropertyGroup> để loại trừ triệt để cảnh báo bảo mật NuGet Audit khi build.
-     + QUY TẮC CƠ SỞ DỮ LIỆU BẮT BUỘC (SQLITE & EF CORE):
-       * Luôn dùng EF Core + SQLite ('Data Source=app.db') làm mặc định để chạy được ngay trên Web IDE mà không cần cài SQL Server.
-       * Cung cấp công tắc chuyển đổi Database trong 'appsettings.json':
-         ""Database"": { ""Provider"": ""Sqlite"", ""SqliteConnection"": ""Data Source=app.db"", ""SqlServerConnection"": ""Server=.;Database=MyAppDb;Trusted_Connection=True;TrustServerCertificate=True;"" }
-       * Trong 'Program.cs': Đọc 'Database:Provider' (nếu là 'SqlServer' thì UseSqlServer, mặc định UseSqlite), luôn gọi 'db.Database.EnsureCreated()' và seed 5-10 bản ghi mẫu khởi tạo để ứng dụng có dữ liệu chạy ngay.
-       * Tuyệt đối KHÔNG hardcode kết nối SQL Server cục bộ (ví dụ 'Server=localhost;...') vì sẽ gây crash lỗi kết nối trên Web IDE.
-     + Khi người dùng yêu cầu Angular: Sử dụng 'npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install' trong 'setupCommands' (luôn gắn cờ non-interactive & --skip-install để tạo bộ file mã nguồn siêu nhanh trong 2-3s mà không bị treo tải node_modules).
-     + Khi người dùng yêu cầu Fullstack (.NET Web API + Angular): Đưa 2 lệnh vào 'setupCommands':
-       'dotnet new webapi --use-controllers -n backend'
-       'npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install'
-     + Sau đó mới đưa code nghiệp vụ tùy chỉnh (Controllers, Models, Components, v.v.) vào mảng 'operations'.
-     + Nếu là web tĩnh thuần HTML/CSS/JS: để 'setupCommands': [] và tạo trực tiếp index.html, css/style.css, js/app.js qua 'operations'.
-   - KHÔNG ĐƯỢC để nội dung giả kiểu '// code here', viết code hoàn chỉnh, responsive, đẹp mắt và chạy thật 100%!
-   - ĐỊNH DẠNG CODE BẮT BUỘC (QUY TẮC CHỐNG DỒN DÒNG / MINIFIED):
-     + TUYỆT ĐỐI KHÔNG nén/minify code lên 1 dòng duy nhất!
-     + Mọi file code (.html, .css, .js, .cs, .json, .py, v.v.) BẮT BUỘC phải xuống dòng đầy đủ (\n) rõ ràng giữa các thẻ, các selector, các hàm và câu lệnh.
-     + Thụt lề (indentation) chuẩn 2 hoặc 4 khoảng trắng sạch đẹp, cấu trúc mở đóng thẻ/dấu ngoặc rõ ràng, chuyên nghiệp như lập trình viên viết tay.
-   - QUY TẮC THIẾT KẾ ĐẲNG CẤP & TỰ ĐỘNG TẠO ẢNH:
-     + Khi dự án cần hình ảnh: Liệt kê vào mảng 'images'. Mỗi ảnh có 'path' (ví dụ 'images/hero-banner.png') và 'prompt' tiếng Anh cực kỳ chi tiết, sống động, ánh sáng tự nhiên, góc chụp sắc nét (8k, photorealistic). Hệ thống Antigravity sẽ TỰ ĐỘNG gọi AI sinh ảnh thật vào đúng thư mục!
+            string agentSystemInstruction = $@"Bạn là Btoan AI Autonomous Coding Agent trong Btoan Studio IDE.
+Bạn đang làm việc trực tiếp trên thư mục dự án: '{cleanProj}'.
 
-CẤU TRÚC JSON BẮT BUỘC TRẢ VỀ DUY NHẤT:
-{
-  ""projectName"": ""ten-du-an (vi du: my-webapi)"",
-  ""plan"": [
-    ""Bước 1: Chạy lệnh CLI scaffolding khởi tạo khung dự án chuẩn"",
-    ""Bước 2: Viết mã nguồn nghiệp vụ Controllers, Models và giao diện hoàn chỉnh"",
-    ""Bước 3: Tự động tổng hợp và kiểm tra cấu trúc thư mục dự án""
-  ],
-  ""explanation"": ""Tóm tắt chi tiết cấu trúc dự án và các tính năng vừa được tạo."",
-  ""setupCommands"": [
-    ""dotnet new webapi --use-controllers -n backend""
-  ],
-  ""images"": [
-    {
-      ""path"": ""images/hero-banner.png"",
-      ""prompt"": ""An ultra-sharp photorealistic modern banner, clean lighting, 8k resolution""
-    }
-  ],
-  ""operations"": [
-    {
-      ""action"": ""create"",
-      ""path"": ""backend/Controllers/ProductController.cs"",
-      ""content"": ""Toàn bộ mã nguồn 100% của file..."",
-      ""summary"": ""Controller nghiệp vụ sản phẩm""
-    }
-  ],
-  ""suggestedCommand"": ""dotnet build""
-}
+CÁC CÔNG CỤ THỰC THI THẬT BẠN ĐƯỢC CẤP:
+- list_files(directory): Xem danh sách tệp/thư mục.
+- read_file(path): Đọc mã nguồn tệp.
+- write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%.
+- edit_file(path, target, replacement): Sửa đoạn code trong tệp.
+- delete_file(path): Xóa tệp.
+- run_command(command): Chạy lệnh shell (dotnet build, dotnet add package, v.v.) tại thư mục dự án.
 
-QUY TẮC QUAN TRỌNG:
-1. TUYỆT ĐỐI CHỈ TRẢ VỀ DUY NHẤT MỘT KHỐI JSON HỢP LỆ. Không thêm lời mở đầu hay kết luận ngoài JSON.
-2. Mã nguồn trong 'content' phải là 100% code hoàn chỉnh, sẵn sàng chạy ngay.
-";
+QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
+1. BẮT BUỘC PHẢI DÙNG CÔNG CỤ:
+   - Khi người dùng yêu cầu sửa đổi, thêm chức năng, sửa cơ sở dữ liệu: Bạn BẮT BUỘC phải dùng read_file, write_file, edit_file hoặc run_command để trực tiếp đọc và sửa file thật trên ổ đĩa.
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC CHỈ TRẢ LỜI BẰNG CHỮ HAY IN RA JSON PLAN mà không gọi tool! Mọi kế hoạch phải được bạn TỰ ĐỘNG THỰC THI NGAY LẬP TỨC.
+2. NẾU CẦN THÊM DATABASE HAY PACKAGE NUGET:
+   - Dùng run_command chạy: dotnet add package Microsoft.EntityFrameworkCore.Sqlite --version 10.0.0
+   - Tạo Model trong thư mục Models/, tạo AppDbContext trong Data/, cập nhật Program.cs và appsettings.json.
+3. SAU KHI SỬA HOẶC TẠO FILE XONG:
+   - Nếu dự án có file .csproj (.NET): Bạn BẮT BUỘC phải gọi tool run_command chạy 'dotnet build' để kiểm tra kết quả biên dịch.
+   - Nếu kết quả build có lỗi (Error), đọc kỹ lỗi và tự động dùng edit_file / write_file để sửa code cho đến khi build đạt 0 Error.
+4. CÂU TRẢ LỜI CUỐI CÙNG:
+   - Khi đã thực hiện xong mọi công cụ và build thành công, hãy trả lời bằng tiếng Việt tự nhiên, tóm tắt rõ ràng các file bạn đã tạo/sửa và kết quả build.
+   - TUYỆT ĐỐI KHÔNG in ra chuỗi JSON kế hoạch thô vào câu trả lời!";
 
-            var payload = new JsonObject
+            var toolsDefinition = new JsonArray
             {
-                ["contents"] = new JsonArray
+                new JsonObject
                 {
-                    new JsonObject
+                    ["functionDeclarations"] = new JsonArray
                     {
-                        ["role"] = "user",
-                        ["parts"] = new JsonArray
+                        new JsonObject
                         {
-                            new JsonObject { ["text"] = $"{systemPrompt}\n\n[CONTEXT FILES]:\n{sbContext}\n\n[CURRENT PROJECT]: {model.Project ?? "(none)"}\n\n[USER REQUEST]: {model.Prompt}" }
+                            ["name"] = "list_files",
+                            ["description"] = "Liệt kê danh sách các tệp và thư mục trong dự án.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["directory"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối trong dự án (ví dụ: '.' hoặc 'Controllers' hoặc 'Views')."
+                                    }
+                                }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "read_file",
+                            ["description"] = "Đọc toàn bộ nội dung của một tệp trong dự án.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Program.cs', 'Controllers/HomeController.cs')."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "write_file",
+                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án. Tự động tạo các thư mục cha nếu chưa tồn tại.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Controllers/HomeController.cs', 'Views/Home/About.cshtml')."
+                                    },
+                                    ["content"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Toàn bộ nội dung hoàn chỉnh của tệp."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path", "content" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "edit_file",
+                            ["description"] = "Chỉnh sửa một đoạn mã nguồn trong tệp bằng cách tìm chính xác đoạn target và thay thế bằng replacement.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp cần sửa."
+                                    },
+                                    ["target"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đoạn mã nguồn hiện tại trong tệp cần được thay thế."
+                                    },
+                                    ["replacement"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đoạn mã nguồn mới thay thế vào."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path", "target", "replacement" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "delete_file",
+                            ["description"] = "Xóa một tệp trong dự án.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp cần xóa."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "run_command",
+                            ["description"] = "Thực thi lệnh shell (PowerShell/Bash) ngay tại thư mục dự án (ví dụ: 'dotnet build', 'dotnet add package ... --version 10.0.0').",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["command"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Câu lệnh shell cần chạy."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "command" }
+                            }
                         }
                     }
-                },
-                ["generationConfig"] = new JsonObject
-                {
-                    ["temperature"] = isFastMode ? 0.3 : 0.5,
-                    ["maxOutputTokens"] = 16384
                 }
             };
 
-            if (isFastMode)
+            var messages = new JsonArray
             {
-                payload["generationConfig"]!["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
-            }
+                new JsonObject
+                {
+                    ["role"] = "user",
+                    ["parts"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["text"] = $"{agentSystemInstruction}\n\n[CONTEXT FILES]:\n{sbContext}\n\n[USER REQUEST]: {model.Prompt}"
+                        }
+                    }
+                }
+            };
+
+            var modifiedFiles = new List<string>();
+            var executedCommands = new List<string>();
+            var toolOperations = new List<object>();
+            var planSteps = new List<string>();
+            bool buildPassed = false;
+            string finalExplanation = "";
+
+            int maxTurns = 15;
+            int currentTurn = 0;
 
             try
             {
-                var (success, resData, rawResponse, error) = await _geminiService.GenerateContentAsync(selectedModel, payload);
-
-                if (!success || resData == null)
+                while (currentTurn < maxTurns)
                 {
-                    return Ok(new
+                    currentTurn++;
+
+                    var payload = new JsonObject
                     {
-                        ok = false,
-                        error = error ?? "Failed to get response from Gemini"
-                    });
-                }
-
-                string text = "";
-                var candidates = resData["candidates"]?.AsArray();
-                if (candidates != null && candidates.Count > 0)
-                {
-                    var parts = candidates[0]?["content"]?["parts"]?.AsArray();
-                    if (parts != null && parts.Count > 0)
-                    {
-                        text = parts[0]?["text"]?.ToString() ?? "";
-                    }
-                }
-
-                // Clean markdown code fence if present
-                string cleanJson = text.Trim();
-                if (cleanJson.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                {
-                    cleanJson = cleanJson.Substring(7);
-                }
-                else if (cleanJson.StartsWith("```"))
-                {
-                    cleanJson = cleanJson.Substring(3);
-                }
-                if (cleanJson.EndsWith("```"))
-                {
-                    cleanJson = cleanJson.Substring(0, cleanJson.Length - 3);
-                }
-                cleanJson = cleanJson.Trim();
-
-                try
-                {
-                    var parsed = JsonNode.Parse(cleanJson)?.AsObject();
-                    if (parsed != null)
-                    {
-                        string projectName = parsed["projectName"]?.ToString() ?? "";
-                        if (string.IsNullOrWhiteSpace(projectName) && !string.IsNullOrWhiteSpace(model.Project))
+                        ["contents"] = messages.DeepClone(),
+                        ["tools"] = toolsDefinition.DeepClone(),
+                        ["generationConfig"] = new JsonObject
                         {
-                            projectName = model.Project;
+                            ["temperature"] = isFastMode ? 0.2 : 0.4,
+                            ["maxOutputTokens"] = 8192
+                        }
+                    };
+                    if (isFastMode)
+                    {
+                        payload["generationConfig"]!["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
+                    }
+
+                    var (success, resData, _, error) = await _geminiService.GenerateContentAsync(selectedModel, payload);
+                    if (!success || resData == null)
+                    {
+                        finalExplanation = $"Lỗi kết nối AI: {error}";
+                        break;
+                    }
+
+                    var candidate = resData["candidates"]?[0]?["content"];
+                    if (candidate == null)
+                    {
+                        finalExplanation = "Không nhận được phản hồi từ AI.";
+                        break;
+                    }
+
+                    var parts = candidate["parts"]?.AsArray();
+                    if (parts == null || parts.Count == 0)
+                    {
+                        break;
+                    }
+
+                    // Check if there is a functionCall in any part
+                    JsonObject? functionCallPart = null;
+                    string? candidateText = null;
+
+                    foreach (var p in parts)
+                    {
+                        if (p is JsonObject pObj)
+                        {
+                            if (pObj.ContainsKey("functionCall"))
+                            {
+                                functionCallPart = pObj["functionCall"]?.AsObject();
+                                break;
+                            }
+                            if (pObj.ContainsKey("text") && string.IsNullOrWhiteSpace(candidateText))
+                            {
+                                candidateText = pObj["text"]?.ToString();
+                            }
+                        }
+                    }
+
+                    if (functionCallPart != null)
+                    {
+                        string toolName = functionCallPart["name"]?.ToString() ?? "";
+                        var toolArgs = functionCallPart["args"]?.AsObject();
+
+                        _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
+
+                        // Execute the tool on the real workspace filesystem
+                        string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b);
+
+                        // Record plan step and tool operation
+                        if (toolName == "write_file" || toolName == "edit_file")
+                        {
+                            string fPath = toolArgs?["path"]?.ToString() ?? "";
+                            toolOperations.Add(new
+                            {
+                                action = toolName == "write_file" ? "create" : "edit",
+                                path = fPath,
+                                summary = $"Cập nhật tệp {fPath}"
+                            });
+                            planSteps.Add($"Cập nhật tệp '{fPath}'");
+                        }
+                        else if (toolName == "run_command")
+                        {
+                            string cmd = toolArgs?["command"]?.ToString() ?? "";
+                            planSteps.Add($"Thực thi lệnh '{cmd}'");
+                        }
+                        else if (toolName == "read_file")
+                        {
+                            string fPath = toolArgs?["path"]?.ToString() ?? "";
+                            planSteps.Add($"Đọc nội dung tệp '{fPath}'");
                         }
 
-                        // Support both 'operations' and legacy 'edits'
-                        var opsList = new List<object>();
-                        var rawOps = parsed["operations"] as JsonArray ?? parsed["edits"] as JsonArray;
+                        // Append assistant message with functionCall
+                        messages.Add(candidate.DeepClone());
 
-                        string firstFilePath = "";
-                        string firstFileContent = "";
-                        string firstFileOriginal = "";
-
-                        int additions = 0;
-                        int deletions = 0;
-
-                        if (rawOps != null && rawOps.Count > 0)
+                        // Append functionResponse message
+                        messages.Add(new JsonObject
                         {
-                            string root = ResolveWorkspacePath(projectName);
-
-                            foreach (var node in rawOps)
+                            ["role"] = "function",
+                            ["parts"] = new JsonArray
                             {
-                                if (node is JsonObject opObj)
+                                new JsonObject
                                 {
-                                    string path = opObj["path"]?.ToString() ?? "";
-                                    string content = opObj["content"]?.ToString() ?? opObj["newContent"]?.ToString() ?? "";
-                                    string action = opObj["action"]?.ToString() ?? "create";
-                                    string summary = opObj["summary"]?.ToString() ?? "";
-
-                                    if (string.IsNullOrWhiteSpace(path)) continue;
-
-                                    if (string.IsNullOrEmpty(firstFilePath))
+                                    ["functionResponse"] = new JsonObject
                                     {
-                                        firstFilePath = path;
-                                        firstFileContent = content;
-
-                                        if (Directory.Exists(root) && TryGetSafeFilePath(root, path, out string fOrig) && System.IO.File.Exists(fOrig))
+                                        ["name"] = toolName,
+                                        ["response"] = new JsonObject
                                         {
-                                            try { firstFileOriginal = System.IO.File.ReadAllText(fOrig); } catch { }
+                                            ["output"] = toolResult
                                         }
                                     }
-
-                                    int linesCount = content.Split('\n').Length;
-                                    additions += linesCount;
-
-                                    opsList.Add(new
-                                    {
-                                        action = action,
-                                        path = path,
-                                        content = content,
-                                        summary = summary
-                                    });
                                 }
                             }
-                        }
-
-                        // Parse generated images list if any
-                        var imagesList = new List<object>();
-                        if (parsed["images"] is JsonArray rawImgs && rawImgs.Count > 0)
-                        {
-                            foreach (var imgNode in rawImgs)
-                            {
-                                if (imgNode is JsonObject imgObj)
-                                {
-                                    string imgPath = imgObj["path"]?.ToString() ?? "";
-                                    string imgPrompt = imgObj["prompt"]?.ToString() ?? "";
-                                    if (!string.IsNullOrWhiteSpace(imgPath) && !string.IsNullOrWhiteSpace(imgPrompt))
-                                    {
-                                        imagesList.Add(new
-                                        {
-                                            path = imgPath,
-                                            prompt = imgPrompt
-                                        });
-                                    }
-                                }
-                            }
-                        }
-
-                        return Ok(new
-                        {
-                            ok = true,
-                            projectName = projectName,
-                            plan = parsed["plan"],
-                            explanation = parsed["explanation"]?.ToString() ?? "",
-                            operations = opsList,
-                            edits = opsList,
-                            images = imagesList,
-                            suggestedCommand = parsed["suggestedCommand"]?.ToString() ?? "",
-                            proposedFile = firstFilePath,
-                            proposedContent = firstFileContent,
-                            originalContent = firstFileOriginal,
-                            additions = additions,
-                            deletions = deletions
                         });
                     }
-                }
-                catch (Exception pEx)
-                {
-                    _logger.LogWarning("JSON parse error from agent: {Error}. Raw: {Text}", pEx.Message, cleanJson);
+                    else
+                    {
+                        // Gemini returned text without functionCall -> finished!
+                        finalExplanation = candidateText ?? "";
+                        break;
+                    }
                 }
 
-                // Fallback if parsing failed
+                // Clean raw JSON if AI leaked JSON Plan into explanation
+                if (!string.IsNullOrWhiteSpace(finalExplanation))
+                {
+                    string trimmed = finalExplanation.Trim();
+                    if (trimmed.StartsWith("{") && trimmed.Contains("\"plan\""))
+                    {
+                        try
+                        {
+                            var parsedJson = JsonNode.Parse(trimmed);
+                            string exp = parsedJson?["explanation"]?.ToString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(exp))
+                            {
+                                finalExplanation = exp;
+                            }
+                            else
+                            {
+                                finalExplanation = $"Đã hoàn tất cập nhật dự án '{cleanProj}' theo yêu cầu.";
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                if (planSteps.Count == 0)
+                {
+                    planSteps.Add("Kiểm tra và cập nhật mã nguồn dự án");
+                    if (buildPassed) planSteps.Add("Biên dịch kiểm tra dotnet build: Thành công");
+                }
+
+                if (string.IsNullOrWhiteSpace(finalExplanation))
+                {
+                    finalExplanation = modifiedFiles.Count > 0 
+                        ? $"Đã thực hiện xong các chỉnh sửa trên {modifiedFiles.Count} tệp trong dự án '{cleanProj}'."
+                        : $"Đã kiểm tra dự án '{cleanProj}'.";
+                }
+
                 return Ok(new
                 {
                     ok = true,
-                    plan = new string[] { "Hoàn tất xử lý yêu cầu" },
-                    explanation = text,
-                    operations = new object[] { },
-                    edits = new object[] { },
-                    images = new object[] { },
-                    suggestedCommand = "",
-                    proposedFile = "",
-                    proposedContent = "",
-                    originalContent = "",
-                    additions = 0,
-                    deletions = 0
+                    projectName = cleanProj,
+                    plan = planSteps,
+                    explanation = finalExplanation,
+                    modifiedFiles = modifiedFiles,
+                    operations = toolOperations,
+                    buildPassed = buildPassed,
+                    executedCommands = executedCommands
                 });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Agent chat execution error");
                 return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
+
+        private static async Task<string> ExecuteAgentToolAsync(string projectPath, string toolName, JsonObject? args, List<string> modifiedFiles, List<string> executedCommands, Action<bool> setBuildPassed)
+        {
+            try
+            {
+                switch (toolName)
+                {
+                    case "list_files":
+                    {
+                        string dir = args?["directory"]?.ToString() ?? ".";
+                        string targetDir = Path.GetFullPath(Path.Combine(projectPath, dir.TrimStart('/', '\\')));
+                        if (!targetDir.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "Error: Cannot access outside project directory";
+                        }
+                        if (!Directory.Exists(targetDir)) return $"Directory '{dir}' does not exist.";
+                        var entries = Directory.GetFileSystemEntries(targetDir)
+                            .Select(e => {
+                                string rel = Path.GetRelativePath(projectPath, e).Replace('\\', '/');
+                                return Directory.Exists(e) ? rel + "/" : rel;
+                            })
+                            .Take(100);
+                        return string.Join("\n", entries);
+                    }
+                    case "read_file":
+                    {
+                        string path = args?["path"]?.ToString() ?? "";
+                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "Error: Cannot access outside project directory";
+                        }
+                        if (!System.IO.File.Exists(fullPath)) return $"Error: File '{path}' does not exist.";
+                        return await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8);
+                    }
+                    case "write_file":
+                    {
+                        string path = args?["path"]?.ToString() ?? "";
+                        string content = args?["content"]?.ToString() ?? "";
+                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "Error: Cannot access outside project directory";
+                        }
+                        string dir = Path.GetDirectoryName(fullPath)!;
+                        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                        await System.IO.File.WriteAllTextAsync(fullPath, content, Encoding.UTF8);
+                        string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
+                        if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
+                        return $"Successfully written file: {relPath} ({content.Length} bytes)";
+                    }
+                    case "edit_file":
+                    {
+                        string path = args?["path"]?.ToString() ?? "";
+                        string target = args?["target"]?.ToString() ?? "";
+                        string replacement = args?["replacement"]?.ToString() ?? "";
+                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "Error: Cannot access outside project directory";
+                        }
+                        if (!System.IO.File.Exists(fullPath)) return $"Error: File '{path}' does not exist.";
+                        string existing = await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8);
+                        if (!existing.Contains(target))
+                        {
+                            return $"Error: target string not found in '{path}'. Use read_file to check exact text.";
+                        }
+                        string updated = existing.Replace(target, replacement);
+                        await System.IO.File.WriteAllTextAsync(fullPath, updated, Encoding.UTF8);
+                        string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
+                        if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
+                        return $"Successfully edited file: {relPath}";
+                    }
+                    case "delete_file":
+                    {
+                        string path = args?["path"]?.ToString() ?? "";
+                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "Error: Cannot access outside project directory";
+                        }
+                        if (System.IO.File.Exists(fullPath))
+                        {
+                            System.IO.File.Delete(fullPath);
+                            string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
+                            if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
+                            return $"Successfully deleted: {relPath}";
+                        }
+                        return $"File '{path}' does not exist.";
+                    }
+                    case "run_command":
+                    {
+                        string command = args?["command"]?.ToString() ?? "";
+                        if (string.IsNullOrWhiteSpace(command)) return "Error: command is required";
+                        executedCommands.Add(command);
+                        var (ok, output) = await RunCliProcessAsync(projectPath, command, "", 60);
+                        if (command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase) && ok)
+                        {
+                            setBuildPassed(true);
+                        }
+                        return $"ExitCode: {(ok ? 0 : 1)}\nOutput:\n{output}";
+                    }
+                    default:
+                        return $"Unknown tool: {toolName}";
+                }
+            }
+            catch (Exception ex)
+            {
+                return $"Tool execution error: {ex.Message}";
             }
         }
 

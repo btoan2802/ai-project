@@ -2427,6 +2427,23 @@ async function sendAgentTask() {
 
         if (data.ok) {
             renderAgentResponse(data, agentMsg);
+
+            // Tự động làm mới cây thư mục Explorer sau khi Agent sửa hoặc tạo tệp mới
+            if (typeof refreshFileTree === 'function') {
+                try { await refreshFileTree(); } catch(e) { console.warn(e); }
+            }
+
+            // Nếu tệp đang mở trong Editor bị Agent chỉnh sửa, tự động tải lại nội dung mới nhất
+            if (activeFilePath && Array.isArray(data.modifiedFiles)) {
+                const normActive = activeFilePath.replace(/\\/g, '/').toLowerCase();
+                const wasModified = data.modifiedFiles.some(f => {
+                    const normF = f.replace(/\\/g, '/').toLowerCase();
+                    return normActive.endsWith(normF) || normF.endsWith(normActive);
+                });
+                if (wasModified && typeof openFileInEditor === 'function') {
+                    try { await openFileInEditor(activeFilePath); } catch(e) { console.warn(e); }
+                }
+            }
         } else {
             agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${data.message || "Agent execution failed"}</div>`;
         }
@@ -2479,12 +2496,58 @@ function renderAgentResponse(data, container) {
         container.appendChild(planCard);
     }
 
-    // 2. Explanation / Message
-    if (data.explanation) {
+    // 2. Explanation / Message (Lọc sạch JSON Plan thô nếu AI vô tình xuất)
+    let explanationText = data.explanation || "";
+    if (explanationText.trim().startsWith("{") && explanationText.includes('"plan"')) {
+        try {
+            const parsed = JSON.parse(explanationText.trim());
+            explanationText = parsed.explanation || (Array.isArray(parsed.plan) ? "" : "");
+        } catch {}
+    }
+    if (explanationText) {
         const expEl = document.createElement("div");
         expEl.className = "p-2 rounded bg-dark border border-secondary text-light extra-small";
-        expEl.innerText = data.explanation;
+        expEl.innerText = explanationText;
         container.appendChild(expEl);
+    }
+
+    // 2.5. Modified Files Card (Hiển thị các tệp đã trực tiếp sửa/tạo trên ổ đĩa)
+    if (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) {
+        const modCard = document.createElement("div");
+        modCard.className = "agent-modified-files-card p-2 rounded bg-dark border border-secondary mb-2";
+        modCard.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="fw-semibold text-success extra-small"><i class="bi bi-check-circle-fill me-1"></i> Đã cập nhật ${data.modifiedFiles.length} tệp trên ổ đĩa:</span>
+                ${data.buildPassed ? '<span class="badge bg-success extra-small"><i class="bi bi-shield-check me-1"></i>dotnet build: Pass</span>' : ''}
+            </div>
+            <div class="d-flex flex-column gap-1">
+                ${data.modifiedFiles.map(f => `
+                    <div class="p-1 px-2 rounded bg-black border border-secondary text-light extra-small d-flex align-items-center justify-content-between">
+                        <span class="font-mono text-info"><i class="bi bi-file-earmark-code me-1"></i>${escapeHtml(f)}</span>
+                        <button class="btn btn-xs btn-outline-info py-0 px-1 extra-small" onclick="openFileInEditor('${escapeHtml(f.replace(/\\/g, '/'))}')">Xem</button>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        container.appendChild(modCard);
+    }
+
+    // 2.6. Executed Commands Card (Kiểm tra lệnh dotnet build / shell đã chạy)
+    if (Array.isArray(data.executedCommands) && data.executedCommands.length > 0) {
+        const cmdCard = document.createElement("div");
+        cmdCard.className = "agent-executed-commands-card p-2 rounded bg-dark border border-secondary mb-2";
+        cmdCard.innerHTML = `
+            <div class="fw-semibold text-warning extra-small mb-1"><i class="bi bi-terminal me-1"></i> Lệnh đã thực thi kiểm tra:</div>
+            <div class="d-flex flex-column gap-1 font-mono" style="font-size: 11px;">
+                ${data.executedCommands.map(cmd => `
+                    <div class="p-1 px-2 rounded bg-black border border-secondary text-secondary d-flex align-items-center">
+                        <span class="text-secondary me-1.5">&gt;</span>
+                        <span class="text-light">${escapeHtml(cmd)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        container.appendChild(cmdCard);
     }
 
     // 3. Multi-file Operations & Generated Images (Full-Project Scaffolding)

@@ -305,10 +305,6 @@ namespace BtoanAiNet.Services
                 modelPayload.Remove("user_id");
                 modelPayload.Remove("conversation_id");
                 modelPayload.Remove("intent");
-                if (!isThinkingMode)
-                {
-                    modelPayload.Remove("tools");
-                }
 
                 if (currentModel.Contains("flash-latest") || currentModel.Contains("flash-lite-latest") || currentModel.Contains("lite"))
                 {
