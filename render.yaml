@@ -14,3 +14,7 @@ services:
         value: MySql
       - key: ConnectionStrings__DefaultConnection
         sync: false
+      - key: Gemini__ApiKey
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

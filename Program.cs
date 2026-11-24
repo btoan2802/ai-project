@@ -558,7 +558,9 @@ END
 // 1. Configure ForwardedHeaders for Cloudflare Tunnel / Reverse Proxy (ai.btoan.com)
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor 
+                     | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto 
+                     | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedHost
 };
 forwardedHeadersOptions.KnownIPNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();

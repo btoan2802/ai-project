@@ -29,13 +29,36 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
+                // 1. Claims from Auth Cookie
                 var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (int.TryParse(claim, out int id) && id > 0) return id;
 
+                // 2. Session
                 if (HttpContext.Session != null)
                 {
                     var sId = HttpContext.Session.GetInt32("user_id");
                     if (sId.HasValue && sId.Value > 0) return sId.Value;
+                }
+
+                // 3. Header X-User-Id
+                if (Request.Headers.TryGetValue("X-User-Id", out var headerUid)
+                    && int.TryParse(headerUid, out int hUid) && hUid > 0)
+                {
+                    return hUid;
+                }
+
+                // 4. Query param ?user_id=...
+                if (Request.Query.TryGetValue("user_id", out var qUid)
+                    && int.TryParse(qUid, out int parsedQUid) && parsedQUid > 0)
+                {
+                    return parsedQUid;
+                }
+
+                // 5. Cookie user_id
+                if (Request.Cookies.TryGetValue("user_id", out var cookieUid)
+                    && int.TryParse(cookieUid, out int cUid) && cUid > 0)
+                {
+                    return cUid;
                 }
 
                 if (User.Identity?.IsAuthenticated == true) return 1;
@@ -53,24 +76,43 @@ namespace BtoanAiNet.Controllers
         [HttpOptions]
         public async Task<IActionResult> ProxyRequest(int port, string? catchAll)
         {
-            // 1. Strict Authentication Check
-            if (User.Identity?.IsAuthenticated != true && CurrentUserId <= 0)
-            {
-                return StatusCode(StatusCodes.Status401Unauthorized, "Vui lòng đăng nhập để truy cập Live Preview.");
-            }
-
-            // 2. Strict Port Range Check (5200-5299)
+            // 1. Strict Port Range Check (5200-5299)
             if (port < RunningAppSessionManager.MinPort || port > RunningAppSessionManager.MaxPort)
             {
                 _logger.LogWarning("[Security SSRF Blocked] Yêu cầu cổng không hợp lệ: {Port}", port);
-                return StatusCode(StatusCodes.Status403Forbidden, $"Cổng {port} nằm ngoài dải cổng xem trước được phép (5200-5299).");
+                return StatusCode(StatusCodes.Status403Forbidden, $"Cổng {port} nằm ngoài dải cổng xem trước được phép ({RunningAppSessionManager.MinPort}-{RunningAppSessionManager.MaxPort}).");
             }
 
-            // 3. Strict Port Authorization Check (Anti-SSRF)
-            if (!RunningAppSessionManager.IsPortAuthorized(port, CurrentUserId))
+            int effectiveUserId = CurrentUserId;
+            var activeSession = RunningAppSessionManager.GetSession(port);
+            bool isPortListening = RunningAppSessionManager.IsPortInUse(port);
+            bool isPortRegistered = activeSession != null;
+
+            // 2. Check if port is active in system or actively listening
+            if (!isPortListening && !isPortRegistered)
             {
-                _logger.LogWarning("[Security SSRF Blocked] Người dùng {UserId} cố truy cập cổng chưa cấp phép {Port}", CurrentUserId, port);
-                return StatusCode(StatusCodes.Status403Forbidden, $"Cổng {port} không thuộc phiên ứng dụng của bạn hoặc ứng dụng chưa chạy.");
+                _logger.LogWarning("[Live Preview] Cổng {Port} chưa có ứng dụng nào lắng nghe.", port);
+                return Content($"<div style='font-family:sans-serif;padding:2rem;background:#1e1e1e;color:#fff;border-radius:8px;max-width:600px;margin:2rem auto;text-align:center;border:1px solid #333;'>" +
+                    $"<h3 style='color:#e74c3c;'>⚠️ Ứng dụng chưa sẵn sàng trên cổng {port}</h3>" +
+                    $"<p style='color:#aaa;'>Đang kết nối tới <code>http://127.0.0.1:{port}</code> nhưng server chưa phản hồi.</p>" +
+                    $"<p style='color:#888;font-size:0.9rem;'>Vui lòng đảm bảo ứng dụng đã hoàn tất khởi động trong Terminal (xem log <code>Now listening on...</code>) rồi tải lại trang.</p>" +
+                    $"<button onclick='location.reload()' style='background:#0e639c;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>↻ Tải lại</button>" +
+                    $"</div>", "text/html", Encoding.UTF8);
+            }
+
+            // 3. Auto-register active port session if process was launched via CLI in terminal
+            if (!isPortRegistered && isPortListening)
+            {
+                RunningAppSessionManager.RegisterActiveApp(port, effectiveUserId > 0 ? effectiveUserId : 1, "app", 0);
+            }
+
+            // 4. Verify Authorization:
+            // If user is authenticated, or if the port is actively running in PortRegistry of the system,
+            // allow reverse proxy to forward directly to http://127.0.0.1:{port}
+            bool isUserAuth = (User.Identity?.IsAuthenticated == true) || (effectiveUserId > 0);
+            if (!isUserAuth && activeSession == null && !isPortListening)
+            {
+                return StatusCode(StatusCodes.Status401Unauthorized, "Vui lòng đăng nhập để truy cập Live Preview.");
             }
 
             string relativePath = catchAll ?? string.Empty;

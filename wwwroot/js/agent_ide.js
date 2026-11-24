@@ -1725,7 +1725,7 @@ async function loadActivePorts() {
                                 <tr>
                                     <td><span class="font-mono text-info fw-bold">:${p.port}</span></td>
                                     <td>
-                                        <a href="/ide-preview/${p.port}/" target="_blank" class="text-light text-decoration-none font-mono">
+                                        <a href="/ide-preview/${p.port}/?user_id=${encodeURIComponent(localStorage.getItem('user_id') || '1')}" target="_blank" class="text-light text-decoration-none font-mono">
                                             http://127.0.0.1:${p.port} <i class="bi bi-box-arrow-up-right extra-small text-secondary"></i>
                                         </a>
                                     </td>
@@ -4222,7 +4222,8 @@ function openAppLivePreview() {
     if (sqliteContainer) sqliteContainer.style.display = "none";
     if (liveAppContainer) liveAppContainer.style.display = "flex";
 
-    const proxyUrl = `/ide-preview/${currentLiveAppPort}/`;
+    const uid = localStorage.getItem("user_id") || "1";
+    const proxyUrl = `/ide-preview/${currentLiveAppPort}/?user_id=${encodeURIComponent(uid)}`;
     if (iframe && iframe.src !== window.location.origin + proxyUrl) {
         iframe.src = proxyUrl;
     }
@@ -4247,7 +4248,8 @@ function closeLiveAppPreview() {
 function reloadLiveAppIframe() {
     const iframe = document.getElementById("liveAppIframe");
     if (iframe && currentLiveAppPort) {
-        iframe.src = `/ide-preview/${currentLiveAppPort}/?_t=${Date.now()}`;
+        const uid = localStorage.getItem("user_id") || "1";
+        iframe.src = `/ide-preview/${currentLiveAppPort}/?user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`;
     }
 }
 

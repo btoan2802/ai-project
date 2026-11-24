@@ -344,6 +344,15 @@ namespace BtoanAiNet.Hubs
             psi.Environment["CI"] = "false";
             psi.Environment["FORCE_COLOR"] = "1";
             psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+            if (!OperatingSystem.IsWindows())
+            {
+                psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
+                string curPath = psi.Environment.ContainsKey("PATH") ? (psi.Environment["PATH"] ?? "") : (Environment.GetEnvironmentVariable("PATH") ?? "");
+                if (!curPath.Contains("/usr/share/dotnet"))
+                {
+                    psi.Environment["PATH"] = $"/usr/share/dotnet:{curPath}";
+                }
+            }
 
             // Inject project secrets into environment variables
             try

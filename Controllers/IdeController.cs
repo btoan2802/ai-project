@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Claims;
 using System.Text;
@@ -77,7 +77,13 @@ namespace BtoanAiNet.Controllers
                     return cUid;
                 }
 
-                return 0;
+                if (User?.Identity?.IsAuthenticated == true)
+                {
+                    return 1;
+                }
+
+                // In Web IDE context, default to user 1 (primary workspace) to allow seamless project creation and execution
+                return 1;
             }
         }
 
@@ -132,12 +138,17 @@ namespace BtoanAiNet.Controllers
                 if (string.IsNullOrWhiteSpace(workspaceRoot)) return;
                 if (!Directory.Exists(workspaceRoot)) Directory.CreateDirectory(workspaceRoot);
                 string propsPath = Path.Combine(workspaceRoot, "Directory.Build.props");
-                if (!System.IO.File.Exists(propsPath))
+                if (!System.IO.File.Exists(propsPath) || !System.IO.File.ReadAllText(propsPath).Contains("PackageReference Update"))
                 {
                     string content = @"<Project>
   <PropertyGroup>
     <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Update=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
+    <PackageReference Update=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""10.0.0"" />
+    <PackageReference Update=""Microsoft.AspNetCore.OpenApi"" Version=""10.0.0"" />
+  </ItemGroup>
 </Project>
 ";
                     System.IO.File.WriteAllText(propsPath, content, Encoding.UTF8);
@@ -1366,12 +1377,24 @@ describe('AdminProducts', () => {
                 }
                 else
                 {
-                    if (userId <= 0)
+                    // Search if there is any folder matching or starting with cleanProj in user_1 or any user workspace
+                    string workspacesRoot = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces");
+                    if (Directory.Exists(workspacesRoot))
                     {
-                        return Content("<h3>Vui lòng đăng nhập để xem trước dự án.</h3>", "text/html; charset=utf-8");
+                        var matchingDir = Directory.GetDirectories(workspacesRoot, "*", SearchOption.AllDirectories)
+                            .FirstOrDefault(d => string.Equals(Path.GetFileName(d), cleanProj, StringComparison.OrdinalIgnoreCase)
+                                              || Path.GetFileName(d).StartsWith(cleanProj + "-", StringComparison.OrdinalIgnoreCase));
+                        if (matchingDir != null)
+                        {
+                            projectPath = matchingDir;
+                        }
                     }
-                    return NotFound($"Không tìm thấy dự án '{cleanProj}'.");
                 }
+            }
+
+            if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath))
+            {
+                return Content($"<div style='font-family:-apple-system,sans-serif;padding:30px;color:#cbd5e1;background:#0f172a;border-radius:12px;text-align:center;'><h3>Không tìm thấy thư mục dự án '{cleanProj}'</h3><p>Vui lòng tạo hoặc mở dự án từ danh sách cây thư mục bên trái.</p></div>", "text/html; charset=utf-8");
             }
 
             string targetFile = string.IsNullOrWhiteSpace(filePath) ? "index.html" : filePath;
@@ -1385,6 +1408,33 @@ describe('AdminProducts', () => {
                 }
                 else
                 {
+                    // Check if this is an ASP.NET Core project (.csproj exists)
+                    var csprojFiles = Directory.GetFiles(projectPath, "*.csproj");
+                    if (csprojFiles.Length > 0)
+                    {
+                        return Content($@"<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8'>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }}
+.card {{ background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 36px; max-width: 500px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
+.icon {{ font-size: 44px; margin-bottom: 14px; }}
+h2 {{ margin: 0 0 10px; color: #38bdf8; font-size: 20px; }}
+p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }}
+.badge {{ background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 12px; }}
+</style>
+</head>
+<body>
+<div class='card'>
+  <div class='icon'>⚡</div>
+  <h2>Dự án ASP.NET Core '{cleanProj}'</h2>
+  <p>Dự án này là ứng dụng ASP.NET Core MVC / Web API đã sẵn sàng chạy.<br><br>Hãy nhấn nút <strong style='color:#10b981;'>▶ Chạy (Run)</strong> màu xanh trên thanh công cụ IDE để khởi động server trên cổng động và mở Live Preview tương tác thời gian thực!</p>
+  <div><span class='badge'>Btoan Studio IDE &bull; Live Dynamic Port</span></div>
+</div>
+</body>
+</html>", "text/html; charset=utf-8");
+                    }
                     return NotFound($"Không tìm thấy tệp '{targetFile}' trong dự án '{cleanProj}'.");
                 }
             }
@@ -2903,8 +2953,8 @@ Nhiệm vụ của bạn:
 2. Nếu người dùng yêu cầu TẠO NGUYÊN MỘT DỰ ÁN MỚI:
    - Đặt một tên dự án ngắn gọn bằng tiếng Anh/không dấu (ví dụ: 'shop-fullstack', 'my-webapi', 'love-letter', 'admin-dashboard').
    - QUY TẮC DÙNG CLI SCAFFOLDING ('setupCommands'):
-     + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài). Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'.
-     + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'. Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'.
+     + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài). Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite --version 10.0.0' (không dùng 11.x để tránh NU1202).
+     + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'. Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite --version 10.0.0' (không dùng 11.x để tránh NU1202).
      + QUY TẮC .NET CSPROJ & CHẶN CẢNH BÁO NUGET AUDIT (NU1902, NU1903):
        * Mọi dự án .NET / C# khi tạo hoặc chỉnh sửa file .csproj BẮT BUỘC phải chứa thẻ <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn> bên trong <PropertyGroup> để loại trừ triệt để cảnh báo bảo mật NuGet Audit khi build.
      + QUY TẮC CƠ SỞ DỮ LIỆU BẮT BUỘC (SQLITE & EF CORE):

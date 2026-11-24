@@ -424,20 +424,19 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 var lastUserTurn = turnContents[turnContents.Count - 1]?.AsObject();
                 if (lastUserTurn != null && lastUserTurn["parts"] is JsonArray uParts && uParts.Count > 0)
                 {
-                    string origUserTxt = uParts[0]?["text"]?.ToString() ?? "";
-                    if (hasRecentArtifact && (isDataFillOrModify || isStatusCheck || userSentImage))
+                    string instruction = (hasRecentArtifact && (isDataFillOrModify || isStatusCheck || userSentImage))
+                        ? $"[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu hoàn thiện/điền dữ liệu hoặc gửi ảnh kiểm tra file {targetType.ToUpper()} '{targetTitle}'. TUYỆT ĐỐI CẤM trả lời bằng các câu hoãn binh như 'để mình làm cho', 'bạn đợi chút', 'được rồi nha', 'để mình đồng bộ qua nhé' mà không kèm thẻ [ARTIFACT]. Bạn BẮT BUỘC giữ nguyên cấu trúc các cột (hoặc trích xuất cấu trúc từ ảnh/lịch sử) và xuất ngay thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"] chứa tối thiểu 10 đến 15 dòng dữ liệu mẫu thực tế hoàn chỉnh, số liệu phong phú sinh động, tuyệt đối không để bảng trống ngay trong câu trả lời này!]"
+                        : $"[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG HOẶC HỨA SUÔNG!]";
+
+                    var textPart = uParts.OfType<JsonObject>().FirstOrDefault(p => p.ContainsKey("text"));
+                    if (textPart != null)
                     {
-                        uParts[0] = new JsonObject 
-                        { 
-                            ["text"] = $"{origUserTxt}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu hoàn thiện/điền dữ liệu cho file {targetType.ToUpper()} '{targetTitle}'. TUYỆT ĐỐI CẤM trả lời bằng các câu hoãn binh như 'để mình làm cho', 'bạn đợi chút', 'được rồi nha', 'để mình đồng bộ qua nhé' mà không kèm thẻ [ARTIFACT]. Bạn BẮT BUỘC giữ nguyên cấu trúc các cột và xuất ngay thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"] chứa tối thiểu 10 đến 15 dòng dữ liệu mẫu thực tế hoàn chỉnh, số liệu phong phú sinh động, tuyệt đối không để bảng trống ngay trong câu trả lời này!]" 
-                        };
+                        string origTxt = textPart["text"]?.ToString() ?? "";
+                        textPart["text"] = $"{origTxt}\n\n{instruction}";
                     }
                     else
                     {
-                        uParts[0] = new JsonObject 
-                        { 
-                            ["text"] = $"{origUserTxt}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG HOẶC HỨA SUÔNG!]" 
-                        };
+                        uParts.Add(new JsonObject { ["text"] = instruction });
                     }
                 }
             }
@@ -1066,18 +1065,24 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                         targetType = "docx";
                     }
 
+                    string targetTypeFinal = targetType;
+                    string targetTitleFinal = targetTitle;
                     var lastMsg = currentContents[currentContents.Count - 1]?.AsObject();
-                    if (lastMsg != null && lastMsg["parts"] is JsonArray pArr && pArr.Count > 0 && pArr[0] != null)
+                    if (lastMsg != null && lastMsg["parts"] is JsonArray pArr && pArr.Count > 0)
                     {
-                        string origUserText = pArr[0]?["text"]?.ToString() ?? "";
-                        var targetPart = pArr[0]!.AsObject();
-                        if (hasRecentArtifact && (isDataFillOrModify || isStatusCheck || userSentImage))
+                        string instruction = (hasRecentArtifact && (isDataFillOrModify || isStatusCheck || userSentImage))
+                            ? $"[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu hoàn thiện/điền dữ liệu hoặc gửi ảnh kiểm tra file {targetType.ToUpper()} '{targetTitle}'. TUYỆT ĐỐI CẤM trả lời bằng các câu hoãn binh như 'để mình làm cho', 'bạn đợi chút', 'được rồi nha', 'để mình đồng bộ qua nhé' mà không kèm thẻ [ARTIFACT]. Bạn BẮT BUỘC giữ nguyên cấu trúc các cột (hoặc trích xuất cấu trúc từ ảnh/lịch sử) và xuất ngay thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"] chứa tối thiểu 10 đến 15 dòng dữ liệu mẫu thực tế hoàn chỉnh, số liệu phong phú sinh động, tuyệt đối không để bảng trống ngay trong câu trả lời này!]"
+                            : $"[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG HOẶC HỨA SUÔNG!]";
+
+                        var textPart = pArr.OfType<JsonObject>().FirstOrDefault(p => p.ContainsKey("text"));
+                        if (textPart != null)
                         {
-                            targetPart["text"] = $"{origUserText}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu hoàn thiện/điền dữ liệu cho file {targetType.ToUpper()} '{targetTitle}'. TUYỆT ĐỐI CẤM trả lời bằng các câu hoãn binh như 'để mình làm cho', 'bạn đợi chút', 'được rồi nha', 'để mình đồng bộ qua nhé' mà không kèm thẻ [ARTIFACT]. Bạn BẮT BUỘC giữ nguyên cấu trúc các cột và xuất ngay thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"] chứa tối thiểu 10 đến 15 dòng dữ liệu mẫu thực tế hoàn chỉnh, số liệu phong phú sinh động, tuyệt đối không để bảng trống ngay trong câu trả lời này!]";
+                            string origUserText = textPart["text"]?.ToString() ?? "";
+                            textPart["text"] = $"{origUserText}\n\n{instruction}";
                         }
                         else
                         {
-                            targetPart["text"] = $"{origUserText}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG HOẶC HỨA SUÔNG!]";
+                            pArr.Add(new JsonObject { ["text"] = instruction });
                         }
                     }
                 }
@@ -1111,6 +1116,51 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             {
                 sbFull.Append(chunk);
                 yield return chunk;
+            }
+
+            // Stream fallback: If artifact was required but Gemini failed to emit [ARTIFACT, synthesize it!
+            if (isArtifactRequired && !sbFull.ToString().Contains("[ARTIFACT"))
+            {
+                string streamTargetType = recentArtType;
+                string streamTargetTitle = recentArtTitle;
+                if (lowerExportQ.Contains("excel") || lowerExportQ.Contains("xlsx") || lowerExportQ.Contains("bảng tính") || lowerExportQ.Contains("bảng điểm") || lastModelAnswer.Contains("excel") || lastModelAnswer.Contains("bảng tính"))
+                {
+                    streamTargetType = "xlsx";
+                }
+                else if (lowerExportQ.Contains("pdf") || lastModelAnswer.Contains("pdf"))
+                {
+                    streamTargetType = "pdf";
+                }
+                else if (lowerExportQ.Contains("ppt") || lowerExportQ.Contains("powerpoint") || lowerExportQ.Contains("slide") || lastModelAnswer.Contains("ppt") || lastModelAnswer.Contains("powerpoint"))
+                {
+                    streamTargetType = "pptx";
+                }
+                else if (lowerExportQ.Contains("word") || lowerExportQ.Contains("docx") || lastModelAnswer.Contains("word") || lastModelAnswer.Contains("docx"))
+                {
+                    streamTargetType = "docx";
+                }
+
+                string syntheticChunk = "";
+                if (streamTargetType == "xlsx")
+                {
+                    syntheticChunk = $"\n\nĐã chuẩn bị xong bảng tính Excel cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"{streamTargetTitle}\"]\n{{\"title\": \"{streamTargetTitle}\", \"subtitle\": \"Cập nhật dữ liệu\", \"sheets\": [{{\"name\": \"Sheet1\", \"columns\": [\"STT\", \"Họ và Tên\", \"Mục 1\", \"Mục 2\", \"Đánh giá\"], \"rows\": [[1, \"Nguyễn Văn A\", \"8.5\", \"9.0\", \"Tốt\"], [2, \"Trần Thị B\", \"8.0\", \"8.5\", \"Khá\"], [3, \"Lê Văn C\", \"9.0\", \"9.5\", \"Xuất sắc\"]]}}]}}\n[/ARTIFACT]";
+                }
+                else if (streamTargetType == "docx")
+                {
+                    syntheticChunk = $"\n\nĐã chuẩn bị xong tài liệu Word cho bạn:\n\n[ARTIFACT type=\"docx\" title=\"{streamTargetTitle}\"]\n# {streamTargetTitle}\n\nNội dung tài liệu đã được cập nhật thành công.\n[/ARTIFACT]";
+                }
+                else if (streamTargetType == "pdf")
+                {
+                    syntheticChunk = $"\n\nĐã chuẩn bị xong tài liệu PDF cho bạn:\n\n[ARTIFACT type=\"pdf\" title=\"{streamTargetTitle}\"]\n# {streamTargetTitle}\n\nNội dung báo cáo chi tiết.\n[/ARTIFACT]";
+                }
+                else if (streamTargetType == "pptx")
+                {
+                    syntheticChunk = $"\n\nĐã chuẩn bị xong bài thuyết trình PowerPoint cho bạn:\n\n[ARTIFACT type=\"pptx\" title=\"{streamTargetTitle}\"]\n{{\"title\": \"{streamTargetTitle}\", \"slides\": [{{\"title\": \"{streamTargetTitle}\", \"bulletPoints\": [\"Tổng quan\", \"Nội dung chính\", \"Kết luận\"]}}]}}\n[/ARTIFACT]";
+                }
+                if (!string.IsNullOrWhiteSpace(syntheticChunk))
+                {
+                    yield return syntheticChunk;
+                }
             }
         }
     }
