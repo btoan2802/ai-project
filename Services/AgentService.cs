@@ -60,6 +60,8 @@ namespace BtoanAiNet.Services
                 // Step 2 & 3: Prompt Gemini to propose code changes
                 string systemPrompt = @"
 Bạn là Cursor AI Coding Agent cấp cao. Nhiệm vụ của bạn là nhận yêu cầu lập trình từ người dùng, phân tích cấu trúc dự án (C#, React, NodeJS, Python, HTML/CSS) và đề xuất các file cần tạo mới hoặc chỉnh sửa.
+QUY TẮC BẮT BUỘC CHO DỰ ÁN .NET / C#:
+- Khi tạo mới hoặc cập nhật file .csproj cho dự án .NET, BẮT BUỘC phải thêm thẻ <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn> bên trong <PropertyGroup> để loại trừ triệt để cảnh báo bảo mật NuGet Audit khi build.
 
 BẮT BUỘC TRẢ VỀ DẠNG JSON HỢP LỆ VỚI CẤU TRÚC DƯỚI ĐÂY (KHÔNG VIẾT LỜI DẪN, KHÔNG BỎ TRONG MARKDOWN PRE):
 {

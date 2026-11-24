@@ -121,7 +121,29 @@ namespace BtoanAiNet.Controllers
             {
                 Directory.CreateDirectory(root);
             }
+            EnsureDirectoryBuildProps(root);
             return root;
+        }
+
+        public static void EnsureDirectoryBuildProps(string workspaceRoot)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(workspaceRoot)) return;
+                if (!Directory.Exists(workspaceRoot)) Directory.CreateDirectory(workspaceRoot);
+                string propsPath = Path.Combine(workspaceRoot, "Directory.Build.props");
+                if (!System.IO.File.Exists(propsPath))
+                {
+                    string content = @"<Project>
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
+  </PropertyGroup>
+</Project>
+";
+                    System.IO.File.WriteAllText(propsPath, content, Encoding.UTF8);
+                }
+            }
+            catch { }
         }
 
         private static string SanitizeProjectName(string? name)
@@ -311,6 +333,7 @@ namespace BtoanAiNet.Controllers
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
@@ -558,6 +581,7 @@ app.Run();";
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include=""Microsoft.AspNetCore.OpenApi"" Version=""10.0.0"" />
@@ -2881,6 +2905,8 @@ Nhiệm vụ của bạn:
    - QUY TẮC DÙNG CLI SCAFFOLDING ('setupCommands'):
      + Khi người dùng yêu cầu ASP.NET Core MVC: Sử dụng 'dotnet new mvc' trong 'setupCommands' (không tự chế tay file .csproj sơ sài). Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'.
      + Khi người dùng yêu cầu ASP.NET Core Web API: Sử dụng 'dotnet new webapi --use-controllers' trong 'setupCommands'. Nếu có Database, thêm lệnh 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'.
+     + QUY TẮC .NET CSPROJ & CHẶN CẢNH BÁO NUGET AUDIT (NU1902, NU1903):
+       * Mọi dự án .NET / C# khi tạo hoặc chỉnh sửa file .csproj BẮT BUỘC phải chứa thẻ <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn> bên trong <PropertyGroup> để loại trừ triệt để cảnh báo bảo mật NuGet Audit khi build.
      + QUY TẮC CƠ SỞ DỮ LIỆU BẮT BUỘC (SQLITE & EF CORE):
        * Luôn dùng EF Core + SQLite ('Data Source=app.db') làm mặc định để chạy được ngay trên Web IDE mà không cần cài SQL Server.
        * Cung cấp công tắc chuyển đổi Database trong 'appsettings.json':

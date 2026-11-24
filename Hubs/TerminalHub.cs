@@ -121,6 +121,7 @@ namespace BtoanAiNet.Hubs
             {
                 Directory.CreateDirectory(userRoot);
             }
+            Controllers.IdeController.EnsureDirectoryBuildProps(userRoot);
 
             string projectPath = Path.Combine(userRoot, cleanProj);
             if (!Directory.Exists(projectPath))

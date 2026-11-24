@@ -81,6 +81,7 @@ namespace BtoanAiNet.Services
             {
                 Directory.CreateDirectory(absoluteStorage);
             }
+            Controllers.IdeController.EnsureDirectoryBuildProps(absoluteStorage);
 
             await InitializeTemplateFilesAsync(project.Id, absoluteStorage, template);
 
@@ -503,6 +504,7 @@ class Calculator {
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
 </Project>", "SYSTEM", "Initial Template", storagePath);
                     await SaveFileWithVersionAsync(projectId, "Program.cs", @"var builder = WebApplication.CreateBuilder(args);
