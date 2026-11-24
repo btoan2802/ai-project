@@ -2291,15 +2291,11 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return BadRequest(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
             }
 
-            string selectedModel = !string.IsNullOrWhiteSpace(model.Model) ? model.Model : "gemini-2.5-flash";
-            if (string.Equals(selectedModel, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(selectedModel, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase))
+            string selectedModel = "gemini-3.5-flash-lite";
+            if (string.Equals(model.Model, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(model.Model, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase))
             {
-                selectedModel = "gemini-2.5-pro";
-            }
-            else
-            {
-                selectedModel = "gemini-2.5-flash";
+                selectedModel = "gemini-3.5-flash-lite";
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
 
@@ -2603,7 +2599,7 @@ QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
                         // Append functionResponse message
                         messages.Add(new JsonObject
                         {
-                            ["role"] = "function",
+                            ["role"] = "user",
                             ["parts"] = new JsonArray
                             {
                                 new JsonObject
