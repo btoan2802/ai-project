@@ -932,6 +932,9 @@ async function streamGeminiChat(userText, images, files, onChunk) {
                     }
                     if (parsed.done) {
                         finalDoneData = parsed;
+                        if (parsed.conversation_title && parsed.conversation_title !== "Chat mới" && !parsed.conversation_title.startsWith("{")) {
+                            syncSidebarChatTitle(parsed.conversation_title, parsed.conversation_id || conversation_id);
+                        }
                     }
                 } catch (e) {
                     console.debug("SSE Parse error:", e);
@@ -1092,6 +1095,28 @@ async function callGemini(userText, images, files) {
         throw new Error("server trả dữ liệu không phải JSON");
     }
 
+function syncSidebarChatTitle(newTitle, cId) {
+    if (!newTitle || newTitle === "Chat mới" || newTitle.startsWith("{")) return;
+    const cleanTitle = newTitle.replace(/[\r\n]+/g, ' ').trim();
+    document.title = `${cleanTitle} - Btoan AI`;
+
+    const targetId = cId || conversation_id;
+    let found = false;
+    if (targetId) {
+        document.querySelectorAll(`.chat-history-item[data-id="${targetId}"] .chat-title, .history-item[data-id="${targetId}"] .history-title`).forEach(el => {
+            el.innerText = cleanTitle;
+            found = true;
+        });
+    }
+    if (!found) {
+        const activeTitleEl = document.querySelector('.chat-history-item.active .chat-title') ||
+                              document.querySelector('.chat-history-item:first-child .chat-title');
+        if (activeTitleEl) {
+            activeTitleEl.innerText = cleanTitle;
+        }
+    }
+}
+
     // 🔥 FIX ĐÚNG CHỖ (sau parse)
     if (data?.conversation_id && !conversation_id) {
         conversation_id = data.conversation_id
@@ -1099,13 +1124,7 @@ async function callGemini(userText, images, files) {
         loadHistory()
     }
     if (data?.conversation_title && data.conversation_title !== "Chat mới" && !data.conversation_title.startsWith("{")) {
-        document.title = `${data.conversation_title} - Btoan AI`;
-        const activeItem = document.querySelector(`.chat-history-item[data-id="${conversation_id}"]`) ||
-            document.querySelector(`.history-item[data-id="${conversation_id}"]`);
-        if (activeItem) {
-            const activeTitle = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
-            if (activeTitle) activeTitle.innerText = data.conversation_title;
-        }
+        syncSidebarChatTitle(data.conversation_title, conversation_id);
         setTimeout(() => loadHistory(), 600);
     }
 
@@ -1373,13 +1392,7 @@ async function send() {
         }
 
         if (geminiRes.title && geminiRes.title !== "Chat mới" && !geminiRes.title.startsWith("{")) {
-            document.title = `${geminiRes.title} - Btoan AI`;
-            const targetId = current_chat_id || conversation_id;
-            const items = document.querySelectorAll(`.chat-history-item[data-id="${targetId}"], .history-item[data-id="${targetId}"], .chat-history-item.active`);
-            items.forEach(el => {
-                const titleEl = el.querySelector(".chat-title, .history-title");
-                if (titleEl) titleEl.innerText = geminiRes.title;
-            });
+            syncSidebarChatTitle(geminiRes.title, current_chat_id || conversation_id);
             if (typeof loadHistory === "function") {
                 loadHistory();
                 setTimeout(() => loadHistory(), 600);
@@ -2002,8 +2015,16 @@ async function loadHistory() {
             div.className = `chat-history-item d-flex justify-content-between align-items-center ${isActive ? 'active' : ''}`;
             div.setAttribute('data-id', c.id);
 
+            let itemTitle = c.title || "Chat mới";
+            if (isActive && (itemTitle === "Chat mới" || !itemTitle) && document.title.includes(" - Btoan AI")) {
+                const docTitleCandidate = document.title.replace(" - Btoan AI", "").trim();
+                if (docTitleCandidate && docTitleCandidate !== "Chat mới" && !docTitleCandidate.startsWith("{")) {
+                    itemTitle = docTitleCandidate;
+                }
+            }
+
             div.innerHTML = `
-    <div class="chat-title">${c.title}</div>
+    <div class="chat-title">${escapeHtml(itemTitle)}</div>
     <div class="dropdown" onclick="event.stopPropagation()">
         <button class="history-action-btn" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-three-dots"></i>

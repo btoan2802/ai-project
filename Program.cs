@@ -1,6 +1,8 @@
 using QuestPDF.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
+using System.Net;
+using System.Net.Sockets;
 using BtoanAiNet.Data;
 using BtoanAiNet.Repositories;
 using BtoanAiNet.Services;
@@ -79,7 +81,29 @@ builder.Services.AddHttpClient<IGeminiService, GeminiService>()
         PooledConnectionLifetime = TimeSpan.FromMinutes(15),
         KeepAlivePingDelay = TimeSpan.FromSeconds(30),
         KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
-        EnableMultipleHttp2Connections = true
+        EnableMultipleHttp2Connections = true,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            // Force IPv4 in Linux/Docker environments to prevent 8-15s IPv6 resolution timeout
+            var entry = await Dns.GetHostEntryAsync(context.DnsEndPoint.Host, AddressFamily.InterNetwork, cancellationToken);
+            var address = entry.AddressList.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+            if (address == null) throw new SocketException((int)SocketError.HostNotFound);
+
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
     });
 builder.Services.AddScoped<IIntentEngineService, IntentEngineService>();
 builder.Services.AddScoped<IMemoryService, MemoryService>();

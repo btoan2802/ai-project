@@ -111,11 +111,11 @@ namespace BtoanAiNet.Services
             }
             else
             {
-                // Fast mode: prioritize active sub-second models with thinkingBudget: 0
-                candidateModels.Add("gemini-flash-latest");
+                // Gọi thẳng gemini-2.5-flash cho chế độ Btoan 2.5 Flash / Fast mode
                 candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-2.5-pro");
                 candidateModels.Add("gemini-pro-latest");
-                candidateModels.Add("gemini-flash-lite-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -128,7 +128,7 @@ namespace BtoanAiNet.Services
             {
                 if (!isThinkingMode)
                 {
-                    gConfig.Remove("thinkingConfig");
+                    gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
                 }
                 else if (!gConfig.ContainsKey("thinkingConfig"))
                 {
@@ -255,11 +255,11 @@ namespace BtoanAiNet.Services
             }
             else
             {
-                // Fast mode: prioritize active sub-second models with thinkingBudget: 0
-                candidateModels.Add("gemini-flash-latest");
+                // Gọi thẳng gemini-2.5-flash cho chế độ Btoan 2.5 Flash / Fast mode
                 candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-2.5-pro");
                 candidateModels.Add("gemini-pro-latest");
-                candidateModels.Add("gemini-flash-lite-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -272,7 +272,7 @@ namespace BtoanAiNet.Services
             {
                 if (!isThinkingMode)
                 {
-                    gConfig.Remove("thinkingConfig");
+                    gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
                 }
                 else if (!gConfig.ContainsKey("thinkingConfig"))
                 {
@@ -329,7 +329,7 @@ namespace BtoanAiNet.Services
 
                     HttpResponseMessage? response = null;
                     using var ctsTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    ctsTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+                    ctsTimeout.CancelAfter(TimeSpan.FromSeconds(25));
                     try
                     {
                         var swReq = System.Diagnostics.Stopwatch.StartNew();
@@ -338,7 +338,7 @@ namespace BtoanAiNet.Services
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        lastStreamError = $"[{currentModel}] Request headers timed out after 8s";
+                        lastStreamError = $"[{currentModel}] Request headers timed out after 25s";
                         Console.WriteLine($"[GeminiService.Stream] {lastStreamError}");
                         continue;
                     }
@@ -362,7 +362,7 @@ namespace BtoanAiNet.Services
                                     Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
                                 };
                                 using var ctsRetry = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                                ctsRetry.CancelAfter(TimeSpan.FromSeconds(8));
+                                ctsRetry.CancelAfter(TimeSpan.FromSeconds(25));
                                 response = await _httpClient.SendAsync(retryReq, HttpCompletionOption.ResponseHeadersRead, ctsRetry.Token);
                             }
                             catch { }
