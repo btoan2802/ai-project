@@ -22,22 +22,42 @@ builder.Services.AddControllersWithViews()
         options.JsonSerializerOptions.Converters.Add(new BtoanAiNet.ViewModels.FlexibleStringConverter());
     });
 
-var dbProvider = builder.Configuration.GetValue<string>("DbProvider") ?? "SqlServer";
+var dbProvider = builder.Configuration.GetValue<string>("DbProvider");
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-                    ?? builder.Configuration.GetConnectionString("SqlServerConnection");
+                    ?? builder.Configuration.GetConnectionString("SqlServerConnection") ?? "";
 
-if (!string.IsNullOrEmpty(connectionString))
+// Robust multi-provider detection:
+// 1. Explicit SQLite or path contains .db
+// 2. MySQL if explicitly configured or connection string contains CharSet / utf8mb4 / Port=3306
+// 3. SQL Server if on Windows and configured with LocalDB or Trusted_Connection
+// 4. Fallback: On Linux/Docker or if SQL Server is not reachable, use SQLite in App_Data/btoan_ai.db
+bool isSqlite = (!string.IsNullOrEmpty(dbProvider) && dbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+                || connectionString.Contains(".db", StringComparison.OrdinalIgnoreCase);
+
+bool isMySql = (!string.IsNullOrEmpty(dbProvider) && dbProvider.Equals("MySql", StringComparison.OrdinalIgnoreCase))
+               || connectionString.Contains("CharSet=", StringComparison.OrdinalIgnoreCase)
+               || connectionString.Contains("utf8mb4", StringComparison.OrdinalIgnoreCase);
+
+bool isSqlServer = (!string.IsNullOrEmpty(dbProvider) && dbProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+                   || (OperatingSystem.IsWindows() && (connectionString.Contains("Trusted_Connection") || connectionString.Contains("(local)")));
+
+if (isMySql)
 {
-    if (dbProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) || connectionString.Contains("FS-TOANNB21") || connectionString.Contains("Trusted_Connection") || connectionString.Contains("(local)"))
-    {
-        builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(connectionString, sqlOptions => sqlOptions.CommandTimeout(3)));
-    }
-    else
-    {
-        builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 30))));
-    }
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 30))));
+}
+else if (isSqlServer && OperatingSystem.IsWindows())
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(connectionString, sqlOptions => sqlOptions.CommandTimeout(5)));
+}
+else
+{
+    var appDataDir = Path.Combine(builder.Environment.ContentRootPath, "App_Data");
+    Directory.CreateDirectory(appDataDir);
+    var sqliteDbPath = Path.Combine(appDataDir, "btoan_ai.db");
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlite($"Data Source={sqliteDbPath}"));
 }
 
 builder.Services.AddHttpClient();
@@ -542,14 +562,32 @@ BEGIN
         [timestamp] DATETIME2 NOT NULL
     );
 END
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[agent_chat_messages]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[agent_chat_messages] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NOT NULL,
+        [project_name] NVARCHAR(100) NOT NULL,
+        [role] NVARCHAR(20) NOT NULL,
+        [content] NVARCHAR(MAX) NOT NULL,
+        [plan_json] NVARCHAR(MAX) NULL,
+        [tool_actions_json] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 NOT NULL
+    );
+END
 ";
-        if (dbProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+        if (dbContext.Database.IsSqlServer())
         {
             dbContext.Database.ExecuteSqlRaw(sql);
         }
+        else if (dbContext.Database.IsSqlite())
+        {
+            dbContext.Database.EnsureCreated();
+        }
         else
         {
-            // MySQL / MariaDB / SQLite auto-migration for missing columns in users table
+            // MySQL / MariaDB auto-migration for missing columns in users table
             var nonSqlCols = new (string col, string type)[]
             {
                 ("bio", "TEXT NULL"),
@@ -575,6 +613,22 @@ END
                     // Ignore if column already exists
                 }
             }
+
+            try
+            {
+                dbContext.Database.ExecuteSqlRaw(@"
+CREATE TABLE IF NOT EXISTS `agent_chat_messages` (
+    `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL,
+    `project_name` VARCHAR(100) NOT NULL,
+    `role` VARCHAR(20) NOT NULL,
+    `content` LONGTEXT NOT NULL,
+    `plan_json` LONGTEXT NULL,
+    `tool_actions_json` LONGTEXT NULL,
+    `created_at` DATETIME NOT NULL
+);");
+            }
+            catch { }
         }
     }
     catch (Exception ex)

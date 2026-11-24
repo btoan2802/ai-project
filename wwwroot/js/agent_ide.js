@@ -225,8 +225,13 @@ async function loadUserProjects() {
                 opt.innerText = p.name;
                 select.appendChild(opt);
             });
-            activeProjectId = data.projects[0].id;
+            const savedLastProj = localStorage.getItem("antigravity_last_project");
+            const matchedProj = savedLastProj && data.projects.some(p => p.id === savedLastProj);
+            activeProjectId = matchedProj ? savedLastProj : data.projects[0].id;
+            select.value = activeProjectId;
+            localStorage.setItem("antigravity_last_project", activeProjectId);
             hideEmptyWorkspaceState();
+            loadAgentChatHistory(activeProjectId);
         } else {
             select.innerHTML = `<option value="">-- Chưa có dự án --</option>`;
             activeProjectId = "";
@@ -323,6 +328,7 @@ function onProjectChanged() {
     const select = document.getElementById("projectSelect");
     if (!select) return;
     activeProjectId = select.value;
+    localStorage.setItem("antigravity_last_project", activeProjectId);
 
     if (activeProjectId) {
         hideEmptyWorkspaceState();
@@ -333,6 +339,7 @@ function onProjectChanged() {
         updateTerminalPrompt();
         refreshFileTree();
         loadGitStatus();
+        loadAgentChatHistory(activeProjectId);
         if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
             terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
         }
@@ -349,6 +356,7 @@ function onProjectChanged() {
 async function switchActiveProject(projName) {
     if (!projName) return;
     activeProjectId = projName;
+    localStorage.setItem("antigravity_last_project", activeProjectId);
     const select = document.getElementById("projectSelect");
     if (select) {
         select.value = projName;
@@ -378,6 +386,7 @@ async function switchActiveProject(projName) {
     updateTerminalPrompt();
     await refreshFileTree();
     loadGitStatus();
+    loadAgentChatHistory(activeProjectId);
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
         await terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
     }
@@ -400,13 +409,14 @@ async function refreshFileTree() {
             workspaceFilesList = data.files;
             renderFileTree(data.files, container);
 
-            // Auto-open primary file if nothing opened
-            if (!activeFilePath) {
+            // Auto-restore open tabs from localStorage or auto-open primary file
+            const restored = await restoreOpenTabsState();
+            if (!restored && !activeFilePath) {
                 const primaryFile = data.files.find(f => !f.isDir && (f.name === "index.html" || f.path.endsWith("index.html") || f.name === "Program.cs"));
                 if (primaryFile) {
-                    openFileInEditor(primaryFile.path);
+                    await openFileInEditor(primaryFile.path, true);
                 } else if (data.files.length > 0 && !data.files[0].isDir) {
-                    openFileInEditor(data.files[0].path);
+                    await openFileInEditor(data.files[0].path, true);
                 }
             }
         } else {
@@ -718,6 +728,41 @@ function getMonacoLanguage(fileName) {
     }
 }
 
+function saveOpenTabsState() {
+    if (!activeProjectId) return;
+    const tabPaths = Array.from(openTabsMap.keys());
+    localStorage.setItem(`antigravity_open_tabs_${activeProjectId}`, JSON.stringify(tabPaths));
+    if (activeFilePath) {
+        localStorage.setItem(`antigravity_active_tab_${activeProjectId}`, activeFilePath);
+    } else {
+        localStorage.removeItem(`antigravity_active_tab_${activeProjectId}`);
+    }
+}
+
+async function restoreOpenTabsState() {
+    if (!activeProjectId || !monacoEditor) return false;
+    try {
+        const raw = localStorage.getItem(`antigravity_open_tabs_${activeProjectId}`);
+        const savedActive = localStorage.getItem(`antigravity_active_tab_${activeProjectId}`);
+        if (raw) {
+            const tabPaths = JSON.parse(raw);
+            if (Array.isArray(tabPaths) && tabPaths.length > 0) {
+                for (const p of tabPaths) {
+                    await openFileInEditor(p, true);
+                }
+                const targetActive = (savedActive && openTabsMap.has(savedActive)) ? savedActive : tabPaths[0];
+                if (targetActive && openTabsMap.has(targetActive)) {
+                    await openFileInEditor(targetActive, false);
+                }
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn("Failed to restore open tabs state:", e);
+    }
+    return false;
+}
+
 // ==========================================
 // 3. MULTI-TABS & FILE OPEN/SAVE
 // ==========================================
@@ -737,6 +782,8 @@ async function openFileInEditor(filePath, forceReload = false) {
         monacoEditor.setModel(tab.model);
         updateEditorUI(tab);
         renderTabBar();
+        saveOpenTabsState();
+        try { monacoEditor.layout(); } catch {}
         return;
     }
 
@@ -749,12 +796,13 @@ async function openFileInEditor(filePath, forceReload = false) {
         if (data.ok) {
             const fileName = filePath.split(/[\\/]/).pop();
             const lang = getMonacoLanguage(fileName);
-            const modelUri = monaco.Uri.parse(`inmemory://workspace/${filePath}`);
+            const modelUri = monaco.Uri.parse(`inmemory://workspace/${activeProjectId}/${filePath}`);
             let model = monaco.editor.getModel(modelUri);
+            const content = data.content !== undefined && data.content !== null ? data.content : "";
             if (!model) {
-                model = monaco.editor.createModel(data.content, lang, modelUri);
+                model = monaco.editor.createModel(content, lang, modelUri);
             } else {
-                model.setValue(data.content);
+                model.setValue(content);
             }
 
             const tab = {
@@ -763,7 +811,7 @@ async function openFileInEditor(filePath, forceReload = false) {
                 language: lang,
                 model: model,
                 isDirty: false,
-                originalContent: data.content
+                originalContent: content
             };
 
             openTabsMap.set(filePath, tab);
@@ -771,6 +819,8 @@ async function openFileInEditor(filePath, forceReload = false) {
             monacoEditor.setModel(model);
             updateEditorUI(tab);
             renderTabBar();
+            saveOpenTabsState();
+            try { monacoEditor.layout(); } catch {}
 
         } else {
             alert("❌ " + (data.message || "Failed to load file content"));
@@ -949,6 +999,7 @@ function closeTab(path) {
     } else {
         renderTabBar();
     }
+    saveOpenTabsState();
     updateGitBadgeCount();
     scheduleOutlineRefresh();
 }
@@ -2398,13 +2449,77 @@ function quickAgentPrompt(text) {
     }
 }
 
-function resetAgentChat() {
+async function resetAgentChat() {
+    if (activeProjectId) {
+        try {
+            await fetch(`/api/ide/agent/history?project=${encodeURIComponent(activeProjectId)}`, {
+                method: 'DELETE',
+                headers: getApiHeaders()
+            });
+        } catch (e) { }
+    }
     const splash = document.getElementById("chatSplashArea");
     const container = document.getElementById("agentMessagesContainer");
     if (splash) splash.style.display = "flex";
     if (container) {
         container.style.display = "none";
         container.innerHTML = "";
+    }
+    showToastNotification("Đã bắt đầu phiên trò chuyện mới!");
+}
+
+async function loadAgentChatHistory(projectId) {
+    if (!projectId) return;
+    const container = document.getElementById("agentMessagesContainer");
+    const splash = document.getElementById("chatSplashArea");
+    if (!container) return;
+
+    try {
+        const res = await fetch(`/api/ide/agent/history?project=${encodeURIComponent(projectId)}`, {
+            headers: getApiHeaders()
+        });
+        const data = await res.json();
+        const list = (data.messages || data.history || []);
+        if (data.ok && Array.isArray(list) && list.length > 0) {
+            if (splash) splash.style.display = "none";
+            container.style.display = "flex";
+            container.innerHTML = "";
+
+            list.forEach(item => {
+                if (item.role === "user") {
+                    const userMsg = document.createElement("div");
+                    userMsg.className = "p-2 rounded bg-dark border border-secondary text-light extra-small align-self-end";
+                    userMsg.style.maxWidth = "85%";
+                    userMsg.innerText = item.content;
+                    container.appendChild(userMsg);
+                } else {
+                    const agentMsg = document.createElement("div");
+                    agentMsg.className = "d-flex flex-column gap-2 extra-small text-light";
+                    let parsedPlan = [];
+                    let parsedOps = [];
+                    try { if (item.planJson) parsedPlan = JSON.parse(item.planJson); } catch(e){}
+                    try { if (item.toolActionsJson) parsedOps = JSON.parse(item.toolActionsJson); } catch(e){}
+                    if (!parsedPlan.length && Array.isArray(item.plan)) parsedPlan = item.plan;
+                    if (!parsedOps.length && Array.isArray(item.operations)) parsedOps = item.operations;
+
+                    renderAgentResponse({
+                        explanation: item.content,
+                        plan: parsedPlan,
+                        operations: parsedOps,
+                        modifiedFiles: item.modifiedFiles || [],
+                        executedCommands: item.executedCommands || []
+                    }, agentMsg);
+                    container.appendChild(agentMsg);
+                }
+            });
+            container.scrollTop = container.scrollHeight;
+        } else {
+            if (splash) splash.style.display = "flex";
+            container.style.display = "none";
+            container.innerHTML = "";
+        }
+    } catch (e) {
+        console.warn("Failed to load agent chat history:", e);
     }
 }
 
@@ -2529,47 +2644,137 @@ async function sendAgentTask() {
     try {
         const res = await fetch('/api/ide/agent-run', {
             method: 'POST',
-            headers: getApiHeaders(),
+            headers: {
+                ...getApiHeaders(),
+                'Accept': 'text/event-stream'
+            },
             signal: controller.signal,
             body: JSON.stringify({
                 project: activeProjectId,
                 activeFile: activeFilePath,
                 prompt: task,
                 mode: mode,
-                model: model
+                model: model,
+                stream: true
             })
         });
         clearTimeout(timeoutId);
-        const data = await res.json();
 
-        if (data.ok) {
-            renderAgentResponse(data, agentMsg);
+        if (!res.ok) {
+            let errMsg = `HTTP error ${res.status}`;
+            try {
+                const errData = await res.json();
+                errMsg = errData.message || errData.error || errMsg;
+            } catch {}
+            agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${errMsg}</div>`;
+            return;
+        }
 
-            // Tự động làm mới cây thư mục Explorer sau khi Agent sửa hoặc tạo tệp mới
-            if (typeof refreshFileTree === 'function') {
-                try { await refreshFileTree(); } catch(e) { console.warn(e); }
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/event-stream")) {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+            let finalData = null;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop() || "";
+
+                for (const chunk of lines) {
+                    if (!chunk.trim()) continue;
+                    let eventType = "message";
+                    let eventDataStr = "";
+
+                    const chunkLines = chunk.split("\n");
+                    for (const cl of chunkLines) {
+                        if (cl.startsWith("event:")) {
+                            eventType = cl.substring(6).trim();
+                        } else if (cl.startsWith("data:")) {
+                            eventDataStr = cl.substring(5).trim();
+                        }
+                    }
+
+                    if (!eventDataStr) continue;
+                    let eventData = {};
+                    try { eventData = JSON.parse(eventDataStr); } catch { eventData = { text: eventDataStr }; }
+
+                    // Process stream event
+                    if (eventType === "status" || eventType === "turn_start") {
+                        if (pillSpan) {
+                            pillSpan.innerText = eventData.message || `Lượt ${eventData.turn}: Đang xử lý...`;
+                        }
+                    } else if (eventType === "tool_start") {
+                        if (pillSpan) {
+                            pillSpan.innerText = eventData.message || `Đang chạy ${eventData.tool}...`;
+                        }
+                    } else if (eventType === "tool_done") {
+                        if (pillSpan) {
+                            pillSpan.innerText = eventData.message || `Đã xong ${eventData.tool}`;
+                        }
+                        // Real-time update: refresh tree and open created/edited file immediately
+                        if (eventData.action === 'create' || eventData.action === 'edit' || eventData.action === 'image') {
+                            if (typeof refreshFileTree === 'function') {
+                                refreshFileTree().catch(console.warn);
+                            }
+                            if (eventData.target && typeof openFileInEditor === 'function') {
+                                openFileInEditor(eventData.target, true).catch(console.warn);
+                            }
+                        }
+                    } else if (eventType === "done") {
+                        finalData = eventData;
+                        renderAgentResponse(finalData, agentMsg);
+                        if (typeof refreshFileTree === 'function') {
+                            await refreshFileTree().catch(console.warn);
+                        }
+                        if (typeof reloadOpenFileTabs === 'function') {
+                            await reloadOpenFileTabs(finalData.modifiedFiles).catch(console.warn);
+                        }
+                        if (Array.isArray(finalData.modifiedFiles) && finalData.modifiedFiles.length > 0) {
+                            const targetOpen = (!activeFilePath || !openTabsMap.has(activeFilePath)) ? finalData.modifiedFiles[0] : activeFilePath;
+                            if (targetOpen && typeof openFileInEditor === 'function') {
+                                await openFileInEditor(targetOpen, true).catch(console.warn);
+                            }
+                        }
+                    } else if (eventType === "error") {
+                        agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${eventData.error || "Agent execution failed"}</div>`;
+                    }
+                }
             }
 
-            // Tự động làm mới lại toàn bộ các tab đang mở trong Monaco Editor có file bị sửa
-            if (typeof reloadOpenFileTabs === 'function') {
-                try { await reloadOpenFileTabs(data.modifiedFiles); } catch(e) { console.warn(e); }
-            }
-
-            // Tự động mở ngay file đầu tiên được tạo/sửa để người dùng thấy code ngay lập tức
-            if (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) {
-                const targetOpen = (!activeFilePath || !openTabsMap.has(activeFilePath)) ? data.modifiedFiles[0] : activeFilePath;
-                if (targetOpen && typeof openFileInEditor === 'function') {
-                    try { await openFileInEditor(targetOpen, true); } catch(e) { console.warn(e); }
+            if (!finalData && !agentMsg.querySelector(".text-danger")) {
+                if (typeof refreshFileTree === 'function') {
+                    await refreshFileTree().catch(console.warn);
                 }
             }
         } else {
-            agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${data.message || data.error || "Agent execution failed"}</div>`;
+            const data = await res.json();
+            if (data.ok) {
+                renderAgentResponse(data, agentMsg);
+                if (typeof refreshFileTree === 'function') {
+                    await refreshFileTree().catch(console.warn);
+                }
+                if (typeof reloadOpenFileTabs === 'function') {
+                    await reloadOpenFileTabs(data.modifiedFiles).catch(console.warn);
+                }
+                if (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) {
+                    const targetOpen = (!activeFilePath || !openTabsMap.has(activeFilePath)) ? data.modifiedFiles[0] : activeFilePath;
+                    if (targetOpen && typeof openFileInEditor === 'function') {
+                        await openFileInEditor(targetOpen, true).catch(console.warn);
+                    }
+                }
+            } else {
+                agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${data.message || data.error || "Agent execution failed"}</div>`;
+            }
         }
     } catch (err) {
         clearTimeout(timeoutId);
         const isAbort = err.name === 'AbortError';
         agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
-        // Tự động làm mới cây thư mục ngay cả khi timeout/lỗi để hiển thị các tệp đã tạo thành công
         if (typeof refreshFileTree === 'function') {
             try { await refreshFileTree(); } catch(e) { console.warn(e); }
         }

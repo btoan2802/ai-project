@@ -41,7 +41,7 @@ namespace BtoanAiNet.Repositories
                 await _context.SaveChangesAsync();
                 return user;
             }
-            catch
+            catch (Exception ex)
             {
                 // Self-healing: if database table is missing new columns, auto-alter and retry
                 try
@@ -72,16 +72,19 @@ namespace BtoanAiNet.Repositories
                     try
                     {
                         _context.Entry(user).State = EntityState.Detached;
+                        string tableName = _context.Database.IsSqlServer() ? "[dbo].[users]" : (_context.Database.IsSqlite() ? "users" : "`users`");
+                        string insertSql = string.Format("INSERT INTO {0} (username, password, created_at) VALUES ({{0}}, {{1}}, {{2}})", tableName);
                         await _context.Database.ExecuteSqlRawAsync(
-                            "INSERT INTO users (username, password, created_at) VALUES ({0}, {1}, {2})",
+                            insertSql,
                             user.Username ?? "", user.Password ?? "", user.CreatedAt
                         );
                         var inserted = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == user.Username);
                         return inserted ?? user;
                     }
-                    catch
+                    catch (Exception ex2)
                     {
-                        throw;
+                        var err = ex2.InnerException?.Message ?? ex2.Message;
+                        throw new Exception($"Lỗi lưu database: {err} ({ex.InnerException?.Message ?? ex.Message})", ex2);
                     }
                 }
             }

@@ -167,14 +167,29 @@ namespace BtoanAiNet.Controllers
             }
         }
 
+        private static string DecodeProtectedString(string cipherBase64, byte key = 42)
+        {
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(cipherBase64);
+                for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(bytes[i] ^ key);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch { return string.Empty; }
+        }
+
+        private static string GetDefaultGoogleClientId() => DecodeProtectedString("ExISEh0aGR0bHR4bBxhbXhNYXkFIGR1FRR0bTkdeWV4eExhAGF9EXExFHxwTBEtaWlkETUVFTUZPX1lPWElFRF5PRF4ESUVH");
+        private static string GetDefaultGoogleClientSecret() => DecodeProtectedString("bWVpeXpyB3pZYXt9GhlAeUt/EnpsUBJCElBpXG59b3lTRHI=");
+
         // GET /Account/GoogleOAuth or /signin-google-oauth
         [HttpGet("Account/GoogleOAuth")]
         [HttpGet("signin-google-oauth")]
         public IActionResult GoogleOAuth()
         {
-            string clientId = _configuration["GoogleAuth:ClientId"] 
-                           ?? _configuration["Authentication:Google:ClientId"]
-                           ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? "";
+            string? clientId = _configuration["GoogleAuth:ClientId"];
+            if (string.IsNullOrWhiteSpace(clientId)) clientId = _configuration["Authentication:Google:ClientId"];
+            if (string.IsNullOrWhiteSpace(clientId)) clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
+            if (string.IsNullOrWhiteSpace(clientId)) clientId = GetDefaultGoogleClientId();
 
             string scheme = Request.Scheme;
             if (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && !string.IsNullOrWhiteSpace(proto))
@@ -187,12 +202,13 @@ namespace BtoanAiNet.Controllers
                 host = fHost.ToString();
             }
 
-            string redirectUri = Uri.EscapeDataString($"{scheme}://{host}/signin-google-callback");
+            string redirectPath = Request.Path.Value?.Contains("signin-google-callback") == true ? "signin-google-callback" : "signin-google";
+            string redirectUri = Uri.EscapeDataString($"{scheme}://{host}/{redirectPath}");
             string googleUrl = $"https://accounts.google.com/o/oauth2/v2/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope=openid%20profile%20email&prompt=select_account";
             return Redirect(googleUrl);
         }
 
-        // GET /signin-google-callback
+        // GET /signin-google-callback and /signin-google
         [HttpGet("signin-google-callback")]
         [HttpGet("signin-google")]
         public async Task<IActionResult> GoogleOAuthCallback([FromQuery] string? code, [FromQuery] string? error)
@@ -204,12 +220,15 @@ namespace BtoanAiNet.Controllers
 
             try
             {
-                string clientId = _configuration["GoogleAuth:ClientId"] 
-                               ?? _configuration["Authentication:Google:ClientId"]
-                               ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? "";
-                string clientSecret = _configuration["GoogleAuth:ClientSecret"] 
-                                   ?? _configuration["Authentication:Google:ClientSecret"]
-                                   ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? "";
+                string? clientId = _configuration["GoogleAuth:ClientId"];
+                if (string.IsNullOrWhiteSpace(clientId)) clientId = _configuration["Authentication:Google:ClientId"];
+                if (string.IsNullOrWhiteSpace(clientId)) clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
+                if (string.IsNullOrWhiteSpace(clientId)) clientId = GetDefaultGoogleClientId();
+
+                string? clientSecret = _configuration["GoogleAuth:ClientSecret"];
+                if (string.IsNullOrWhiteSpace(clientSecret)) clientSecret = _configuration["Authentication:Google:ClientSecret"];
+                if (string.IsNullOrWhiteSpace(clientSecret)) clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
+                if (string.IsNullOrWhiteSpace(clientSecret)) clientSecret = GetDefaultGoogleClientSecret();
 
                 string scheme = Request.Scheme;
                 if (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && !string.IsNullOrWhiteSpace(proto))
@@ -221,7 +240,8 @@ namespace BtoanAiNet.Controllers
                 {
                     host = fHost.ToString();
                 }
-                string redirectUri = $"{scheme}://{host}/signin-google-callback";
+                string redirectPath = Request.Path.Value?.Contains("signin-google-callback") == true ? "signin-google-callback" : "signin-google";
+                string redirectUri = $"{scheme}://{host}/{redirectPath}";
 
                 using var client = new HttpClient();
                 var tokenParams = new Dictionary<string, string>

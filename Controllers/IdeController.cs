@@ -5,10 +5,12 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using BtoanAiNet.Data;
 using BtoanAiNet.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace BtoanAiNet.Controllers
 {
@@ -16,10 +18,6 @@ namespace BtoanAiNet.Controllers
     [Route("api/ide")]
     public class IdeController : ControllerBase
     {
-        private readonly IWebHostEnvironment _env;
-        private readonly IGeminiService _geminiService;
-        private readonly IImageGenerationService _imageGenerationService;
-        private readonly ILogger<IdeController> _logger;
         private static readonly FileExtensionContentTypeProvider _contentTypeProvider = new();
 
         private static readonly HashSet<string> WhitelistedCommands = new(StringComparer.OrdinalIgnoreCase)
@@ -34,16 +32,24 @@ namespace BtoanAiNet.Controllers
             "bin", "obj", ".git", ".vs", ".idea", "node_modules", "dist", ".gemini"
         };
 
+        private readonly IWebHostEnvironment _env;
+        private readonly IGeminiService _geminiService;
+        private readonly IImageGenerationService _imageGenerationService;
+        private readonly ILogger<IdeController> _logger;
+        private readonly AppDbContext _dbContext;
+
         public IdeController(
             IWebHostEnvironment env,
             IGeminiService geminiService,
             IImageGenerationService imageGenerationService,
-            ILogger<IdeController> logger)
+            ILogger<IdeController> logger,
+            AppDbContext dbContext)
         {
             _env = env;
             _geminiService = geminiService;
             _imageGenerationService = imageGenerationService;
             _logger = logger;
+            _dbContext = dbContext;
         }
 
         private int CurrentUserId
@@ -2493,14 +2499,77 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         // 5. BTOAN AGENT FULL-PROJECT CHAT & RUN
         // ==========================================
 
+        // GET /api/ide/agent/history?project=...
+        [HttpGet("agent/history")]
+        public async Task<IActionResult> GetAgentHistory([FromQuery] string? project)
+        {
+            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            string cleanProj = SanitizeProjectName(project);
+
+            try
+            {
+                var messages = await _dbContext.AgentChatMessages
+                    .Where(m => m.UserId == userId && m.ProjectName == cleanProj)
+                    .OrderBy(m => m.CreatedAt)
+                    .Select(m => new
+                    {
+                        id = m.Id,
+                        role = m.Role,
+                        content = m.Content,
+                        planJson = m.PlanJson,
+                        toolActionsJson = m.ToolActionsJson,
+                        createdAt = m.CreatedAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { ok = true, project = cleanProj, messages });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load agent history for {Project}", cleanProj);
+                return Ok(new { ok = true, project = cleanProj, messages = Array.Empty<object>() });
+            }
+        }
+
+        // DELETE /api/ide/agent/history?project=... or POST /api/ide/agent/clear-history
+        [HttpDelete("agent/history")]
+        [HttpPost("agent/clear-history")]
+        public async Task<IActionResult> ClearAgentHistory([FromQuery] string? project, [FromBody] JsonObject? body)
+        {
+            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            string? proj = project ?? body?["project"]?.ToString();
+            string cleanProj = SanitizeProjectName(proj);
+
+            try
+            {
+                var oldMsgs = await _dbContext.AgentChatMessages
+                    .Where(m => m.UserId == userId && m.ProjectName == cleanProj)
+                    .ToListAsync();
+
+                if (oldMsgs.Count > 0)
+                {
+                    _dbContext.AgentChatMessages.RemoveRange(oldMsgs);
+                    await _dbContext.SaveChangesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clear agent history for {Project}", cleanProj);
+            }
+
+            return Ok(new { ok = true, project = cleanProj, message = "Đã khởi tạo phiên trò chuyện mới thành công." });
+        }
+
         // POST /api/ide/agent-chat and /api/ide/agent-run
         [HttpPost("agent-chat")]
         [HttpPost("agent-run")]
-        public async Task<IActionResult> AgentChat([FromBody] AgentChatRequestModel model)
+        public async Task AgentChat([FromBody] AgentChatRequestModel model)
         {
             if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
             {
-                return BadRequest(new { ok = false, error = "Prompt is required" });
+                Response.StatusCode = 400;
+                await Response.WriteAsJsonAsync(new { ok = false, error = "Prompt is required" });
+                return;
             }
 
             int userId = CurrentUserId > 0 ? CurrentUserId : 1;
@@ -2513,7 +2582,34 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             }
             if (!Directory.Exists(projectPath))
             {
-                return BadRequest(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
+                Response.StatusCode = 400;
+                await Response.WriteAsJsonAsync(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
+                return;
+            }
+
+            bool isStream = model.Stream || Request.Headers.Accept.ToString().Contains("text/event-stream", StringComparison.OrdinalIgnoreCase);
+
+            if (isStream)
+            {
+                HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+                Response.ContentType = "text/event-stream; charset=utf-8";
+                Response.Headers["Cache-Control"] = "no-cache, no-transform";
+                Response.Headers["X-Accel-Buffering"] = "no";
+                Response.Headers["Connection"] = "keep-alive";
+            }
+
+            async Task SendSseEventAsync(string eventType, object data)
+            {
+                if (!isStream) return;
+                try
+                {
+                    string json = JsonSerializer.Serialize(data);
+                    string sse = $"event: {eventType}\ndata: {json}\n\n";
+                    byte[] bytes = Encoding.UTF8.GetBytes(sse);
+                    await Response.Body.WriteAsync(bytes, 0, bytes.Length);
+                    await Response.Body.FlushAsync();
+                }
+                catch { }
             }
 
             string selectedModel = "gemini-flash-latest";
@@ -2523,6 +2619,27 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 selectedModel = "gemini-pro-latest";
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
+
+            await SendSseEventAsync("status", new { stage = "init", message = $"Btoan Agent ({selectedModel}) đang phân tích yêu cầu...", project = cleanProj });
+
+            // 1. Lưu tin nhắn người dùng vào SQLite bền vững
+            try
+            {
+                var userChatMsg = new Models.AgentChatMessage
+                {
+                    UserId = userId,
+                    ProjectName = cleanProj,
+                    Role = "user",
+                    Content = model.Prompt,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.AgentChatMessages.Add(userChatMsg);
+                await _dbContext.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist user agent chat message");
+            }
 
             var sbContext = new StringBuilder();
             AutoFixMapStaticAssets(projectPath);
@@ -2558,39 +2675,42 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 }
             }
 
-            string agentSystemInstruction = $@"Bạn là Btoan AI Autonomous Coding Agent trong Btoan Studio IDE.
+            string agentSystemInstruction = $@"Bạn là Btoan AI Autonomous Coding Agent trong Btoan Studio IDE (tương đương chuẩn Antigravity IDE).
 Bạn đang làm việc trực tiếp trên thư mục dự án: '{cleanProj}'.
 
-CÁC CÔNG CỤ THỰC THI BẠN ĐƯỢC CẤP:
-- read_file(path): Đọc mã nguồn tệp nếu cần xem trước.
+CÁC CÔNG CỤ THỰC THI (FUNCTION CALLING) BẠN ĐƯỢC CẤP:
+- list_files(directory): Xem danh sách tệp/thư mục con trong dự án.
+- read_file(path): Đọc mã nguồn tệp trong dự án.
+- generate_image(prompt, output_path, aspect_ratio): Tạo hình ảnh AI chất lượng cao lưu thẳng vào thư mục dự án (ví dụ 'images/hero.jpg', 'images/product1.jpg'). BẮT BUỘC gọi tool này để tạo ảnh minh họa thật cho website/app thay vì dùng ảnh rỗng hay link giả 404!
 - write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC chứa toàn bộ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống (0 byte).
 - edit_file(path, target, replacement): Sửa đoạn code trong tệp.
 - delete_file(path): Xóa tệp không cần thiết.
 - run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build', 'dotnet add package...') tại thư mục dự án.
 
-QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG GỘP CHUNG 1 TỆP):
-1. ĐỐI VỚI DỰ ÁN WEB / FRONTEND (HTML / CSS / JAVASCRIPT):
-   - TUYỆT ĐỐI KHÔNG GỘP TẤT CẢ CODE VÀO 1 TỆP index.html DUY NHẤT! KHÔNG viết CSS vào thẻ <style> lớn, KHÔNG viết JavaScript vào thẻ <script> lớn trong index.html.
-   - BẮT BUỘC gọi write_file để phân tách rõ ràng tối thiểu 3 tệp riêng biệt:
-     + 'index.html': Chỉ chứa khung cấu trúc HTML ngữ nghĩa, thẻ liên kết <link rel=""stylesheet"" href=""style.css""> trong thẻ <head> và thẻ <script src=""script.js""></script> ở cuối thẻ <body>.
-     + 'style.css': Chứa toàn bộ định kiểu CSS hiện đại, màu sắc gradient đẹp mắt, font Google Fonts, CSS Grid / Flexbox responsive cho Mobile & PC, hiệu ứng animation & hover.
-     + 'script.js': Chứa toàn bộ dữ liệu mẫu (mảng sản phẩm, giỏ hàng, danh mục...), logic xử lý sự kiện DOM (thêm vào giỏ, tính tổng tiền, modal, countdown timer, hiệu ứng âm thanh/pháo hoa...).
-   - Nếu có ảnh minh họa: hãy sử dụng link ảnh trực tiếp từ Unsplash chất lượng cao (ví dụ: https://images.unsplash.com/...) hoặc các file ảnh có sẵn trong thư mục images/.
+QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG (AUTONOMOUS 4-STEP LOOP):
+1. BƯỚC 1: KHẢO SÁT & HIỂU RÕ DỰ ÁN
+   - Nếu dự án đã có sẵn tệp, sử dụng read_file để hiểu ngữ cảnh trước khi sửa.
 
-2. ĐỐI VỚI DỰ ÁN BACKEND .NET / ASP.NET CORE:
-   - BẮT BUỘC phân chia chuẩn kiến trúc MVC vào từng thư mục riêng biệt: Models/ (Product.cs, Order.cs...), Data/ (DbContext, SeedData), Controllers/ (HomeController.cs, ProductsController.cs...), Views/ (Index.cshtml, Privacy.cshtml...), Program.cs.
-   - Sau khi tạo/sửa xong, BẮT BUỘC gọi run_command(""dotnet build"") để kiểm chứng. Nếu có lỗi biên dịch, bạn phải đọc thông báo lỗi và tự sửa lại các file bị lỗi cho đến khi build thành công 0 Error(s).
+2. BƯỚC 2: TẠO HÌNH ẢNH MINH HỌA THẬT (ĐỐI VỚI DỰ ÁN WEB / GIAO DIỆN)
+   - Nếu người dùng yêu cầu tạo web bán hàng, quán cà phê, portfolio, trang tỏ tình, dashboard, landing page...:
+   - BẮT BUỘC gọi 'generate_image' từ 2 đến 5 lần để tạo các ảnh thật lưu vào thư mục 'images/' (ví dụ: 'images/banner.jpg', 'images/prod1.jpg', 'images/prod2.jpg', 'images/couple.jpg').
+   - Sau đó trong 'index.html', dùng chính xác đường dẫn thẻ <img src=""images/banner.jpg""> hoặc CSS background-image: url('images/banner.jpg').
 
-3. MÃ NGUỒN HOÀN CHỈNH 100% & CHỐNG FILE RỖNG 0 BYTE:
-   - Tham số 'content' của write_file BẮT BUỘC chứa toàn bộ code thực thi được ngay, TUYỆT ĐỐI KHÔNG dùng comment giữ chỗ ('// code goes here', '// implement later'), KHÔNG ghi file rỗng 0 byte.
-   - NẠP ĐẦY ĐỦ CONTENT KHI GỌI write_file: Khi gọi write_file, truyền toàn bộ source code vào tham số 'content'. Bạn có thể gọi write_file nhiều lần trong cùng một lượt (parallel tool call) để tạo đồng thời 'index.html', 'style.css' và 'script.js' nhanh chóng.
+3. BƯỚC 3: PHÂN TÁCH TỆP CHUẨN 100% (TUYỆT ĐỐI KHÔNG DỒN 1 TỆP):
+   - ĐỐI VỚI DỰ ÁN WEB (HTML / CSS / JS):
+     + BẮT BUỘC gọi write_file để phân tách rõ ràng tối thiểu 3 tệp riêng biệt:
+       * 'index.html': Chỉ chứa khung cấu trúc HTML ngữ nghĩa, liên kết <link rel=""stylesheet"" href=""style.css""> trong <head> và <script src=""script.js""></script> ở cuối <body>.
+       * 'style.css': Chứa toàn bộ định kiểu CSS hiện đại, màu sắc gradient, responsive Flexbox/Grid, hiệu ứng animation.
+       * 'script.js': Chứa toàn bộ dữ liệu mẫu (mảng sản phẩm, giỏ hàng...), logic sự kiện DOM (countdown, giỏ hàng, modal, confetti...).
+   - ĐỐI VỚI DỰ ÁN BACKEND .NET / ASP.NET CORE:
+     + BẮT BUỘC chia đúng cấu trúc MVC: Models/, Data/, Controllers/, Views/, Program.cs.
 
-4. TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
-   - Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (write_file / edit_file / run_command) ngay từ lượt đầu tiên để trực tiếp tạo/sửa code thật trong dự án.
-   - CẤM in ra kế hoạch dạng JSON thuần rồi dừng lại. Nếu có kế hoạch, hãy bắt tay vào gọi write_file / edit_file để thực hiện luôn bước đầu tiên!
+4. BƯỚC 4: TỰ ĐỘNG BIÊN DỊCH & TỰ SỬA LỖI (SELF-HEALING BUILD VERIFICATION):
+   - Đối với dự án .NET: BẮT BUỘC gọi run_command(""dotnet build""). Nếu có lỗi biên dịch, bạn phải đọc lỗi và tự sửa lại các tệp cho đến khi build thành công 0 Error(s).
 
-5. KẾT THÚC KHI HOÀN THÀNH:
-   - Khi đã tạo/sửa đủ các file và build thành công (đối với .NET) hoặc tạo đủ bộ tệp phân tách HTML/CSS/JS (đối với Web), dừng gọi tool và trả lời tóm tắt kết quả chi tiết bằng tiếng Việt.";
+TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
+- Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (generate_image / write_file / edit_file / run_command) ngay từ lượt đầu tiên để trực tiếp tạo/sửa code thật trong dự án.
+- CẤM in ra kế hoạch dạng JSON thuần rồi dừng lại. Khi đã hoàn thành tất cả, dừng gọi tool và trả lời tóm tắt bằng tiếng Việt.";
 
             var toolsDefinition = new JsonArray
             {
@@ -2598,6 +2718,23 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                 {
                     ["functionDeclarations"] = new JsonArray
                     {
+                        new JsonObject
+                        {
+                            ["name"] = "list_files",
+                            ["description"] = "Liệt kê danh sách tệp và thư mục con trong dự án.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["directory"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Thư mục tương đối cần xem (mặc định '.' là thư mục gốc)."
+                                    }
+                                }
+                            }
+                        },
                         new JsonObject
                         {
                             ["name"] = "read_file",
@@ -2614,6 +2751,34 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                                     }
                                 },
                                 ["required"] = new JsonArray { "path" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "generate_image",
+                            ["description"] = "Tạo hình ảnh minh họa thật bằng AI và lưu trực tiếp vào thư mục dự án (ví dụ: 'images/banner.jpg', 'images/product1.jpg'). BẮT BUỘC gọi tool này để tạo hình ảnh trực quan cho website thay vì dùng ảnh rỗng.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["prompt"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Mô tả chi tiết hình ảnh cần tạo bằng tiếng Anh hoặc tiếng Việt."
+                                    },
+                                    ["output_path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn lưu ảnh tương đối trong dự án (ví dụ: 'images/hero.jpg', 'images/item1.jpg')."
+                                    },
+                                    ["aspect_ratio"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Tỉ lệ khung hình: '16:9' (banner/hero), '1:1' (sản phẩm/avatar), '4:3', '9:16'. Mặc định: '16:9'."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "prompt", "output_path" }
                             }
                         },
                         new JsonObject
@@ -2707,20 +2872,42 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                 }
             };
 
-            var messages = new JsonArray
+            var messages = new JsonArray();
+
+            // Preload recent chat history (up to 8 messages) for conversational multi-turn context
+            try
             {
-                new JsonObject
+                var historyMessages = await _dbContext.AgentChatMessages
+                    .Where(m => m.UserId == userId && m.ProjectName == cleanProj)
+                    .OrderByDescending(m => m.CreatedAt)
+                    .Take(8)
+                    .OrderBy(m => m.CreatedAt)
+                    .ToListAsync();
+
+                foreach (var h in historyMessages)
                 {
-                    ["role"] = "user",
-                    ["parts"] = new JsonArray
+                    if (h.Role == "user" && h.Content == model.Prompt) continue;
+                    string r = h.Role == "assistant" ? "model" : "user";
+                    messages.Add(new JsonObject
                     {
-                        new JsonObject
-                        {
-                            ["text"] = $"{agentSystemInstruction}\n\n[CONTEXT FILES]:\n{sbContext}\n\n[USER REQUEST]: {model.Prompt}"
-                        }
+                        ["role"] = r,
+                        ["parts"] = new JsonArray { new JsonObject { ["text"] = h.Content } }
+                    });
+                }
+            }
+            catch { }
+
+            messages.Add(new JsonObject
+            {
+                ["role"] = "user",
+                ["parts"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["text"] = $"{agentSystemInstruction}\n\n[CONTEXT FILES]:\n{sbContext}\n\n[USER REQUEST]: {model.Prompt}"
                     }
                 }
-            };
+            });
 
             var modifiedFiles = new List<string>();
             var executedCommands = new List<string>();
@@ -2729,7 +2916,7 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
             bool buildPassed = false;
             string finalExplanation = "";
 
-            int maxTurns = 6;
+            int maxTurns = 15;
             int currentTurn = 0;
 
             try
@@ -2737,6 +2924,13 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                 while (currentTurn < maxTurns)
                 {
                     currentTurn++;
+
+                    await SendSseEventAsync("turn_start", new
+                    {
+                        turn = currentTurn,
+                        maxTurns = maxTurns,
+                        message = $"[Lượt {currentTurn}/{maxTurns}] Đang phân tích và xử lý..."
+                    });
 
                     var payload = new JsonObject
                     {
@@ -2811,36 +3005,88 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
 
                         foreach (var (toolName, toolArgs) in functionCalls)
                         {
+                            string toolTarget = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "output_path", "outputPath", "command", "directory");
+                            string toolMsg = toolName switch
+                            {
+                                "generate_image" => $"🎨 Đang tạo ảnh minh họa '{toolTarget}'...",
+                                "write_file" => $"📝 Đang ghi tệp '{toolTarget}'...",
+                                "edit_file" => $"✏️ Đang chỉnh sửa tệp '{toolTarget}'...",
+                                "read_file" => $"📖 Đang đọc tệp '{toolTarget}'...",
+                                "list_files" => "📂 Đang duyệt cây thư mục...",
+                                "run_command" => $"🔨 Đang chạy lệnh '{toolTarget}'...",
+                                "delete_file" => $"🗑️ Đang xóa tệp '{toolTarget}'...",
+                                _ => $"⚙️ Đang thực thi {toolName}..."
+                            };
+
+                            await SendSseEventAsync("tool_start", new
+                            {
+                                turn = currentTurn,
+                                tool = toolName,
+                                target = toolTarget,
+                                message = toolMsg
+                            });
+
                             _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
 
                             // Execute the tool on the real workspace filesystem
-                            string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b);
+                            string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
 
                             // Record plan step and tool operation
+                            string toolAction = "read";
                             if (toolName == "write_file" || toolName == "edit_file")
                             {
                                 string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
                                 if (!string.IsNullOrWhiteSpace(fPath))
                                 {
+                                    toolAction = toolName == "write_file" ? "create" : "edit";
                                     toolOperations.Add(new
                                     {
-                                        action = toolName == "write_file" ? "create" : "edit",
+                                        action = toolAction,
                                         path = fPath,
                                         summary = $"Cập nhật tệp {fPath}"
                                     });
                                     planSteps.Add($"Cập nhật tệp '{fPath}'");
                                 }
                             }
+                            else if (toolName == "generate_image")
+                            {
+                                toolAction = "image";
+                                string outPath = ExtractStringArg(toolArgs, "output_path", "outputPath", "path");
+                                string pPrompt = ExtractStringArg(toolArgs, "prompt", "description");
+                                toolOperations.Add(new
+                                {
+                                    action = "image",
+                                    path = outPath,
+                                    summary = $"Tạo hình ảnh: {pPrompt}"
+                                });
+                                planSteps.Add($"Tạo hình ảnh minh họa '{outPath}'");
+                            }
                             else if (toolName == "run_command")
                             {
+                                toolAction = "command";
                                 string cmd = ExtractStringArg(toolArgs, "command", "cmd", "script", "exec");
                                 planSteps.Add($"Thực thi lệnh '{cmd}'");
+                                await SendSseEventAsync("command_output", new { command = cmd, output = toolResult });
                             }
                             else if (toolName == "read_file")
                             {
                                 string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
                                 planSteps.Add($"Đọc nội dung tệp '{fPath}'");
                             }
+                            else if (toolName == "list_files")
+                            {
+                                planSteps.Add("Khảo sát cấu trúc tệp dự án");
+                            }
+
+                            await SendSseEventAsync("tool_done", new
+                            {
+                                turn = currentTurn,
+                                tool = toolName,
+                                target = toolTarget,
+                                action = toolAction,
+                                message = toolMsg.Replace("Đang", "Đã").Replace("...", ""),
+                                result = toolResult.Length > 300 ? toolResult.Substring(0, 300) + "..." : toolResult
+                            });
 
                             functionResponseParts.Add(new JsonObject
                             {
@@ -2970,7 +3216,28 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                         : $"Đã kiểm tra dự án '{cleanProj}'.";
                 }
 
-                return Ok(new
+                // 2. Lưu tin nhắn trợ lý và kế hoạch/hành động vào SQLite bền vững
+                try
+                {
+                    var assistantChatMsg = new Models.AgentChatMessage
+                    {
+                        UserId = userId,
+                        ProjectName = cleanProj,
+                        Role = "assistant",
+                        Content = finalExplanation,
+                        PlanJson = JsonSerializer.Serialize(planSteps),
+                        ToolActionsJson = JsonSerializer.Serialize(toolOperations),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.AgentChatMessages.Add(assistantChatMsg);
+                    await _dbContext.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to persist assistant agent chat message");
+                }
+
+                var resultObj = new
                 {
                     ok = true,
                     projectName = cleanProj,
@@ -2980,12 +3247,35 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                     operations = toolOperations,
                     buildPassed = buildPassed,
                     executedCommands = executedCommands
-                });
+                };
+
+                if (isStream)
+                {
+                    await SendSseEventAsync("done", resultObj);
+                    return;
+                }
+                else
+                {
+                    Response.ContentType = "application/json; charset=utf-8";
+                    await Response.WriteAsJsonAsync(resultObj);
+                    return;
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Agent chat execution error");
-                return StatusCode(500, new { ok = false, error = ex.Message });
+                if (isStream)
+                {
+                    await SendSseEventAsync("error", new { ok = false, error = ex.Message });
+                    return;
+                }
+                else
+                {
+                    Response.StatusCode = 500;
+                    Response.ContentType = "application/json; charset=utf-8";
+                    await Response.WriteAsJsonAsync(new { ok = false, error = ex.Message });
+                    return;
+                }
             }
         }
 
@@ -3013,7 +3303,15 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
             return string.Empty;
         }
 
-        private static async Task<string> ExecuteAgentToolAsync(string projectPath, string toolName, JsonObject? args, List<string> modifiedFiles, List<string> executedCommands, Action<bool> setBuildPassed)
+        private static async Task<string> ExecuteAgentToolAsync(
+            string projectPath, 
+            string toolName, 
+            JsonObject? args, 
+            List<string> modifiedFiles, 
+            List<string> executedCommands, 
+            Action<bool> setBuildPassed,
+            IImageGenerationService? imageGenService = null,
+            string? webRootPath = null)
         {
             try
             {
@@ -3036,6 +3334,70 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                             })
                             .Take(100);
                         return string.Join("\n", entries);
+                    }
+                    case "generate_image":
+                    {
+                        string prompt = ExtractStringArg(args, "prompt", "description", "image_prompt");
+                        string outputPath = ExtractStringArg(args, "output_path", "outputPath", "path", "filename");
+                        string aspectRatio = ExtractStringArg(args, "aspect_ratio", "aspectRatio", "ratio");
+                        if (string.IsNullOrWhiteSpace(outputPath))
+                        {
+                            outputPath = "images/image_" + Guid.NewGuid().ToString("N")[..8] + ".jpg";
+                        }
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, outputPath.TrimStart('/', '\\')));
+                        if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "ERROR: Đường dẫn lưu ảnh phải nằm trong thư mục dự án.";
+                        }
+                        var dir = Path.GetDirectoryName(fullPath);
+                        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                        bool generated = false;
+                        if (imageGenService != null)
+                        {
+                            try
+                            {
+                                var imgReq = new ViewModels.ImageGenerationRequestModel
+                                {
+                                    Prompt = prompt,
+                                    Aspect_Ratio = string.IsNullOrWhiteSpace(aspectRatio) ? "16:9" : aspectRatio
+                                };
+                                var res = await imageGenService.GenerateImageAsync(imgReq);
+                                if (res != null && res["success"]?.GetValue<bool>() == true)
+                                {
+                                    string? b64 = res["imageBase64"]?.ToString();
+                                    if (!string.IsNullOrEmpty(b64))
+                                    {
+                                        await System.IO.File.WriteAllBytesAsync(fullPath, Convert.FromBase64String(b64));
+                                        generated = true;
+                                    }
+                                    else
+                                    {
+                                        string? imgUrl = res["imageUrl"]?.ToString();
+                                        if (!string.IsNullOrEmpty(imgUrl) && !string.IsNullOrEmpty(webRootPath))
+                                        {
+                                            string localUploadPath = Path.Combine(webRootPath, imgUrl.TrimStart('/'));
+                                            if (System.IO.File.Exists(localUploadPath))
+                                            {
+                                                System.IO.File.Copy(localUploadPath, fullPath, true);
+                                                generated = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (!generated)
+                        {
+                            string svg = GenerateSvgPlaceholder(prompt, outputPath);
+                            await System.IO.File.WriteAllTextAsync(fullPath, svg, Encoding.UTF8);
+                        }
+
+                        string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
+                        if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
+                        return $"SUCCESS: Đã tạo và lưu hình ảnh minh họa thật vào '{relPath}'.";
                     }
                     case "read_file":
                     {
@@ -3156,6 +3518,26 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
             {
                 return $"Tool execution error: {ex.Message}";
             }
+        }
+
+        private static string GenerateSvgPlaceholder(string prompt, string filename)
+        {
+            string title = System.Net.WebUtility.HtmlEncode(Path.GetFileNameWithoutExtension(filename).Replace('-', ' ').Replace('_', ' '));
+            string sub = System.Net.WebUtility.HtmlEncode(prompt.Length > 60 ? prompt[..57] + "..." : prompt);
+            return $@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 800 500"" width=""100%"" height=""100%"">
+  <defs>
+    <linearGradient id=""grad"" x1=""0%"" y1=""0%"" x2=""100%"" y2=""100%"">
+      <stop offset=""0%"" style=""stop-color:#1e293b;stop-opacity:1"" />
+      <stop offset=""100%"" style=""stop-color:#0f172a;stop-opacity:1"" />
+    </linearGradient>
+  </defs>
+  <rect width=""100%"" height=""100%"" fill=""url(#grad)"" />
+  <circle cx=""400"" cy=""200"" r=""70"" fill=""rgba(59,130,246,0.2)"" />
+  <path d=""M370 220 L395 185 L415 210 L430 195 L450 220 Z"" fill=""#38bdf8"" />
+  <circle cx=""385"" cy=""180"" r=""8"" fill=""#38bdf8"" />
+  <text x=""400"" y=""310"" font-family=""system-ui, sans-serif"" font-size=""26"" font-weight=""bold"" fill=""#f8fafc"" text-anchor=""middle"">{title}</text>
+  <text x=""400"" y=""350"" font-family=""system-ui, sans-serif"" font-size=""16"" fill=""#94a3b8"" text-anchor=""middle"">{sub}</text>
+</svg>";
         }
 
         private static string DetectLanguage(string path)
@@ -3482,6 +3864,7 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
         public string? ActiveFile { get; set; }
         public string? OpenFileContent { get; set; }
         public List<ContextFileModel>? ContextFiles { get; set; }
+        public bool Stream { get; set; } = true;
     }
 
     public class ContextFileModel

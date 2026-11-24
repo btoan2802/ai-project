@@ -12,12 +12,6 @@ namespace BtoanAiNet.ViewModels
         public string? Password { get; set; }
     }
 
-    public class FaceLoginRequestModel
-    {
-        public string? Username { get; set; }
-        public string? Descriptor { get; set; }
-    }
-
     public class GoogleLoginRequestModel
     {
         public string? Token { get; set; }
@@ -28,12 +22,5 @@ namespace BtoanAiNet.ViewModels
         public int? User_Id { get; set; }
         public string? Full_Name { get; set; }
         public string? Dob { get; set; }
-    }
-
-    public class SaveFaceRequestModel
-    {
-        public string? Username { get; set; }
-        public string? Image { get; set; }
-        public string? Descriptor { get; set; }
     }
 }
