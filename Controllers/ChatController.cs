@@ -78,8 +78,9 @@ namespace BtoanAiNet.Controllers
                 return;
             }
 
+            HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
             Response.ContentType = "text/event-stream; charset=utf-8";
-            Response.Headers["Cache-Control"] = "no-cache";
+            Response.Headers["Cache-Control"] = "no-cache, no-transform";
             Response.Headers["X-Accel-Buffering"] = "no";
 
             var ct = HttpContext.RequestAborted;
@@ -187,7 +188,7 @@ namespace BtoanAiNet.Controllers
                     catch { }
                 }
 
-                // Auto-generate title whenever Title == "Chat mới", empty, or isNewConv
+                // Auto-generate title: only if new conversation or title is empty / "Chat mới"
                 if (currentUid > 0 && conversationId > 0)
                 {
                     try
@@ -208,17 +209,23 @@ namespace BtoanAiNet.Controllers
 
                             string meaningfulQ = "";
                             string lowerQC = (qCandidate ?? "").Trim().ToLowerInvariant();
-                            bool isFiller = lowerQC == "có" || lowerQC == "co" || lowerQC == "ok" || lowerQC == "ừ" || lowerQC == "u" || lowerQC == "được" || lowerQC == "chào" || lowerQC == "ê" || lowerQC.Length <= 1;
+                            bool isFiller = lowerQC == "có" || lowerQC == "co" || lowerQC == "ok" || lowerQC == "ừ" || lowerQC == "u" || 
+                                           lowerQC == "được" || lowerQC == "chào" || lowerQC == "ê" || lowerQC == "e" ||
+                                           lowerQC == "đc chưa" || lowerQC == "dc chua" || lowerQC == "được chưa" || lowerQC == "duoc chua" ||
+                                           lowerQC == "xong chưa" || lowerQC == "xong chua" || lowerQC == "sao rồi" || lowerQC == "sao roi" ||
+                                           lowerQC == "đâu rồi" || lowerQC == "dau roi" || lowerQC == "thêm vào đi" || lowerQC == "làm đi" ||
+                                           lowerQC.Length <= 1;
                             if (!isFiller && !string.IsNullOrWhiteSpace(qCandidate))
                             {
                                 meaningfulQ = qCandidate.Trim();
                             }
                             else
                             {
-                                var history = await _conversationRepository.GetChatHistoryAsync(conversationId, currentUid, 10);
+                                var history = await _conversationRepository.GetChatHistoryAsync(conversationId, currentUid, 15);
                                 var found = history.FirstOrDefault(h => {
                                     string t = (h.Question ?? "").Trim().ToLowerInvariant();
-                                    return t != "có" && t != "co" && t != "ok" && t != "ừ" && t != "chào" && t != "ê" && t.Length > 2;
+                                    return t != "có" && t != "co" && t != "ok" && t != "ừ" && t != "chào" && t != "ê" && 
+                                           t != "đc chưa" && t != "được chưa" && t != "xong chưa" && t.Length > 2;
                                 });
                                 if (found != null && !string.IsNullOrWhiteSpace(found.Question))
                                 {
@@ -233,16 +240,24 @@ namespace BtoanAiNet.Controllers
                                 convTitle = quickTitle;
                                 await _conversationRepository.UpdateConversationTitleAsync(conversationId, quickTitle);
 
-                                try
+                                // Refine asynchronously in background without delaying done event
+                                int cId = conversationId;
+                                string mq = meaningfulQ;
+                                _ = Task.Run(async () =>
                                 {
-                                    var refined = await _chatService.GenerateTitleAsync(meaningfulQ);
-                                    if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && refined.ToLowerInvariant() != "có" && refined.ToLowerInvariant() != "ok" && !refined.StartsWith("{") && !refined.StartsWith("["))
+                                    try
                                     {
-                                        convTitle = refined;
-                                        await _conversationRepository.UpdateConversationTitleAsync(conversationId, refined);
+                                        using var scope = _scopeFactory.CreateScope();
+                                        var cs = scope.ServiceProvider.GetRequiredService<IChatService>();
+                                        var cr = scope.ServiceProvider.GetRequiredService<IConversationRepository>();
+                                        var refined = await cs.GenerateTitleAsync(mq);
+                                        if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && refined.ToLowerInvariant() != "có" && refined.ToLowerInvariant() != "ok" && !refined.StartsWith("{") && !refined.StartsWith("["))
+                                        {
+                                            await cr.UpdateConversationTitleAsync(cId, refined);
+                                        }
                                     }
-                                }
-                                catch { }
+                                    catch { }
+                                });
                             }
                             else if (existing != null)
                             {
@@ -271,6 +286,7 @@ namespace BtoanAiNet.Controllers
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[StreamChat EXCEPTION] {ex}");
                 var errPayload = System.Text.Json.JsonSerializer.Serialize(new { error = ex.Message, done = true });
                 await Response.WriteAsync($"data: {errPayload}\n\n", ct);
                 await Response.Body.FlushAsync(ct);

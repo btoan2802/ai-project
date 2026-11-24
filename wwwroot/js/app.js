@@ -1375,16 +1375,14 @@ async function send() {
         if (geminiRes.title && geminiRes.title !== "Chat mới" && !geminiRes.title.startsWith("{")) {
             document.title = `${geminiRes.title} - Btoan AI`;
             const targetId = current_chat_id || conversation_id;
-            const activeItem = document.querySelector(`.chat-history-item[data-id="${targetId}"]`) ||
-                document.querySelector(`.history-item[data-id="${targetId}"]`) ||
-                document.querySelector(`.chat-history-item.active`);
-            if (activeItem) {
-                const titleEl = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
+            const items = document.querySelectorAll(`.chat-history-item[data-id="${targetId}"], .history-item[data-id="${targetId}"], .chat-history-item.active`);
+            items.forEach(el => {
+                const titleEl = el.querySelector(".chat-title, .history-title");
                 if (titleEl) titleEl.innerText = geminiRes.title;
-            }
+            });
             if (typeof loadHistory === "function") {
                 loadHistory();
-                setTimeout(() => loadHistory(), 700);
+                setTimeout(() => loadHistory(), 600);
             }
         }
 

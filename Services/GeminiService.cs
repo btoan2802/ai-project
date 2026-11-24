@@ -328,14 +328,24 @@ namespace BtoanAiNet.Services
                     };
 
                     HttpResponseMessage? response = null;
+                    using var ctsTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    ctsTimeout.CancelAfter(TimeSpan.FromSeconds(8));
                     try
                     {
-                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                        var swReq = System.Diagnostics.Stopwatch.StartNew();
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ctsTimeout.Token);
+                        Console.WriteLine($"[GeminiService.Stream] Model {currentModel} headers in {swReq.ElapsedMilliseconds} ms, status {response.StatusCode}");
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        lastStreamError = $"[{currentModel}] Request headers timed out after 8s";
+                        Console.WriteLine($"[GeminiService.Stream] {lastStreamError}");
+                        continue;
                     }
                     catch (Exception exSend)
                     {
-                        lastStreamError = $"[{currentModel}] Network/Exception: {exSend.Message}";
-                        Console.WriteLine($"[GeminiService.Stream] SendAsync exception on {currentModel}: {exSend.Message}");
+                        lastStreamError = $"[{currentModel}] Exception: {exSend.Message}";
+                        Console.WriteLine($"[GeminiService.Stream] Exception on {currentModel}: {exSend.Message}");
                         continue;
                     }
 
@@ -351,7 +361,9 @@ namespace BtoanAiNet.Services
                                 {
                                     Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
                                 };
-                                response = await _httpClient.SendAsync(retryReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                                using var ctsRetry = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                                ctsRetry.CancelAfter(TimeSpan.FromSeconds(8));
+                                response = await _httpClient.SendAsync(retryReq, HttpCompletionOption.ResponseHeadersRead, ctsRetry.Token);
                             }
                             catch { }
                         }
@@ -380,9 +392,10 @@ namespace BtoanAiNet.Services
                         string? line = await reader.ReadLineAsync(cancellationToken);
                         if (line == null) break;
                         line = line.Trim();
-                        if (line.StartsWith("data: "))
+                        if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                         {
-                            string jsonStr = line.Substring(6).Trim();
+                            string jsonStr = line.Substring(5).Trim();
+                            if (jsonStr == "[DONE]" || string.IsNullOrEmpty(jsonStr)) continue;
                             if (string.IsNullOrEmpty(jsonStr)) continue;
 
                             List<string>? extractedChunks = null;
