@@ -778,14 +778,14 @@
                 <div class="chat-splash-sub">Yêu cầu tạo nguyên dự án, sinh mã nguồn, tự tạo hình ảnh minh họa cho Web/App</div>
                 
                 <div class="d-flex flex-column gap-2 mt-3 w-100 px-2">
-                    <button type="button" onclick="quickAgentPrompt('Tạo web shop bán hàng mini có ảnh sản phẩm thật, danh mục, giỏ hàng tính tiền & responsive bằng HTML5, CSS3 và JS')" class="btn-prompt-suggestion">
-                        <i class="bi bi-bag-check-fill text-warning me-2"></i>🛍️ Tạo web shop bán hàng có ảnh sản phẩm & giỏ hàng
+                    <button type="button" onclick="quickAgentPrompt('Tạo web shop bán hàng mini đầy đủ tính năng responsive. BẮT BUỘC tách thành 3 tệp riêng: index.html (cấu trúc HTML), style.css (giao diện CSS hiện đại) và script.js (logic giỏ hàng, tính tổng tiền)')" class="btn-prompt-suggestion">
+                        <i class="bi bi-bag-check-fill text-warning me-2"></i>🛍️ Tạo web shop bán hàng (tách riêng HTML / CSS / JS)
                     </button>
-                    <button type="button" onclick="quickAgentPrompt('Tạo trang web tỏ tình lãng mạn có hiệu ứng pháo hoa, trái tim bay, ảnh kỷ niệm đẹp và nhạc nền du dương bằng HTML5, CSS3 và JS')" class="btn-prompt-suggestion">
-                        <i class="bi bi-heart-fill text-danger me-2"></i>💖 Tạo web tỏ tình lãng mạn có hiệu ứng & nhạc/ảnh đẹp
+                    <button type="button" onclick="quickAgentPrompt('Tạo trang web tỏ tình lãng mạn có hiệu ứng pháo hoa, trái tim bay, ảnh kỷ niệm đẹp và nhạc nền. BẮT BUỘC tách thành 3 tệp riêng: index.html, style.css và script.js')" class="btn-prompt-suggestion">
+                        <i class="bi bi-heart-fill text-danger me-2"></i>💖 Tạo web tỏ tình lãng mạn (tách riêng HTML / CSS / JS)
                     </button>
-                    <button type="button" onclick="quickAgentPrompt('Tạo trang Dashboard quản lý công việc và tài chính hiện đại có biểu đồ, bảng số liệu và ảnh avatar bằng HTML5, CSS3 và JS')" class="btn-prompt-suggestion">
-                        <i class="bi bi-speedometer2 text-info me-2"></i>📊 Tạo trang Dashboard quản lý công việc hiện đại
+                    <button type="button" onclick="quickAgentPrompt('Tạo trang Dashboard quản lý công việc và tài chính hiện đại có biểu đồ, bảng dữ liệu. BẮT BUỘC tách thành 3 tệp riêng: index.html, style.css và script.js')" class="btn-prompt-suggestion">
+                        <i class="bi bi-speedometer2 text-info me-2"></i>📊 Tạo trang Dashboard quản lý (tách riêng HTML / CSS / JS)
                     </button>
                 </div>
             </div>
@@ -1265,6 +1265,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261124_full_code_reload_v5" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261124_srcdoc_preview_separation_v6" asp-append-version="true"></script>
 </body>
 </html>

@@ -2344,7 +2344,7 @@ function triggerLivePreview() {
     openLivePreview();
 }
 
-function openLivePreview() {
+async function openLivePreview() {
     if (!activeProjectId) {
         alert("Chưa có dự án nào được chọn. Hãy tạo hoặc mở dự án web có index.html để xem trước.");
         return;
@@ -2356,16 +2356,40 @@ function openLivePreview() {
     const badge = document.getElementById("previewModalUrlBadge");
     const newTabBtn = document.getElementById("previewOpenTabBtn");
 
-    if (iframe) iframe.src = previewUrl;
     if (badge) badge.innerText = `/api/ide/preview/${activeProjectId}/index.html`;
     if (newTabBtn) newTabBtn.href = previewUrl;
 
     showModalSafely("previewModal");
+
+    if (iframe) {
+        try {
+            // First attempt: fetch HTML to load via srcdoc with injected base href for instant rendering without iframe header/sandbox block
+            const res = await fetch(previewUrl, { headers: getApiHeaders() });
+            if (res.ok) {
+                let html = await res.text();
+                const baseHref = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/`;
+                if (!html.includes('<base ') && !html.includes('<base>')) {
+                    if (html.includes('<head>')) {
+                        html = html.replace('<head>', `<head>\n<base href="${baseHref}">`);
+                    } else if (html.includes('<head ')) {
+                        html = html.replace(/<head[^>]*>/i, `$&<base href="${baseHref}">`);
+                    } else {
+                        html = `<base href="${baseHref}">\n` + html;
+                    }
+                }
+                iframe.srcdoc = html;
+            } else {
+                iframe.src = previewUrl;
+            }
+        } catch (e) {
+            console.warn("Live preview fetch error, fallback to direct src:", e);
+            iframe.src = previewUrl;
+        }
+    }
 }
 
 function refreshPreviewIframe() {
-    const iframe = document.getElementById("previewIframe");
-    if (iframe) iframe.src = iframe.src;
+    openLivePreview();
 }
 
 function focusAgentScaffolding() {

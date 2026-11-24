@@ -904,6 +904,34 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 contentType += "; charset=utf-8";
             }
 
+            // Allow embedding inside IDE iframe
+            Response.Headers.Remove("X-Frame-Options");
+            Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+            Response.Headers["Content-Security-Policy"] = "frame-ancestors 'self' https://ai.btoan.com http://localhost:* http://127.0.0.1:*";
+
+            // If HTML, inject base tag for relative assets so css, js, and images resolve reliably
+            if (contentType.StartsWith("text/html") || fullPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || fullPath.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+            {
+                string htmlContent = System.IO.File.ReadAllText(fullPath);
+                string baseHref = $"/api/ide/preview/{cleanProj}/";
+                if (!htmlContent.Contains("<base ", StringComparison.OrdinalIgnoreCase) && !htmlContent.Contains("<base>", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (htmlContent.Contains("<head>", StringComparison.OrdinalIgnoreCase))
+                    {
+                        htmlContent = System.Text.RegularExpressions.Regex.Replace(
+                            htmlContent,
+                            "(<head[^>]*>)",
+                            $"$1\n    <base href=\"{baseHref}\">",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    }
+                    else
+                    {
+                        htmlContent = $"<base href=\"{baseHref}\">\n" + htmlContent;
+                    }
+                }
+                return Content(htmlContent, "text/html; charset=utf-8");
+            }
+
             return PhysicalFile(fullPath, contentType);
         }
 
@@ -2433,11 +2461,25 @@ CÁC CÔNG CỤ THỰC THI BẠN ĐƯỢC CẤP:
 - delete_file(path): Xóa tệp không cần thiết.
 - run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build', 'dotnet add package...') tại thư mục dự án.
 
-QUY TẮC BẮT BUỘC (VIẾT CODE ĐẦY ĐỦ & CHỐNG FILE RỖNG 0 BYTE):
-1. MÃ NGUỒN HOÀN CHỈNH 100%: Mọi file tạo mới hoặc chỉnh sửa (Models, DbContext, SeedData, Controllers, Views, Program.cs) BẮT BUỘC phải có đầy đủ code thực thi được ngay, có namespace, using, class, method đầy đủ. TUYỆT ĐỐI KHÔNG dùng comment giữ chỗ như '// code goes here', '// implement later', và TUYỆT ĐỐI KHÔNG tạo file rỗng 0 byte.
-2. NẠP ĐẦY ĐỦ CONTENT KHI GỌI write_file: Khi gọi write_file, truyền toàn bộ source code vào tham số 'content'. Ghi tuần tự từng file hoàn chỉnh (không nhồi nhiều file cùng lúc gây cắt cụt token).
-3. BIÊN DỊCH KIỂM TRA (dotnet build): Sau khi tạo/sửa xong các file, BẮT BUỘC gọi run_command(""dotnet build"") để kiểm chứng mã nguồn. Nếu có lỗi biên dịch, bạn phải đọc thông báo lỗi và tự sửa lại các file bị lỗi cho đến khi build thành công 0 Error(s).
-4. KẾT THÚC KHI BUILD THÀNH CÔNG: Khi dotnet build đã thành công (0 Error), bạn đã hoàn thành nhiệm vụ! Dừng gọi tool và trả lời tóm tắt kết quả chi tiết bằng tiếng Việt.";
+QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG GỘP CHUNG 1 TỆP):
+1. ĐỐI VỚI DỰ ÁN WEB / FRONTEND (HTML / CSS / JAVASCRIPT):
+   - TUYỆT ĐỐI KHÔNG GỘP TẤT CẢ CODE VÀO 1 TỆP index.html DUY NHẤT! KHÔNG viết CSS vào thẻ <style> lớn, KHÔNG viết JavaScript vào thẻ <script> lớn trong index.html.
+   - BẮT BUỘC gọi write_file để phân tách rõ ràng tối thiểu 3 tệp riêng biệt:
+     + 'index.html': Chỉ chứa khung cấu trúc HTML ngữ nghĩa, thẻ liên kết <link rel=""stylesheet"" href=""style.css""> trong thẻ <head> và thẻ <script src=""script.js""></script> ở cuối thẻ <body>.
+     + 'style.css': Chứa toàn bộ định kiểu CSS hiện đại, màu sắc gradient đẹp mắt, font Google Fonts, CSS Grid / Flexbox responsive cho Mobile & PC, hiệu ứng animation & hover.
+     + 'script.js': Chứa toàn bộ dữ liệu mẫu (mảng sản phẩm, giỏ hàng, danh mục...), logic xử lý sự kiện DOM (thêm vào giỏ, tính tổng tiền, modal, countdown timer, hiệu ứng âm thanh/pháo hoa...).
+   - Nếu có ảnh minh họa: hãy sử dụng link ảnh trực tiếp từ Unsplash chất lượng cao (ví dụ: https://images.unsplash.com/...) hoặc các file ảnh có sẵn trong thư mục images/.
+
+2. ĐỐI VỚI DỰ ÁN BACKEND .NET / ASP.NET CORE:
+   - BẮT BUỘC phân chia chuẩn kiến trúc MVC vào từng thư mục riêng biệt: Models/ (Product.cs, Order.cs...), Data/ (DbContext, SeedData), Controllers/ (HomeController.cs, ProductsController.cs...), Views/ (Index.cshtml, Privacy.cshtml...), Program.cs.
+   - Sau khi tạo/sửa xong, BẮT BUỘC gọi run_command(""dotnet build"") để kiểm chứng. Nếu có lỗi biên dịch, bạn phải đọc thông báo lỗi và tự sửa lại các file bị lỗi cho đến khi build thành công 0 Error(s).
+
+3. MÃ NGUỒN HOÀN CHỈNH 100% & CHỐNG FILE RỖNG 0 BYTE:
+   - Tham số 'content' của write_file BẮT BUỘC chứa toàn bộ code thực thi được ngay, TUYỆT ĐỐI KHÔNG dùng comment giữ chỗ ('// code goes here', '// implement later'), KHÔNG ghi file rỗng 0 byte.
+   - NẠP ĐẦY ĐỦ CONTENT KHI GỌI write_file: Khi gọi write_file, truyền toàn bộ source code vào tham số 'content'. Ghi tuần tự từng file hoàn chỉnh (không nhồi nhiều file cùng lúc gây cắt cụt token).
+
+4. KẾT THÚC KHI HOÀN THÀNH:
+   - Khi đã tạo/sửa đủ các file và build thành công (đối với .NET) hoặc tạo đủ bộ tệp phân tách HTML/CSS/JS (đối với Web), dừng gọi tool và trả lời tóm tắt kết quả chi tiết bằng tiếng Việt.";
 
             var toolsDefinition = new JsonArray
             {
@@ -2466,7 +2508,7 @@ QUY TẮC BẮT BUỘC (VIẾT CODE ĐẦY ĐỦ & CHỐNG FILE RỖNG 0 BYTE):
                         new JsonObject
                         {
                             ["name"] = "write_file",
-                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án với mã nguồn hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC phải chứa đầy đủ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống.",
+                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án với mã nguồn hoàn chỉnh 100%. Với dự án Web, hãy gọi hàm này nhiều lần để tạo riêng từng tệp: 'index.html', 'style.css' và 'script.js' (không dồn chung code vào 1 file). Tham số 'content' BẮT BUỘC phải chứa đầy đủ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống.",
                             ["parameters"] = new JsonObject
                             {
                                 ["type"] = "OBJECT",
@@ -2475,7 +2517,7 @@ QUY TẮC BẮT BUỘC (VIẾT CODE ĐẦY ĐỦ & CHỐNG FILE RỖNG 0 BYTE):
                                     ["path"] = new JsonObject
                                     {
                                         ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Controllers/HomeController.cs', 'Views/Home/About.cshtml', 'Models/Product.cs')."
+                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'index.html', 'style.css', 'script.js', 'Controllers/HomeController.cs', 'Views/Home/About.cshtml', 'Models/Product.cs')."
                                     },
                                     ["content"] = new JsonObject
                                     {
