@@ -296,6 +296,8 @@ namespace BtoanAiNet.Controllers
                     if (!res.ok)
                     {
                         _logger.LogWarning("dotnet new mvc output: {Output}", res.output);
+                        CleanupEmptyDir(projectPath);
+                        return StatusCode(400, new { ok = false, error = $"Khởi tạo dự án ASP.NET Core MVC thất bại: {res.output}" });
                     }
                     primaryFile = "Program.cs";
                 }
@@ -306,16 +308,24 @@ namespace BtoanAiNet.Controllers
                     if (!res.ok)
                     {
                         _logger.LogWarning("dotnet new webapi output: {Output}", res.output);
+                        CleanupEmptyDir(projectPath);
+                        return StatusCode(400, new { ok = false, error = $"Khởi tạo dự án ASP.NET Core Web API thất bại: {res.output}" });
                     }
                     primaryFile = "Program.cs";
                 }
                 else if (template == "angular")
                 {
-                    // 3. Angular App via official Angular CLI
-                    var res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    // 3. Angular App via official Angular CLI (try ng, then fallback to npx)
+                    var res = await RunCliProcessAsync(userRoot, "ng", $"new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --style=css --ssr=false --defaults", 120);
                     if (!res.ok)
                     {
-                        _logger.LogWarning("ng new output: {Output}", res.output);
+                        _logger.LogWarning("ng new failed, falling back to npx: {Output}", res.output);
+                        res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    }
+                    if (!res.ok)
+                    {
+                        CleanupEmptyDir(projectPath);
+                        return StatusCode(400, new { ok = false, error = $"Khởi tạo dự án Angular thất bại: {res.output}" });
                     }
                     primaryFile = System.IO.File.Exists(Path.Combine(projectPath, "src", "app", "app.component.ts")) 
                         ? "src/app/app.component.ts" 
@@ -329,13 +339,28 @@ namespace BtoanAiNet.Controllers
                     Directory.CreateDirectory(bePath);
                     Directory.CreateDirectory(fePath);
 
-                    await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"Backend\" -o \"{bePath}\" --use-controllers --no-https", 90);
-                    await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    var resBe = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"Backend\" -o \"{bePath}\" --use-controllers --no-https", 90);
+                    if (!resBe.ok)
+                    {
+                        CleanupEmptyDir(projectPath);
+                        return StatusCode(400, new { ok = false, error = $"Khởi tạo backend Web API thất bại: {resBe.output}" });
+                    }
+
+                    var resFe = await RunCliProcessAsync(userRoot, "ng", $"new \"frontend\" --directory \"{fePath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    if (!resFe.ok)
+                    {
+                        resFe = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    }
+                    if (!resFe.ok)
+                    {
+                        CleanupEmptyDir(projectPath);
+                        return StatusCode(400, new { ok = false, error = $"Khởi tạo frontend Angular thất bại: {resFe.output}" });
+                    }
                     primaryFile = "backend/Program.cs";
                 }
                 else if (template == "static-web" || template == "html5" || template == "web")
                 {
-                    // 5. HTML5 / CSS3 / JS Static Web
+                    // 5. HTML5 / CSS3 / JS Static Web (Đầy đủ 3 file)
                     string html = @"<!DOCTYPE html>
 <html lang=""vi"">
 <head>
@@ -392,6 +417,13 @@ document.addEventListener(""DOMContentLoaded"", () => {
                     primaryFile = "";
                 }
 
+                // Guard: If not empty project, make sure project directory is not empty
+                if (template != "empty" && Directory.Exists(projectPath) && Directory.GetFileSystemEntries(projectPath).Length == 0)
+                {
+                    CleanupEmptyDir(projectPath);
+                    return StatusCode(400, new { ok = false, error = $"Khởi tạo dự án '{cleanName}' thất bại: Thư mục dự án rỗng." });
+                }
+
                 return Ok(new
                 {
                     ok = true,
@@ -402,9 +434,22 @@ document.addEventListener(""DOMContentLoaded"", () => {
             }
             catch (Exception ex)
             {
+                CleanupEmptyDir(projectPath);
                 _logger.LogError(ex, "Error creating project {Name}", cleanName);
                 return StatusCode(500, new { ok = false, error = ex.Message });
             }
+        }
+
+        private static void CleanupEmptyDir(string dir)
+        {
+            try
+            {
+                if (Directory.Exists(dir))
+                {
+                    Directory.Delete(dir, recursive: true);
+                }
+            }
+            catch { }
         }
 
         private static async Task<(bool ok, string output)> RunCliProcessAsync(string workingDir, string executable, string arguments, int timeoutSeconds = 120)
@@ -1475,6 +1520,26 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             if (!IsAuthenticated) return Unauthorized();
             var sessions = RunningAppSessionManager.GetUserSessions(CurrentUserId);
             return Ok(new { ok = true, ports = sessions });
+        }
+
+        // POST /api/ide/ports/stop and /api/ide/stop-port
+        [HttpPost("ports/stop")]
+        [HttpPost("stop-port")]
+        public async Task<IActionResult> StopPort([FromBody] StopPortRequestModel model)
+        {
+            int port = model?.Port ?? 0;
+            if (port < 1024 || port > 65535)
+            {
+                return BadRequest(new { ok = false, error = "Cổng không hợp lệ." });
+            }
+
+            await RunningAppSessionManager.StopPortAsync(port, CurrentUserId);
+            return Ok(new
+            {
+                ok = true,
+                port = port,
+                message = $"Đã dừng và giải phóng hoàn toàn cổng :{port}."
+            });
         }
 
         // GET /api/ide/file?project=...&path=...
@@ -3199,5 +3264,10 @@ QUY TẮC BẮT BUỘC THỰC THI (AUTONOMOUS TOOL LOOP):
     {
         public string? Project { get; set; }
         public List<SecretPairModel> Secrets { get; set; } = new();
+    }
+
+    public class StopPortRequestModel
+    {
+        public int Port { get; set; }
     }
 }

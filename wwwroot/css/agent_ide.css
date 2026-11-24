@@ -408,12 +408,22 @@ body.agent-ide-body {
     display: flex;
     align-items: center;
     cursor: pointer;
+    user-select: none;
     background-color: rgba(255, 255, 255, 0.02);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .workspace-root-title:hover {
     background-color: rgba(255, 255, 255, 0.05);
+}
+
+.workspace-root-title #workspaceRootChevron {
+    transition: transform 0.15s ease;
+}
+
+#workspaceRootToggleArea {
+    cursor: pointer;
+    user-select: none;
 }
 
 .accordion-section-header {

@@ -118,6 +118,65 @@ namespace BtoanAiNet.Services
             }
         }
 
+        public static async Task<bool> StopPortAsync(int port, int userId = 0)
+        {
+            if (port < 1024 || port > 65535) return false;
+
+            // 1. Kill process tree via registered session
+            if (ActiveSessions.TryGetValue(port, out var session))
+            {
+                if (session.ProcessId > 0)
+                {
+                    KillProcessSafe(session.ProcessId);
+                }
+            }
+            ReleasePort(port);
+
+            // 2. Kill any OS process currently listening on this port (Windows / Linux)
+            try
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c for /f \"tokens=5\" %a in ('netstat -ano ^| findstr \":{port} \"') do taskkill /F /T /PID %a",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p != null)
+                    {
+                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        await p.WaitForExitAsync(cts.Token);
+                    }
+                }
+                else
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "/bin/bash",
+                        Arguments = $"-c \"fuser -k -9 {port}/tcp 2>/dev/null || true; pid=$(ss -tlnp 'sport = :{port}' 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2); if [ -n \\\"$pid\\\" ]; then kill -9 $pid 2>/dev/null || true; fi\"",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p != null)
+                    {
+                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        await p.WaitForExitAsync(cts.Token);
+                    }
+                }
+            }
+            catch { }
+
+            return true;
+        }
+
         public static void ReleaseSessionByConnection(string connectionId)
         {
             if (string.IsNullOrWhiteSpace(connectionId)) return;

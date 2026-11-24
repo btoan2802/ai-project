@@ -165,6 +165,48 @@ function initMonacoEditors() {
 // ==========================================
 // 2. WORKSPACE PROJECTS & FILE EXPLORER
 // ==========================================
+const collapsedRootProjects = new Set();
+
+function toggleRootProjectCollapse(projId, forceState) {
+    const pId = projId || activeProjectId;
+    if (!pId) return;
+
+    const isCurrentlyCollapsed = collapsedRootProjects.has(pId);
+    const shouldCollapse = forceState !== undefined ? forceState : !isCurrentlyCollapsed;
+
+    if (shouldCollapse) {
+        collapsedRootProjects.add(pId);
+    } else {
+        collapsedRootProjects.delete(pId);
+    }
+
+    applyRootProjectCollapseState(pId);
+}
+
+function applyRootProjectCollapseState(projId) {
+    const pId = projId || activeProjectId;
+    const isCollapsed = collapsedRootProjects.has(pId);
+    const container = document.getElementById("workspaceTreeContainer");
+    const rootChevron = document.getElementById("workspaceRootChevron") || document.querySelector("#workspaceRootHeader .bi-chevron-down, #workspaceRootHeader .bi-chevron-right");
+    const folderIcon = document.getElementById("workspaceRootFolderIcon") || document.querySelector("#workspaceRootHeader .bi-folder, #workspaceRootHeader .bi-folder2-open");
+
+    if (container) {
+        container.style.display = isCollapsed ? "none" : "block";
+    }
+
+    if (rootChevron) {
+        rootChevron.className = isCollapsed 
+            ? "bi bi-chevron-right me-1.5 text-secondary" 
+            : "bi bi-chevron-down me-1.5 text-secondary";
+    }
+
+    if (folderIcon) {
+        folderIcon.className = isCollapsed 
+            ? "bi bi-folder text-warning me-1.5" 
+            : "bi bi-folder2-open text-warning me-1.5";
+    }
+}
+window.toggleRootProjectCollapse = toggleRootProjectCollapse;
 async function loadUserProjects() {
     const select = document.getElementById("projectSelect");
     if (!select) return;
@@ -202,12 +244,15 @@ async function loadUserProjects() {
 
         const rootHeader = document.getElementById("workspaceRootHeader");
         if (rootHeader) {
-            rootHeader.onclick = () => {
+            rootHeader.onclick = (e) => {
+                if (e && e.target && e.target.closest('.workspace-root-actions')) return;
                 activeTreeNode = { path: "", isDirectory: true, isProjectRoot: true, el: rootHeader };
                 document.querySelectorAll(".explorer-tree-item, .workspace-root-title").forEach(el => el.classList.remove("selected"));
                 rootHeader.classList.add("selected");
+                toggleRootProjectCollapse(activeProjectId);
             };
         }
+        applyRootProjectCollapseState(activeProjectId);
 
         // Update Terminal Prompt
         updateTerminalPrompt();
@@ -329,6 +374,7 @@ async function switchActiveProject(projName) {
     if (rootNameEl) {
         rootNameEl.innerText = projName;
     }
+    applyRootProjectCollapseState(projName);
     updateTerminalPrompt();
     await refreshFileTree();
     loadGitStatus();
@@ -395,6 +441,7 @@ function renderFileTree(files, container) {
     const frag = document.createDocumentFragment();
     renderTreeLevel(root, frag, 0);
     container.appendChild(frag);
+    applyRootProjectCollapseState(activeProjectId);
     container.oncontextmenu = (e) => {
         if (e.target === container || e.target.id === "workspaceTreeContainer") {
             onExplorerContextMenu(e, "", true);
@@ -1762,8 +1809,7 @@ function openLiveAppPortPreview(port) {
 }
 
 async function stopRunningPort(port) {
-    await stopRunningApp();
-    setTimeout(loadActivePorts, 400);
+    await stopRunningApp(port);
 }
 
 
@@ -4330,15 +4376,36 @@ function reloadLiveAppIframe() {
     }
 }
 
-async function stopRunningApp() {
+async function stopRunningApp(targetPort) {
+    let portToStop = targetPort || currentLiveAppPort;
+    if (!portToStop) {
+        const portEl = document.getElementById("tabLiveAppPort");
+        if (portEl && portEl.textContent) {
+            const m = portEl.textContent.match(/:?(\d+)/);
+            if (m) portToStop = parseInt(m[1]);
+        }
+    }
+
+    try {
+        if (portToStop) {
+            await fetch('/api/ide/ports/stop', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ port: portToStop })
+            });
+        }
+    } catch (err) {
+        console.warn("Error calling stop-port API:", err);
+    }
+
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
         try {
             await terminalHubConn.invoke("KillRunningProcess");
-            showToastNotification("Đã gửi tín hiệu dừng ứng dụng.");
         } catch (e) {
-            console.error("Stop error:", e);
+            console.error("Stop terminal error:", e);
         }
     }
+
     currentLiveAppPort = null;
     const badge = document.getElementById("tabLiveAppBadge");
     if (badge) badge.classList.add("d-none");
@@ -4347,6 +4414,10 @@ async function stopRunningApp() {
     const btnStop = document.getElementById("tabBtnStopApp");
     if (btnStop) btnStop.classList.add("d-none");
     closeLiveAppPreview();
+    showToastNotification(portToStop ? `🛑 Đã dừng ứng dụng trên cổng :${portToStop}.` : "Đã gửi tín hiệu dừng ứng dụng.");
+    if (typeof loadActivePorts === "function") {
+        setTimeout(loadActivePorts, 300);
+    }
 }
 
 // Initial Boot

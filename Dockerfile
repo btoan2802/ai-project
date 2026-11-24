@@ -14,8 +14,14 @@ RUN dotnet publish "BtoanAiNet.csproj" -c Release -o /app/publish /p:UseAppHost=
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
-# Install bash, curl and git for terminal and workspace operations
-RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/*
+# Install bash, curl, git, procps, psmisc, and Node.js 22 LTS + @angular/cli
+RUN apt-get update && apt-get install -y curl git procps psmisc && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g @angular/cli && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV NPM_CONFIG_CACHE=/tmp/.npm
 
 COPY --from=build /app/publish .
 

@@ -443,10 +443,10 @@
                     </div>
                 </div>
                 
-                <div id="workspaceRootHeader" class="workspace-root-title d-flex align-items-center justify-content-between" oncontextmenu="if (typeof onProjectContextMenu === 'function') { onProjectContextMenu(event); return false; }" title="Chuột phải để Đổi tên, Xóa hoặc thao tác dự án">
-                    <div class="d-flex align-items-center text-truncate flex-grow-1">
-                        <i class="bi bi-chevron-down me-1.5 text-secondary"></i>
-                        <i class="bi bi-folder2-open text-warning me-1.5"></i>
+                <div id="workspaceRootHeader" class="workspace-root-title d-flex align-items-center justify-content-between" oncontextmenu="if (typeof onProjectContextMenu === 'function') { onProjectContextMenu(event); return false; }" title="Click để Đóng/Mở, chuột phải để Đổi tên, Xóa hoặc thao tác dự án">
+                    <div class="d-flex align-items-center text-truncate flex-grow-1" id="workspaceRootToggleArea" style="cursor: pointer;">
+                        <i id="workspaceRootChevron" class="bi bi-chevron-down me-1.5 text-secondary"></i>
+                        <i id="workspaceRootFolderIcon" class="bi bi-folder2-open text-warning me-1.5"></i>
                         <span id="workspaceRootName" class="fw-semibold text-light text-truncate">Chưa có dự án</span>
                     </div>
                     <div class="workspace-root-actions d-flex align-items-center gap-1 pe-1">
@@ -1265,6 +1265,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261124_toolloop_v2" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261124_stop_collapse_v3" asp-append-version="true"></script>
 </body>
 </html>
