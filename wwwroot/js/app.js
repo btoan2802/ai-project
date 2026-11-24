@@ -3071,19 +3071,11 @@ async function checkProfile(user_id) {
         // 👉 LUÔN show chat (không dùng profileBox nữa)
         document.getElementById("chatApp").style.display = "flex"
 
-        // 👉 nếu CHƯA có profile → bật popup
+        // 👉 Không bao giờ tự động bật popup Profile làm phiền người dùng
         if (!data.has_profile) {
-
-            document.getElementById("profileModal").style.display = "flex"
-
-            localStorage.setItem("has_profile", "0")
-
+            localStorage.setItem("has_profile", "0");
         } else {
-
-            // 👉 có profile → đóng popup
-            document.getElementById("profileModal").style.display = "none"
-
-            localStorage.setItem("has_profile", "1")
+            localStorage.setItem("has_profile", "1");
         }
     } catch (e) {
         console.warn("Failed to check profile:", e);

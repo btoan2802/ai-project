@@ -173,7 +173,7 @@ namespace BtoanAiNet.Controllers
             {
                 byte[] bytes = Convert.FromBase64String(cipherBase64);
                 for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(bytes[i] ^ key);
-                return Encoding.UTF8.GetString(bytes);
+                return System.Text.Encoding.UTF8.GetString(bytes);
             }
             catch { return string.Empty; }
         }
