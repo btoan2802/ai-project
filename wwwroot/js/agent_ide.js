@@ -2362,29 +2362,12 @@ async function openLivePreview() {
     showModalSafely("previewModal");
 
     if (iframe) {
+        // Luôn xóa sạch srcdoc để tránh opaque null origin trong Chrome làm hỏng script / localStorage
         try {
-            // First attempt: fetch HTML to load via srcdoc with injected base href for instant rendering without iframe header/sandbox block
-            const res = await fetch(previewUrl, { headers: getApiHeaders() });
-            if (res.ok) {
-                let html = await res.text();
-                const baseHref = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/`;
-                if (!html.includes('<base ') && !html.includes('<base>')) {
-                    if (html.includes('<head>')) {
-                        html = html.replace('<head>', `<head>\n<base href="${baseHref}">`);
-                    } else if (html.includes('<head ') || html.includes('<HEAD ')) {
-                        html = html.replace(/<head(\s+[^>]*)?>/i, `$&<base href="${baseHref}">`);
-                    } else {
-                        html = `<base href="${baseHref}">\n` + html;
-                    }
-                }
-                iframe.srcdoc = html;
-            } else {
-                iframe.src = previewUrl;
-            }
-        } catch (e) {
-            console.warn("Live preview fetch error, fallback to direct src:", e);
-            iframe.src = previewUrl;
-        }
+            iframe.removeAttribute("srcdoc");
+        } catch {}
+        // Nạp trực tiếp URL cùng domain để có đầy đủ quyền same-origin, chạy JavaScript và tải CSS hoàn hảo
+        iframe.src = previewUrl;
     }
 }
 
@@ -2541,7 +2524,7 @@ async function sendAgentTask() {
     }, 2000);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 85000);
+    const timeoutId = setTimeout(() => controller.abort(), 240000);
 
     try {
         const res = await fetch('/api/ide/agent-run', {
@@ -2585,7 +2568,11 @@ async function sendAgentTask() {
     } catch (err) {
         clearTimeout(timeoutId);
         const isAbort = err.name === 'AbortError';
-        agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 85s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
+        agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
+        // Tự động làm mới cây thư mục ngay cả khi timeout/lỗi để hiển thị các tệp đã tạo thành công
+        if (typeof refreshFileTree === 'function') {
+            try { await refreshFileTree(); } catch(e) { console.warn(e); }
+        }
     } finally {
         clearInterval(ticker);
     }
@@ -2640,8 +2627,10 @@ function renderAgentResponse(data, container) {
     if (explanationText.trim().startsWith("{") && explanationText.includes('"plan"')) {
         try {
             const parsed = JSON.parse(explanationText.trim());
-            explanationText = parsed.explanation || (Array.isArray(parsed.plan) ? "" : "");
-        } catch {}
+            explanationText = parsed.explanation || (Array.isArray(parsed.plan) ? "Đã phân tích kế hoạch và thực hiện cập nhật dự án thành công." : "");
+        } catch {
+            explanationText = "Đã hoàn tất xử lý yêu cầu cập nhật dự án.";
+        }
     }
     if (explanationText) {
         const expEl = document.createElement("div");

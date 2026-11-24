@@ -40,18 +40,6 @@ namespace BtoanAiNet.Models
         [Column("avatar")]
         public string? Avatar { get; set; }
 
-        [Column("face_enabled")]
-        public int? FaceEnabled { get; set; }
-
-        [Column("face_image_url")]
-        public string? FaceImageUrl { get; set; }
-
-        [Column("face_descriptor")]
-        public string? FaceDescriptor { get; set; }
-
-        [Column("face_updated_at")]
-        public DateTime? FaceUpdatedAt { get; set; }
-
         [Column("bio")]
         [StringLength(500)]
         public string? Bio { get; set; }

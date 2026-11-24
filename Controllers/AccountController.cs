@@ -13,23 +13,23 @@ namespace BtoanAiNet.Controllers
     public class AccountController : Controller
     {
         private readonly IAuthService _authService;
-        private readonly IFaceAuthService _faceAuthService;
         private readonly IGoogleAuthService _googleAuthService;
         private readonly IUserRepository _userRepository;
         private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly IConfiguration _configuration;
 
         public AccountController(
             IAuthService authService,
-            IFaceAuthService faceAuthService,
             IGoogleAuthService googleAuthService,
             IUserRepository userRepository,
-            IWebHostEnvironment webHostEnvironment)
+            IWebHostEnvironment webHostEnvironment,
+            IConfiguration configuration)
         {
             _authService = authService;
-            _faceAuthService = faceAuthService;
             _googleAuthService = googleAuthService;
             _userRepository = userRepository;
             _webHostEnvironment = webHostEnvironment;
+            _configuration = configuration;
         }
 
         protected int? CurrentUserId
@@ -121,64 +121,8 @@ namespace BtoanAiNet.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { status = "error", msg = $"Database error: {ex.Message}" });
-            }
-        }
-
-        // POST /ai/api/login_face.php
-        [HttpPost]
-        [Route("ai/api/login_face.php")]
-        [Route("Account/LoginFace")]
-        public async Task<IActionResult> LoginFace([FromForm] string username, [FromForm] string descriptor)
-        {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(descriptor))
-            {
-                return Json(new { success = false, message = "Thiếu dữ liệu xác thực (username hoặc descriptor)" });
-            }
-
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                var userTask = _userRepository.GetByUsernameAsync(username.Trim());
-                if (await Task.WhenAny(userTask, Task.Delay(2000, cts.Token)) != userTask)
-                {
-                    // Fast timeout when local DB is offline
-                    return Json(new { success = true, has_face_id = false, message = "Database offline (mock/guest profile)" });
-                }
-                var user = await userTask;
-                if (user == null)
-                {
-                    return Json(new { success = false, message = "Tài khoản không tồn tại" });
-                }
-
-                if (user.FaceEnabled != 1 || string.IsNullOrEmpty(user.FaceDescriptor))
-                {
-                    return Json(new { success = false, message = "Tài khoản chưa thiết lập FaceID" });
-                }
-
-                var (isMatch, distance, message) = _faceAuthService.VerifyFace(descriptor, user.FaceDescriptor);
-                if (!isMatch)
-                {
-                    return Json(new { success = false, message, distance });
-                }
-
-                HttpContext.Session.SetInt32("user_id", user.Id);
-                HttpContext.Session.SetString("username", user.Username ?? "");
-                await SignInUserAsync(user);
-                await SignInUserAsync(user);
-
-                return Json(new
-                {
-                    success = true,
-                    message = "Đăng nhập khuôn mặt thành công",
-                    username = user.Username,
-                    user_id = user.Id,
-                    distance
-                });
-            }
-            catch (Exception ex)
-            {
-                return Json(new { success = false, message = $"Database error: {ex.Message}" });
+                var detail = ex.InnerException != null ? $"{ex.Message} ({ex.InnerException.Message})" : ex.Message;
+                return Json(new { status = "error", msg = $"Database error: {detail}" });
             }
         }
 
@@ -220,6 +164,106 @@ namespace BtoanAiNet.Controllers
             catch
             {
                 return Json(new { success = false });
+            }
+        }
+
+        // GET /Account/GoogleOAuth or /signin-google-oauth
+        [HttpGet("Account/GoogleOAuth")]
+        [HttpGet("signin-google-oauth")]
+        public IActionResult GoogleOAuth()
+        {
+            string clientId = _configuration["GoogleAuth:ClientId"] 
+                           ?? _configuration["Authentication:Google:ClientId"]
+                           ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? "";
+
+            string scheme = Request.Scheme;
+            if (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && !string.IsNullOrWhiteSpace(proto))
+            {
+                scheme = proto.ToString();
+            }
+            string host = Request.Host.Value ?? "ai.btoan.com";
+            if (Request.Headers.TryGetValue("X-Forwarded-Host", out var fHost) && !string.IsNullOrWhiteSpace(fHost))
+            {
+                host = fHost.ToString();
+            }
+
+            string redirectUri = Uri.EscapeDataString($"{scheme}://{host}/signin-google-callback");
+            string googleUrl = $"https://accounts.google.com/o/oauth2/v2/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope=openid%20profile%20email&prompt=select_account";
+            return Redirect(googleUrl);
+        }
+
+        // GET /signin-google-callback
+        [HttpGet("signin-google-callback")]
+        [HttpGet("signin-google")]
+        public async Task<IActionResult> GoogleOAuthCallback([FromQuery] string? code, [FromQuery] string? error)
+        {
+            if (string.IsNullOrEmpty(code))
+            {
+                return Redirect("/?login_error=" + Uri.EscapeDataString(error ?? "No code received"));
+            }
+
+            try
+            {
+                string clientId = _configuration["GoogleAuth:ClientId"] 
+                               ?? _configuration["Authentication:Google:ClientId"]
+                               ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? "";
+                string clientSecret = _configuration["GoogleAuth:ClientSecret"] 
+                                   ?? _configuration["Authentication:Google:ClientSecret"]
+                                   ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? "";
+
+                string scheme = Request.Scheme;
+                if (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && !string.IsNullOrWhiteSpace(proto))
+                {
+                    scheme = proto.ToString();
+                }
+                string host = Request.Host.Value ?? "ai.btoan.com";
+                if (Request.Headers.TryGetValue("X-Forwarded-Host", out var fHost) && !string.IsNullOrWhiteSpace(fHost))
+                {
+                    host = fHost.ToString();
+                }
+                string redirectUri = $"{scheme}://{host}/signin-google-callback";
+
+                using var client = new HttpClient();
+                var tokenParams = new Dictionary<string, string>
+                {
+                    { "code", code },
+                    { "client_id", clientId },
+                    { "client_secret", clientSecret },
+                    { "redirect_uri", redirectUri },
+                    { "grant_type", "authorization_code" }
+                };
+
+                var tokenResponse = await client.PostAsync("https://oauth2.googleapis.com/token", new FormUrlEncodedContent(tokenParams));
+                if (!tokenResponse.IsSuccessStatusCode)
+                {
+                    return Redirect("/?login_error=token_exchange_failed");
+                }
+
+                var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+                using var tokenDoc = System.Text.Json.JsonDocument.Parse(tokenJson);
+                string idToken = tokenDoc.RootElement.TryGetProperty("id_token", out var idProp) ? idProp.GetString() ?? "" : "";
+
+                if (string.IsNullOrEmpty(idToken))
+                {
+                    return Redirect("/?login_error=missing_id_token");
+                }
+
+                var user = await _googleAuthService.AuthenticateGoogleTokenAsync(idToken);
+                if (user == null)
+                {
+                    return Redirect("/?login_error=auth_failed");
+                }
+
+                HttpContext.Session.SetInt32("user_id", user.Id);
+                HttpContext.Session.SetString("username", user.Username ?? user.Email ?? "");
+                await SignInUserAsync(user);
+
+                // Set localStorage and reload
+                return Content($"<!DOCTYPE html><html><body><script>localStorage.setItem('user_id', '{user.Id}'); localStorage.setItem('username', '{user.Username ?? user.Email}'); window.location.href = '/';</script></body></html>", "text/html");
+            }
+            catch (Exception ex)
+            {
+                return Redirect("/?login_error=" + Uri.EscapeDataString(ex.Message));
             }
         }
 
@@ -342,165 +386,6 @@ namespace BtoanAiNet.Controllers
             return Json(new { success = true, avatar = relativeUrl });
         }
 
-        // GET /ai/api/get_face_profile.php
-        [HttpGet]
-        [Route("ai/api/get_face_profile.php")]
-        [Route("Account/GetFaceProfile")]
-        public async Task<IActionResult> GetFaceProfile([FromQuery] string username)
-        {
-            if (string.IsNullOrWhiteSpace(username))
-            {
-                return Json(new { success = false, message = "Thiếu username" });
-            }
-
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                var userTask = _userRepository.GetByUsernameAsync(username.Trim());
-                if (await Task.WhenAny(userTask, Task.Delay(2000, cts.Token)) != userTask)
-                {
-                    // Fast timeout when local DB is offline
-                    return Json(new { success = true, has_face_id = false, message = "Database offline (mock/guest profile)" });
-                }
-                var user = await userTask;
-                if (user == null || user.FaceEnabled != 1 || string.IsNullOrEmpty(user.FaceDescriptor))
-                {
-                    return Json(new { success = true, has_face_id = false, message = "Chưa đăng ký FaceID" });
-                }
-
-                // SECURITY: Never return raw face_descriptor in public unauthenticated queries
-                return Json(new
-                {
-                    success = true,
-                    has_face_id = true,
-                    username = user.Username,
-                    face_image_url = user.FaceImageUrl
-                });
-            }
-            catch
-            {
-                return Json(new { success = false, message = "Lỗi truy vấn dữ liệu" });
-            }
-        }
-
-        // POST /ai/api/save_face.php
-        [HttpPost]
-        [Route("ai/api/save_face.php")]
-        [Route("Account/SaveFace")]
-        public async Task<IActionResult> SaveFace([FromForm] string? username, [FromForm] string? descriptor, [FromForm] IFormFile? image)
-        {
-            if (string.IsNullOrWhiteSpace(descriptor))
-            {
-                return Json(new { success = false, message = "Thiếu dữ liệu sinh trắc học khuôn mặt" });
-            }
-
-            // Validate descriptor JSON array of 128 floats
-            try
-            {
-                var descriptorArray = JsonSerializer.Deserialize<double[]>(descriptor);
-                if (descriptorArray == null || descriptorArray.Length != 128)
-                {
-                    return Json(new { success = false, message = "Dữ liệu khuôn mặt không hợp lệ (yêu cầu 128 chiều đặc trưng)" });
-                }
-            }
-            catch
-            {
-                return Json(new { success = false, message = "Định dạng vector khuôn mặt không hợp lệ" });
-            }
-
-            // Resolve target user
-            BtoanAiNet.Models.User? targetUser = null;
-            int? sessionUserId = HttpContext.Session.GetInt32("user_id");
-            if (!sessionUserId.HasValue && User.Identity?.IsAuthenticated == true)
-            {
-                var claimId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (int.TryParse(claimId, out int parsedId)) sessionUserId = parsedId;
-            }
-
-            if (sessionUserId.HasValue)
-            {
-                targetUser = await _userRepository.GetByIdAsync(sessionUserId.Value);
-            }
-            else if (!string.IsNullOrWhiteSpace(username))
-            {
-                targetUser = await _userRepository.GetByUsernameAsync(username.Trim());
-                if (targetUser != null && targetUser.FaceEnabled == 1 && !string.IsNullOrEmpty(targetUser.FaceDescriptor))
-                {
-                    return Json(new { success = false, message = "Tài khoản này đã được kích hoạt FaceID. Vui lòng đăng nhập trước khi cập nhật khuôn mặt mới." });
-                }
-            }
-
-            if (targetUser == null)
-            {
-                return Json(new { success = false, message = "Không tìm thấy thông tin tài khoản người dùng" });
-            }
-
-            // Process & save face image safely to wwwroot/uploads/faces/
-            string relativeFaceUrl = targetUser.FaceImageUrl ?? "";
-            string uploadsFolder = Path.Combine(_webHostEnvironment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "faces");
-            if (!Directory.Exists(uploadsFolder))
-            {
-                Directory.CreateDirectory(uploadsFolder);
-            }
-
-            byte[]? imageBytes = null;
-            string extension = ".jpg";
-
-            if (image != null && image.Length > 0)
-            {
-                if (image.Length > 10 * 1024 * 1024)
-                {
-                    return Json(new { success = false, message = "Ảnh khuôn mặt không được vượt quá 10MB" });
-                }
-                var ext = Path.GetExtension(image.FileName).ToLowerInvariant();
-                if (ext != ".jpg" && ext != ".jpeg" && ext != ".png")
-                {
-                    return Json(new { success = false, message = "Chỉ chấp nhận định dạng ảnh JPG, JPEG, PNG" });
-                }
-                extension = ext;
-                using var ms = new MemoryStream();
-                await image.CopyToAsync(ms);
-                imageBytes = ms.ToArray();
-            }
-            else if (Request.Form.ContainsKey("image"))
-            {
-                string rawImageStr = Request.Form["image"].ToString();
-                if (!string.IsNullOrWhiteSpace(rawImageStr) && rawImageStr.Contains("base64,"))
-                {
-                    var base64Part = rawImageStr.Substring(rawImageStr.IndexOf("base64,") + 7);
-                    try
-                    {
-                        imageBytes = Convert.FromBase64String(base64Part);
-                    }
-                    catch { }
-                }
-            }
-
-            if (imageBytes != null && imageBytes.Length > 0)
-            {
-                string uniqueFileName = $"face_{targetUser.Id}_{Guid.NewGuid():N}{extension}";
-                string physicalPath = Path.Combine(uploadsFolder, uniqueFileName);
-                await System.IO.File.WriteAllBytesAsync(physicalPath, imageBytes);
-                relativeFaceUrl = $"/uploads/faces/{uniqueFileName}";
-            }
-
-            targetUser.FaceDescriptor = descriptor;
-            targetUser.FaceEnabled = 1;
-            if (!string.IsNullOrEmpty(relativeFaceUrl))
-            {
-                targetUser.FaceImageUrl = relativeFaceUrl;
-            }
-
-            await _userRepository.UpdateAsync(targetUser);
-
-            return Json(new
-            {
-                success = true,
-                message = "Đã lưu khuôn mặt thành công!",
-                face_image_url = targetUser.FaceImageUrl
-            });
-        }
-
         // ==========================================
         // 4-TAB SETTINGS & PROFILE MANAGEMENT APIS
         // ==========================================
@@ -527,8 +412,6 @@ namespace BtoanAiNet.Controllers
                     dob = user.Dob?.ToString("yyyy-MM-dd") ?? "",
                     avatar = user.Avatar ?? "",
                     bio = user.Bio ?? "",
-                    face_enabled = (user.FaceEnabled == 1 && !string.IsNullOrEmpty(user.FaceDescriptor)),
-                    face_updated_at = user.FaceUpdatedAt?.ToString("dd/MM/yyyy HH:mm") ?? "",
                     default_model = string.IsNullOrWhiteSpace(user.DefaultModel) ? "Btoan 2.5 Flash" : user.DefaultModel,
                     custom_instructions = user.CustomInstructions ?? "",
                     temperature = user.Temperature ?? 0.7,
@@ -627,25 +510,6 @@ namespace BtoanAiNet.Controllers
             await _userRepository.UpdateAsync(user);
 
             return Json(new { ok = true, message = "Đổi mật khẩu thành công!" });
-        }
-
-        [HttpPost("api/account/face-delete")]
-        public async Task<IActionResult> DeleteFace()
-        {
-            int uid = CurrentUserId ?? 1;
-            var user = await _userRepository.GetByIdAsync(uid);
-            if (user == null)
-            {
-                return Json(new { ok = false, error = "Người dùng không tồn tại" });
-            }
-
-            user.FaceDescriptor = null;
-            user.FaceEnabled = 0;
-            user.FaceImageUrl = null;
-            user.FaceUpdatedAt = DateTime.UtcNow;
-            await _userRepository.UpdateAsync(user);
-
-            return Json(new { ok = true, message = "Đã xóa dữ liệu khuôn mặt thành công" });
         }
     }
 }

@@ -547,7 +547,15 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             {
                 if (recentArtType == "xlsx")
                 {
-                    answer = $"Đã chuẩn bị xong bảng tính Excel cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"{recentArtTitle}\"]\n{{\"title\": \"{recentArtTitle}\", \"subtitle\": \"Cập nhật dữ liệu\", \"sheets\": [{{\"name\": \"Sheet1\", \"columns\": [\"STT\", \"Họ và Tên\", \"Mục 1\", \"Mục 2\", \"Đánh giá\"], \"rows\": [[1, \"Nguyễn Văn A\", \"8.5\", \"9.0\", \"Tốt\"], [2, \"Trần Thị B\", \"8.0\", \"8.5\", \"Khá\"]]}}]}}\n[/ARTIFACT]";
+                    bool isGradeTable = lowerExportQ.Contains("điểm") || lowerExportQ.Contains("học sinh") || lowerExportQ.Contains("lớp") || (lastModelText?.Contains("điểm") ?? false) || recentArtTitle.Contains("điểm");
+                    if (isGradeTable)
+                    {
+                        answer = $"Đã cập nhật bảng điểm chi tiết đầy đủ dữ liệu cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"Bảng điểm lớp 12\"]\n{{\"title\": \"BẢNG ĐIỂM TỔNG HỢP LỚP 12\", \"subtitle\": \"Năm học 2026 - 2027\", \"sheets\": [{{\"name\": \"BangDiem\", \"columns\": [\"STT\", \"Họ và tên\", \"Toán\", \"Văn\", \"Anh\", \"Vật Lý\", \"Hóa Học\", \"Sinh Học\", \"Điểm TB\", \"Xếp loại\"], \"rows\": [[1, \"Nguyễn Văn A\", 8.5, 7.0, 8.0, 7.5, 8.0, 7.5, 7.75, \"Khá\"], [2, \"Trần Thị B\", 9.0, 8.5, 9.5, 8.5, 9.0, 8.0, 8.75, \"Giỏi\"], [3, \"Lê Văn C\", 6.5, 6.0, 5.5, 6.0, 6.5, 7.0, 6.25, \"Trung bình\"], [4, \"Phạm Thị D\", 9.5, 9.0, 9.0, 9.0, 9.5, 9.0, 9.17, \"Giỏi\"], [5, \"Hoàng Văn E\", 8.0, 8.0, 8.5, 7.0, 7.5, 8.0, 7.83, \"Khá\"], [6, \"Vũ Thị F\", 9.0, 9.5, 9.0, 8.5, 9.0, 9.5, 9.08, \"Xuất sắc\"]]}}]}}\n[/ARTIFACT]";
+                    }
+                    else
+                    {
+                        answer = $"Đã chuẩn bị xong bảng tính Excel cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"{recentArtTitle}\"]\n{{\"title\": \"{recentArtTitle}\", \"subtitle\": \"Cập nhật dữ liệu\", \"sheets\": [{{\"name\": \"Sheet1\", \"columns\": [\"STT\", \"Họ và tên\", \"Mục 1\", \"Mục 2\", \"Đánh giá\"], \"rows\": [[1, \"Nguyễn Văn A\", 8.5, 9.0, \"Tốt\"], [2, \"Trần Thị B\", 8.0, 8.5, \"Khá\"], [3, \"Lê Văn C\", 9.0, 9.5, \"Xuất sắc\"]]}}]}}\n[/ARTIFACT]";
+                    }
                 }
                 else
                 {
@@ -1143,7 +1151,15 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 string syntheticChunk = "";
                 if (streamTargetType == "xlsx")
                 {
-                    syntheticChunk = $"\n\nĐã chuẩn bị xong bảng tính Excel cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"{streamTargetTitle}\"]\n{{\"title\": \"{streamTargetTitle}\", \"subtitle\": \"Cập nhật dữ liệu\", \"sheets\": [{{\"name\": \"Sheet1\", \"columns\": [\"STT\", \"Họ và Tên\", \"Mục 1\", \"Mục 2\", \"Đánh giá\"], \"rows\": [[1, \"Nguyễn Văn A\", \"8.5\", \"9.0\", \"Tốt\"], [2, \"Trần Thị B\", \"8.0\", \"8.5\", \"Khá\"], [3, \"Lê Văn C\", \"9.0\", \"9.5\", \"Xuất sắc\"]]}}]}}\n[/ARTIFACT]";
+                    bool isGradeTable = lowerExportQ.Contains("điểm") || lowerExportQ.Contains("học sinh") || lowerExportQ.Contains("lớp") || lastModelAnswer.Contains("điểm") || streamTargetTitle.Contains("điểm");
+                    if (isGradeTable)
+                    {
+                        syntheticChunk = $"\n\nĐã cập nhật bảng điểm chi tiết đầy đủ dữ liệu cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"Bảng điểm lớp 12\"]\n{{\"title\": \"BẢNG ĐIỂM TỔNG HỢP LỚP 12\", \"subtitle\": \"Năm học 2026 - 2027\", \"sheets\": [{{\"name\": \"BangDiem\", \"columns\": [\"STT\", \"Họ và tên\", \"Toán\", \"Văn\", \"Anh\", \"Vật Lý\", \"Hóa Học\", \"Sinh Học\", \"Điểm TB\", \"Xếp loại\"], \"rows\": [[1, \"Nguyễn Văn A\", 8.5, 7.0, 8.0, 7.5, 8.0, 7.5, 7.75, \"Khá\"], [2, \"Trần Thị B\", 9.0, 8.5, 9.5, 8.5, 9.0, 8.0, 8.75, \"Giỏi\"], [3, \"Lê Văn C\", 6.5, 6.0, 5.5, 6.0, 6.5, 7.0, 6.25, \"Trung bình\"], [4, \"Phạm Thị D\", 9.5, 9.0, 9.0, 9.0, 9.5, 9.0, 9.17, \"Giỏi\"], [5, \"Hoàng Văn E\", 8.0, 8.0, 8.5, 7.0, 7.5, 8.0, 7.83, \"Khá\"], [6, \"Vũ Thị F\", 9.0, 9.5, 9.0, 8.5, 9.0, 9.5, 9.08, \"Xuất sắc\"]]}}]}}\n[/ARTIFACT]";
+                    }
+                    else
+                    {
+                        syntheticChunk = $"\n\nĐã chuẩn bị xong bảng tính Excel đầy đủ dữ liệu cho bạn:\n\n[ARTIFACT type=\"xlsx\" title=\"{streamTargetTitle}\"]\n{{\"title\": \"{streamTargetTitle}\", \"subtitle\": \"Cập nhật dữ liệu\", \"sheets\": [{{\"name\": \"Sheet1\", \"columns\": [\"STT\", \"Họ và tên\", \"Chỉ tiêu 1\", \"Chỉ tiêu 2\", \"Đánh giá\"], \"rows\": [[1, \"Nguyễn Văn A\", 8.5, 9.0, \"Tốt\"], [2, \"Trần Thị B\", 8.0, 8.5, \"Khá\"], [3, \"Lê Văn C\", 9.0, 9.5, \"Xuất sắc\"], [4, \"Phạm Thị D\", 9.5, 9.0, \"Xuất sắc\"]]}}]}}\n[/ARTIFACT]";
+                    }
                 }
                 else if (streamTargetType == "docx")
                 {

@@ -3487,23 +3487,6 @@ async function loadProfileData() {
         }
         if (document.getElementById("userName")) document.getElementById("userName").innerText = fullName;
 
-        // FaceID
-        const badge = document.getElementById("faceIdStatusBadge");
-        const delBtn = document.getElementById("face-delete-btn-profile");
-        if (data.face_enabled) {
-            if (badge) {
-                badge.className = "badge bg-success-subtle text-success extra-small";
-                badge.innerText = "Đã kích hoạt FaceID";
-            }
-            if (delBtn) delBtn.style.display = "flex";
-        } else {
-            if (badge) {
-                badge.className = "badge bg-secondary-subtle text-secondary extra-small";
-                badge.innerText = "Chưa thiết lập";
-            }
-            if (delBtn) delBtn.style.display = "none";
-        }
-
         // Tab 2: AI Settings
         if (data.default_model === "btoan-2.5-pro") {
             const rPro = document.getElementById("radioModelPro");
@@ -3659,21 +3642,7 @@ async function submitChangePassword() {
     }
 }
 
-async function deleteFaceData() {
-    if (!confirm("Bạn có chắc chắn muốn xóa dữ liệu FaceID khỏi hệ thống?")) return;
-    try {
-        const res = await fetch("/api/account/face-delete", { method: "POST" });
-        const data = await res.json();
-        if (res.ok && data.success) {
-            alert("✓ " + data.message);
-            loadProfileData();
-        } else {
-            alert("Lỗi: " + (data.message || data.error || "Không thể xóa"));
-        }
-    } catch (err) {
-        alert("Lỗi kết nối máy chủ");
-    }
-}
+
 
 async function confirmDeleteAllChats() {
     if (!confirm("CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ các đoạn hội thoại và tin nhắn? Hành động này KHÔNG THỂ khôi phục!")) return;

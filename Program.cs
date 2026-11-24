@@ -51,9 +51,9 @@ builder.Services.AddScoped<ITrainingRepository, TrainingRepository>();
 
 // Register Services
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddSingleton<IFaceAuthService, FaceAuthService>();
 builder.Services.AddScoped<IGoogleAuthService, GoogleAuthService>();
 builder.Services.AddHttpClient<IGeminiService, GeminiService>()
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(240))
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         PooledConnectionLifetime = TimeSpan.FromMinutes(15),
@@ -547,6 +547,35 @@ END
         {
             dbContext.Database.ExecuteSqlRaw(sql);
         }
+        else
+        {
+            // MySQL / MariaDB / SQLite auto-migration for missing columns in users table
+            var nonSqlCols = new (string col, string type)[]
+            {
+                ("bio", "TEXT NULL"),
+                ("default_model", "VARCHAR(50) NULL DEFAULT 'Btoan 2.5 Flash'"),
+                ("custom_instructions", "TEXT NULL"),
+                ("temperature", "DOUBLE NULL DEFAULT 0.7"),
+                ("long_term_memory", "INT NULL DEFAULT 1"),
+                ("rag_enabled", "INT NULL DEFAULT 1"),
+                ("theme", "VARCHAR(20) NULL DEFAULT 'dark'"),
+                ("chat_font_size", "VARCHAR(20) NULL DEFAULT '15px'"),
+                ("tts_speed", "DOUBLE NULL DEFAULT 1.0")
+            };
+
+            foreach (var (col, colType) in nonSqlCols)
+            {
+                try
+                {
+                    string alterSql = string.Format("ALTER TABLE `users` ADD COLUMN `{0}` {1};", col, colType);
+                    dbContext.Database.ExecuteSqlRaw(alterSql);
+                }
+                catch
+                {
+                    // Ignore if column already exists
+                }
+            }
+        }
     }
     catch (Exception ex)
     {
@@ -576,19 +605,6 @@ app.UseHttpsRedirection();
 
 // 2. Standard Static Files for wwwroot
 app.UseStaticFiles();
-
-// 3. Dedicated StaticFileOptions for face-api models to serve extensionless shards
-var modelsPath = Path.Combine(app.Environment.WebRootPath, "facelib", "models");
-if (Directory.Exists(modelsPath))
-{
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(modelsPath),
-        RequestPath = "/facelib/models",
-        ServeUnknownFileTypes = true,
-        DefaultContentType = "application/octet-stream"
-    });
-}
 
 app.UseRouting();
 

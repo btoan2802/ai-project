@@ -9,7 +9,6 @@ namespace BtoanAiNet.Services
         Task<(bool Success, string Status, string? Message)> RegisterAsync(string username, string password);
         Task<(bool HasProfile, string? FullName, DateOnly? Dob, string? Avatar)> CheckProfileAsync(int userId);
         Task<bool> UpdateNameAsync(int userId, string fullName, string dobStr);
-        Task<bool> SaveFaceAsync(string username, string publicUrl, string descriptor);
     }
 
     public class AuthService : IAuthService
@@ -97,20 +96,6 @@ namespace BtoanAiNet.Services
             {
                 user.Dob = parsedDob;
             }
-
-            await _userRepository.UpdateAsync(user);
-            return true;
-        }
-
-        public async Task<bool> SaveFaceAsync(string username, string publicUrl, string descriptor)
-        {
-            var user = await _userRepository.GetByUsernameAsync(username);
-            if (user == null) return false;
-
-            user.FaceImageUrl = publicUrl;
-            user.FaceDescriptor = descriptor;
-            user.FaceEnabled = 1;
-            user.FaceUpdatedAt = DateTime.UtcNow;
 
             await _userRepository.UpdateAsync(user);
             return true;

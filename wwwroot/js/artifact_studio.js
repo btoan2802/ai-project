@@ -494,14 +494,28 @@ function renderActiveSheetGrid(container, data, sheetIdx) {
         const rowNum = rIdx + 5;
         let tdHtml = `<td class="excel-row-num">${rowNum}</td>`;
 
-        const rArr = Array.isArray(r) ? r : Object.values(r);
+        let rArr = [];
+        if (Array.isArray(r)) {
+            rArr = r;
+        } else if (r && typeof r === "object") {
+            // Map object keys reliably to columns
+            rArr = cols.map(c => {
+                if (r[c] !== undefined) return r[c];
+                const matchKey = Object.keys(r).find(k => k.trim().toLowerCase() === c.trim().toLowerCase());
+                return matchKey ? r[matchKey] : "";
+            });
+        }
+
+        const isEven = rIdx % 2 === 1;
+        const rowBg = isEven ? '#f8fafc' : '#ffffff';
+
         cols.forEach((_, cIdx) => {
-            const val = rArr[cIdx] !== undefined ? rArr[cIdx] : "";
+            const val = rArr[cIdx] !== undefined && rArr[cIdx] !== null ? rArr[cIdx] : "";
             const colLetter = getExcelColLetter(cIdx);
             const addr = `${colLetter}${rowNum}`;
             const isNum = typeof val === "number" || (!isNaN(val) && val !== "");
             const alignClass = cIdx === 0 ? "text-center" : (isNum ? "text-end" : "text-start");
-            tdHtml += `<td class="${alignClass}" data-addr="${addr}" data-val="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
+            tdHtml += `<td class="${alignClass}" style="color: #0f172a !important; background-color: ${rowBg}; opacity: 1 !important; font-weight: 500;" data-addr="${addr}" data-val="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
         });
         tr.innerHTML = tdHtml;
         table.appendChild(tr);
@@ -640,30 +654,64 @@ function drawBarChart(canvas, labels, values, title) {
 }
 
 function parseMarkdownTableToSheet(title, content) {
-    const lines = content.split("\n").filter(l => l.trim().startsWith("|"));
-    if (lines.length < 2) return null;
-
-    const parseLine = l => l.split("|").slice(1, -1).map(c => c.trim());
-    const cols = parseLine(lines[0]);
-    const rows = [];
-
-    for (let i = 2; i < lines.length; i++) {
-        if (lines[i].includes("---")) continue;
-        const cells = parseLine(lines[i]);
-        if (cells.length > 0) {
-            const rowVals = cells.map(c => {
-                const n = parseFloat(c);
-                return !isNaN(n) && c.trim() === String(n) ? n : c;
-            });
-            rows.push(rowVals);
+    if (!content) return null;
+    
+    // 1. Try pipe table | ... | ... |
+    const pipeLines = content.split("\n").filter(l => l.trim().includes("|"));
+    if (pipeLines.length >= 2) {
+        const parseLine = l => l.split("|").map(c => c.trim()).filter(c => c.length > 0);
+        const headerIndex = pipeLines.findIndex(l => !l.includes("---"));
+        if (headerIndex !== -1 && headerIndex + 1 < pipeLines.length) {
+            const cols = parseLine(pipeLines[headerIndex]);
+            const rows = [];
+            for (let i = headerIndex + 1; i < pipeLines.length; i++) {
+                if (pipeLines[i].includes("---")) continue;
+                const cells = parseLine(pipeLines[i]);
+                if (cells.length > 0) {
+                    const rowVals = cells.map(c => {
+                        const n = parseFloat(c);
+                        return !isNaN(n) && c.trim() === String(n) ? n : c;
+                    });
+                    rows.push(rowVals);
+                }
+            }
+            if (cols.length > 0 && rows.length > 0) {
+                return {
+                    title: title || "BẢNG DỮ LIỆU",
+                    subtitle: `Xuất bản: ${new Date().toLocaleDateString('vi-VN')}`,
+                    sheets: [{ name: "BaoCao", columns: cols, rows: rows }]
+                };
+            }
         }
     }
 
-    return {
-        title: title || "BẢNG DỮ LIỆU",
-        subtitle: `Xuất bản: ${new Date().toLocaleDateString('vi-VN')}`,
-        sheets: [{ name: "BaoCao", columns: cols, rows: rows }]
-    };
+    // 2. Try Tab or multi-space separated table
+    const rawLines = content.split("\n").map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith("```") && !l.startsWith("#"));
+    if (rawLines.length >= 2) {
+        const splitRegex = /\t+|\s{2,}/;
+        const potentialCols = rawLines[0].split(splitRegex).map(c => c.trim()).filter(Boolean);
+        if (potentialCols.length >= 2) {
+            const rows = [];
+            for (let i = 1; i < rawLines.length; i++) {
+                const cells = rawLines[i].split(splitRegex).map(c => c.trim()).filter(Boolean);
+                if (cells.length > 0) {
+                    rows.push(cells.map(c => {
+                        const n = parseFloat(c);
+                        return !isNaN(n) && c.trim() === String(n) ? n : c;
+                    }));
+                }
+            }
+            if (rows.length > 0) {
+                return {
+                    title: title || "BẢNG DỮ LIỆU",
+                    subtitle: `Xuất bản: ${new Date().toLocaleDateString('vi-VN')}`,
+                    sheets: [{ name: "BaoCao", columns: potentialCols, rows: rows }]
+                };
+            }
+        }
+    }
+
+    return null;
 }
 
 // 3. Presentation Preview (.pptx)

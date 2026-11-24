@@ -162,8 +162,11 @@ namespace BtoanAiNet.Controllers
             try
             {
                 if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
-                string progPath = Path.Combine(projectPath, "Program.cs");
-                if (System.IO.File.Exists(progPath))
+                var progFiles = Directory.GetFiles(projectPath, "Program.cs", SearchOption.AllDirectories)
+                    .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
+
+                foreach (var progPath in progFiles)
                 {
                     string pContent = System.IO.File.ReadAllText(progPath, Encoding.UTF8);
                     if (pContent.Contains("MapStaticAssets") || pContent.Contains("WithStaticAssets"))
@@ -173,6 +176,110 @@ namespace BtoanAiNet.Controllers
                                            .Replace(".WithStaticAssets()", "");
                         System.IO.File.WriteAllText(progPath, pContent, Encoding.UTF8);
                     }
+                }
+            }
+            catch { }
+        }
+
+        public static void EnforceWebSeparation(string projectPath, List<string> modifiedFiles)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
+
+                string indexPath = Path.Combine(projectPath, "index.html");
+                if (!System.IO.File.Exists(indexPath)) return;
+
+                string html = System.IO.File.ReadAllText(indexPath, Encoding.UTF8);
+                bool modifiedHtml = false;
+
+                string cssPath = Path.Combine(projectPath, "style.css");
+                string jsPath = Path.Combine(projectPath, "script.js");
+
+                // 1. Extract CSS if style.css does not exist or is empty
+                var styleMatches = System.Text.RegularExpressions.Regex.Matches(
+                    html,
+                    @"<style[^>]*>(.*?)</style>",
+                    System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
+
+                if (styleMatches.Count > 0 && (!System.IO.File.Exists(cssPath) || System.IO.File.ReadAllText(cssPath).Trim().Length == 0))
+                {
+                    var sbCss = new StringBuilder();
+                    foreach (System.Text.RegularExpressions.Match m in styleMatches)
+                    {
+                        sbCss.AppendLine(m.Groups[1].Value.Trim());
+                    }
+                    string extractedCss = sbCss.ToString().Trim();
+                    if (!string.IsNullOrWhiteSpace(extractedCss))
+                    {
+                        System.IO.File.WriteAllText(cssPath, extractedCss, Encoding.UTF8);
+                        if (!modifiedFiles.Contains("style.css")) modifiedFiles.Add("style.css");
+
+                        html = System.Text.RegularExpressions.Regex.Replace(
+                            html,
+                            @"<style[^>]*>.*?</style>",
+                            "",
+                            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                        );
+                        modifiedHtml = true;
+                    }
+                }
+
+                // 2. Extract JS if script.js does not exist or is empty
+                var scriptMatches = System.Text.RegularExpressions.Regex.Matches(
+                    html,
+                    @"<script(?![^>]*src=)[^>]*>(.*?)</script>",
+                    System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
+
+                if (scriptMatches.Count > 0 && (!System.IO.File.Exists(jsPath) || System.IO.File.ReadAllText(jsPath).Trim().Length == 0))
+                {
+                    var sbJs = new StringBuilder();
+                    foreach (System.Text.RegularExpressions.Match m in scriptMatches)
+                    {
+                        sbJs.AppendLine(m.Groups[1].Value.Trim());
+                    }
+                    string extractedJs = sbJs.ToString().Trim();
+                    if (!string.IsNullOrWhiteSpace(extractedJs))
+                    {
+                        System.IO.File.WriteAllText(jsPath, extractedJs, Encoding.UTF8);
+                        if (!modifiedFiles.Contains("script.js")) modifiedFiles.Add("script.js");
+
+                        html = System.Text.RegularExpressions.Regex.Replace(
+                            html,
+                            @"<script(?![^>]*src=)[^>]*>.*?</script>",
+                            "",
+                            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                        );
+                        modifiedHtml = true;
+                    }
+                }
+
+                // 3. Ensure <link rel="stylesheet" href="style.css"> in <head>
+                if (System.IO.File.Exists(cssPath) && !html.Contains("style.css", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (html.Contains("</head>", StringComparison.OrdinalIgnoreCase))
+                    {
+                        html = html.Replace("</head>", "    <link rel=\"stylesheet\" href=\"style.css\">\n</head>", StringComparison.OrdinalIgnoreCase);
+                        modifiedHtml = true;
+                    }
+                }
+
+                // 4. Ensure <script src="script.js"></script> before </body>
+                if (System.IO.File.Exists(jsPath) && !html.Contains("script.js", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (html.Contains("</body>", StringComparison.OrdinalIgnoreCase))
+                    {
+                        html = html.Replace("</body>", "    <script src=\"script.js\"></script>\n</body>", StringComparison.OrdinalIgnoreCase);
+                        modifiedHtml = true;
+                    }
+                }
+
+                if (modifiedHtml)
+                {
+                    System.IO.File.WriteAllText(indexPath, html, Encoding.UTF8);
+                    if (!modifiedFiles.Contains("index.html")) modifiedFiles.Add("index.html");
                 }
             }
             catch { }
@@ -2409,11 +2516,11 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return BadRequest(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
             }
 
-            string selectedModel = "gemini-3.5-flash-lite";
+            string selectedModel = "gemini-flash-latest";
             if (string.Equals(model.Model, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(model.Model, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase))
             {
-                selectedModel = "gemini-3.5-flash-lite";
+                selectedModel = "gemini-pro-latest";
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
 
@@ -2476,9 +2583,13 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
 
 3. MÃ NGUỒN HOÀN CHỈNH 100% & CHỐNG FILE RỖNG 0 BYTE:
    - Tham số 'content' của write_file BẮT BUỘC chứa toàn bộ code thực thi được ngay, TUYỆT ĐỐI KHÔNG dùng comment giữ chỗ ('// code goes here', '// implement later'), KHÔNG ghi file rỗng 0 byte.
-   - NẠP ĐẦY ĐỦ CONTENT KHI GỌI write_file: Khi gọi write_file, truyền toàn bộ source code vào tham số 'content'. Ghi tuần tự từng file hoàn chỉnh (không nhồi nhiều file cùng lúc gây cắt cụt token).
+   - NẠP ĐẦY ĐỦ CONTENT KHI GỌI write_file: Khi gọi write_file, truyền toàn bộ source code vào tham số 'content'. Bạn có thể gọi write_file nhiều lần trong cùng một lượt (parallel tool call) để tạo đồng thời 'index.html', 'style.css' và 'script.js' nhanh chóng.
 
-4. KẾT THÚC KHI HOÀN THÀNH:
+4. TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
+   - Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (write_file / edit_file / run_command) ngay từ lượt đầu tiên để trực tiếp tạo/sửa code thật trong dự án.
+   - CẤM in ra kế hoạch dạng JSON thuần rồi dừng lại. Nếu có kế hoạch, hãy bắt tay vào gọi write_file / edit_file để thực hiện luôn bước đầu tiên!
+
+5. KẾT THÚC KHI HOÀN THÀNH:
    - Khi đã tạo/sửa đủ các file và build thành công (đối với .NET) hoặc tạo đủ bộ tệp phân tách HTML/CSS/JS (đối với Web), dừng gọi tool và trả lời tóm tắt kết quả chi tiết bằng tiếng Việt.";
 
             var toolsDefinition = new JsonArray
@@ -2629,8 +2740,16 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
 
                     var payload = new JsonObject
                     {
+                        ["systemInstruction"] = new JsonObject
+                        {
+                            ["parts"] = new JsonArray { new JsonObject { ["text"] = agentSystemInstruction } }
+                        },
                         ["contents"] = messages.DeepClone(),
                         ["tools"] = toolsDefinition.DeepClone(),
+                        ["toolConfig"] = new JsonObject
+                        {
+                            ["functionCallingConfig"] = new JsonObject { ["mode"] = "AUTO" }
+                        },
                         ["generationConfig"] = new JsonObject
                         {
                             ["temperature"] = isFastMode ? 0.2 : 0.4,
@@ -2662,18 +2781,22 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                         break;
                     }
 
-                    // Check if there is a functionCall in any part
-                    JsonObject? functionCallPart = null;
+                    // Check if there are functionCalls in any part (support parallel tool calls)
+                    var functionCalls = new List<(string Name, JsonObject? Args)>();
                     string? candidateText = null;
 
                     foreach (var p in parts)
                     {
                         if (p is JsonObject pObj)
                         {
-                            if (pObj.ContainsKey("functionCall"))
+                            if (pObj.ContainsKey("functionCall") && pObj["functionCall"] is JsonObject fCall)
                             {
-                                functionCallPart = pObj["functionCall"]?.AsObject();
-                                break;
+                                string fName = fCall["name"]?.ToString() ?? "";
+                                var fArgs = fCall["args"]?.AsObject();
+                                if (!string.IsNullOrWhiteSpace(fName))
+                                {
+                                    functionCalls.Add((fName, fArgs));
+                                }
                             }
                             if (pObj.ContainsKey("text") && string.IsNullOrWhiteSpace(candidateText))
                             {
@@ -2682,72 +2805,134 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
                         }
                     }
 
-                    if (functionCallPart != null)
+                    if (functionCalls.Count > 0)
                     {
-                        string toolName = functionCallPart["name"]?.ToString() ?? "";
-                        var toolArgs = functionCallPart["args"]?.AsObject();
+                        var functionResponseParts = new JsonArray();
 
-                        _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
-
-                        // Execute the tool on the real workspace filesystem
-                        string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b);
-
-                        // Record plan step and tool operation
-                        if (toolName == "write_file" || toolName == "edit_file")
+                        foreach (var (toolName, toolArgs) in functionCalls)
                         {
-                            string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
-                            if (!string.IsNullOrWhiteSpace(fPath))
+                            _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
+
+                            // Execute the tool on the real workspace filesystem
+                            string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b);
+
+                            // Record plan step and tool operation
+                            if (toolName == "write_file" || toolName == "edit_file")
                             {
-                                toolOperations.Add(new
+                                string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
+                                if (!string.IsNullOrWhiteSpace(fPath))
                                 {
-                                    action = toolName == "write_file" ? "create" : "edit",
-                                    path = fPath,
-                                    summary = $"Cập nhật tệp {fPath}"
-                                });
-                                planSteps.Add($"Cập nhật tệp '{fPath}'");
+                                    toolOperations.Add(new
+                                    {
+                                        action = toolName == "write_file" ? "create" : "edit",
+                                        path = fPath,
+                                        summary = $"Cập nhật tệp {fPath}"
+                                    });
+                                    planSteps.Add($"Cập nhật tệp '{fPath}'");
+                                }
                             }
-                        }
-                        else if (toolName == "run_command")
-                        {
-                            string cmd = ExtractStringArg(toolArgs, "command", "cmd", "script", "exec");
-                            planSteps.Add($"Thực thi lệnh '{cmd}'");
-                        }
-                        else if (toolName == "read_file")
-                        {
-                            string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
-                            planSteps.Add($"Đọc nội dung tệp '{fPath}'");
+                            else if (toolName == "run_command")
+                            {
+                                string cmd = ExtractStringArg(toolArgs, "command", "cmd", "script", "exec");
+                                planSteps.Add($"Thực thi lệnh '{cmd}'");
+                            }
+                            else if (toolName == "read_file")
+                            {
+                                string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
+                                planSteps.Add($"Đọc nội dung tệp '{fPath}'");
+                            }
+
+                            functionResponseParts.Add(new JsonObject
+                            {
+                                ["functionResponse"] = new JsonObject
+                                {
+                                    ["name"] = toolName,
+                                    ["response"] = new JsonObject
+                                    {
+                                        ["output"] = toolResult
+                                    }
+                                }
+                            });
                         }
 
-                        // Append assistant message with functionCall
+                        // Append assistant message with candidate (containing all functionCalls)
                         messages.Add(candidate.DeepClone());
 
-                        // Append functionResponse message
+                        // Append matching functionResponse parts for ALL executed tools (crucial for Gemini protocol)
                         messages.Add(new JsonObject
                         {
                             ["role"] = "user",
-                            ["parts"] = new JsonArray
-                            {
-                                new JsonObject
-                                {
-                                    ["functionResponse"] = new JsonObject
-                                    {
-                                        ["name"] = toolName,
-                                        ["response"] = new JsonObject
-                                        {
-                                            ["output"] = toolResult
-                                        }
-                                    }
-                                }
-                            }
+                            ["parts"] = functionResponseParts
                         });
                     }
                     else
                     {
-                        // Gemini returned text without functionCall -> finished!
-                        finalExplanation = candidateText ?? "";
+                        string cText = candidateText ?? "";
+                        // If Gemini returned a plan in text/JSON without calling tools yet, FORCE IT to execute the tools!
+                        if (modifiedFiles.Count == 0 && currentTurn < maxTurns && (cText.Contains("\"plan\"") || cText.Contains("Kế hoạch") || cText.Contains("Bước 1:")))
+                        {
+                            _logger.LogInformation("Agent returned plan text without tool call. Forcing tool execution...");
+                            // Append assistant message
+                            messages.Add(candidate.DeepClone());
+                            // Add prompt to execute
+                            messages.Add(new JsonObject
+                            {
+                                ["role"] = "user",
+                                ["parts"] = new JsonArray
+                                {
+                                    new JsonObject
+                                    {
+                                        ["text"] = "Bạn đã lập kế hoạch. BÂY GIỜ BẮT BUỘC GỌI TOOL 'write_file' hoặc 'edit_file' ngay lập tức để trực tiếp tạo/sửa các tệp code trong dự án theo kế hoạch. TUYỆT ĐỐI KHÔNG xuất văn bản thuần hoặc JSON nữa, hãy gọi functionCall ngay!"
+                                    }
+                                }
+                            });
+                            continue;
+                        }
+
+                        // Self-healing: If user requested separate files (e.g. index.html, style.css, script.js) and some files are still missing
+                        bool asksForSeparateWebFiles = model.Prompt.Contains("style.css", StringComparison.OrdinalIgnoreCase) ||
+                                                       model.Prompt.Contains("script.js", StringComparison.OrdinalIgnoreCase) ||
+                                                       model.Prompt.Contains("tách thành 3 tệp", StringComparison.OrdinalIgnoreCase) ||
+                                                       model.Prompt.Contains("tách riêng", StringComparison.OrdinalIgnoreCase);
+
+                        if (asksForSeparateWebFiles && currentTurn < maxTurns)
+                        {
+                            bool hasHtml = modifiedFiles.Any(f => f.EndsWith("index.html", StringComparison.OrdinalIgnoreCase));
+                            bool hasCss = modifiedFiles.Any(f => f.EndsWith("style.css", StringComparison.OrdinalIgnoreCase));
+                            bool hasJs = modifiedFiles.Any(f => f.EndsWith("script.js", StringComparison.OrdinalIgnoreCase));
+
+                            var missing = new List<string>();
+                            if (!hasHtml) missing.Add("index.html");
+                            if (!hasCss) missing.Add("style.css");
+                            if (!hasJs) missing.Add("script.js");
+
+                            if (missing.Count > 0)
+                            {
+                                _logger.LogInformation("Agent missed requested files: {Missing}. Forcing tool execution...", string.Join(", ", missing));
+                                messages.Add(candidate.DeepClone());
+                                messages.Add(new JsonObject
+                                {
+                                    ["role"] = "user",
+                                    ["parts"] = new JsonArray
+                                    {
+                                        new JsonObject
+                                        {
+                                            ["text"] = $"Người dùng yêu cầu BẮT BUỘC tách thành các tệp riêng biệt. Bạn vẫn chưa tạo: {string.Join(", ", missing)}. Hãy gọi 'write_file' ngay bây giờ để tạo các tệp còn thiếu với mã nguồn đầy đủ 100%!"
+                                        }
+                                    }
+                                });
+                                continue;
+                            }
+                        }
+
+                        // Gemini returned final explanation -> finished!
+                        finalExplanation = cText;
                         break;
                     }
                 }
+
+                // Enforce 3-file web separation (index.html, style.css, script.js)
+                EnforceWebSeparation(projectPath, modifiedFiles);
 
                 // Clean raw JSON if AI leaked JSON Plan into explanation
                 if (!string.IsNullOrWhiteSpace(finalExplanation))
@@ -3186,6 +3371,13 @@ QUY TẮC BẮT BUỘC VỀ PHÂN TÁCH TỆP CHUẨN (TUYỆT ĐỐI KHÔNG G�
 
             try
             {
+                if (!string.IsNullOrWhiteSpace(project))
+                {
+                    string cleanProj = SanitizeProjectName(project);
+                    string projectPath = ResolveWorkspacePath(cleanProj);
+                    AutoFixMapStaticAssets(projectPath);
+                }
+
                 int port = RunningAppSessionManager.AllocatePort(CurrentUserId, project ?? "app");
                 return Ok(new { ok = true, port });
             }
