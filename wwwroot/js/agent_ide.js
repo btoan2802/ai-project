@@ -2804,45 +2804,49 @@ async function submitCreateProject() {
         return;
     }
 
+    const btn = document.getElementById("btnSubmitCreateProject");
+    const origBtnHtml = btn ? btn.innerHTML : `<i class="bi bi-plus-circle me-1"></i> Tạo Dự Án`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1.5" role="status" aria-hidden="true"></span> Đang khởi tạo dự án qua CLI, vui lòng đợi...`;
+    }
+
+    const abortCtrl = new AbortController();
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 95000); // 95s timeout for CLI operations
+
     try {
         const uid = localStorage.getItem("user_id") || "1";
         const res = await fetch('/api/ide/create-project', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name, template, userId: parseInt(uid) || 1 })
+            body: JSON.stringify({ name, template, userId: parseInt(uid) || 1 }),
+            signal: abortCtrl.signal
         });
+        clearTimeout(timeoutId);
         const data = await res.json();
         if (data.ok) {
             hideModalSafely("createProjectModal");
+            const nameInput = document.getElementById("newProjectName");
+            if (nameInput) nameInput.value = "";
+
             await loadUserProjects();
 
             // Switch to the newly created project
             const cleanName = data.project || name;
             await switchActiveProject(cleanName);
 
-            // Template scaffolding CLI command mapping
-            let scaffoldCmd = "";
-            if (template === "dotnet-mvc" || template === "dotnet-webapi") {
-                scaffoldCmd = "dotnet restore";
-            } else if (template === "angular") {
-                scaffoldCmd = "npx -y @angular/cli new " + cleanName + " --directory . --routing --style=css --ssr=false --skip-git --skip-install";
-            } else if (template === "fullstack") {
-                scaffoldCmd = "dotnet new webapi --use-controllers -n backend && npx -y @angular/cli new frontend --routing --style=css --ssr=false --skip-git --skip-install";
-            } else if (template === "html5") {
-                scaffoldCmd = "echo ^<!DOCTYPE html^>^<html^>^<head^>^<title^>" + cleanName + "^</title^>^</head^>^<body^>^<h1^>Welcome to " + cleanName + "^</h1^>^</body^>^</html^> > index.html";
+            // Automatically open primary file if created
+            if (data.primaryFile) {
+                setTimeout(async () => {
+                    try {
+                        await openFileInEditor(data.primaryFile);
+                    } catch (e) {
+                        console.warn("Could not auto-open primary file:", e);
+                    }
+                }, 400);
             }
 
-            if (scaffoldCmd) {
-                switchBottomTab('terminal');
-                showToastNotification(`Khởi tạo template [${template}]...`);
-                setTimeout(async () => {
-                    if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-                        await terminalHubConn.invoke("ExecuteCommand", cleanName, scaffoldCmd);
-                    }
-                }, 600);
-            } else {
-                showToastNotification(`Đã tạo dự án ${cleanName} thành công!`);
-            }
+            showToastNotification(`Đã tạo dự án '${cleanName}' theo chuẩn CLI thành công!`);
         } else {
             if (data.needLogin) {
                 showRestrictedLoginPrompt(data.error);
@@ -2856,11 +2860,21 @@ async function submitCreateProject() {
             }
         }
     } catch (err) {
+        clearTimeout(timeoutId);
+        console.error("Error creating project:", err);
+        const msg = err.name === "AbortError" 
+            ? "Lệnh khởi tạo CLI mất quá nhiều thời gian (>90s). Vui lòng kiểm tra lại kết nối mạng." 
+            : (err.message || "Lỗi khi gọi API tạo dự án.");
         if (errBox) {
-            errBox.textContent = "❌ Lỗi: " + err.message;
+            errBox.textContent = "❌ " + msg;
             errBox.style.display = "block";
         }
-        showToastNotification("Lỗi: " + err.message);
+        showToastNotification("Lỗi: " + msg);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origBtnHtml;
+        }
     }
 }
 

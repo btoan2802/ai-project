@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Claims;
 using System.Text;
@@ -261,7 +261,7 @@ namespace BtoanAiNet.Controllers
         // POST /api/ide/projects/create and POST /api/ide/create-project
         [HttpPost("projects/create")]
         [HttpPost("create-project")]
-        public IActionResult CreateProject([FromBody] IdeCreateProjectRequestModel model)
+        public async Task<IActionResult> CreateProject([FromBody] IdeCreateProjectRequestModel model)
         {
             int effectiveUserId = CurrentUserId;
             if (effectiveUserId <= 0 && model?.UserId.HasValue == true && model.UserId.Value > 0)
@@ -286,39 +286,117 @@ namespace BtoanAiNet.Controllers
             try
             {
                 Directory.CreateDirectory(projectPath);
+                string template = model?.Template?.ToLowerInvariant() ?? "empty";
+                string primaryFile = string.Empty;
 
-                // Scaffolding templates
-                if (string.Equals(model?.Template, "dotnet-mvc", StringComparison.OrdinalIgnoreCase))
+                if (template == "dotnet-mvc" || template == "mvc")
                 {
-                    GenerateMvcStarterTemplate(projectPath, cleanName);
+                    // 1. ASP.NET Core Web App (Model-View-Controller) via official CLI
+                    var res = await RunCliProcessAsync(userRoot, "dotnet", $"new mvc -n \"{cleanName}\" -o \"{projectPath}\" --no-https", 90);
+                    if (!res.ok)
+                    {
+                        _logger.LogWarning("dotnet new mvc output: {Output}", res.output);
+                    }
+                    primaryFile = "Program.cs";
                 }
-                else if (string.Equals(model?.Template, "dotnet-webapi", StringComparison.OrdinalIgnoreCase))
+                else if (template == "dotnet-webapi" || template == "webapi")
                 {
-                    GenerateWebApiStarterTemplate(projectPath, cleanName);
+                    // 2. ASP.NET Core Web API via official CLI
+                    var res = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"{cleanName}\" -o \"{projectPath}\" --use-controllers --no-https", 90);
+                    if (!res.ok)
+                    {
+                        _logger.LogWarning("dotnet new webapi output: {Output}", res.output);
+                    }
+                    primaryFile = "Program.cs";
                 }
-                else if (string.Equals(model?.Template, "angular", StringComparison.OrdinalIgnoreCase))
+                else if (template == "angular")
                 {
-                    GenerateAngularStarterTemplate(projectPath, cleanName);
+                    // 3. Angular App via official Angular CLI
+                    var res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    if (!res.ok)
+                    {
+                        _logger.LogWarning("ng new output: {Output}", res.output);
+                    }
+                    primaryFile = System.IO.File.Exists(Path.Combine(projectPath, "src", "app", "app.component.ts")) 
+                        ? "src/app/app.component.ts" 
+                        : (System.IO.File.Exists(Path.Combine(projectPath, "src", "app", "app.ts")) ? "src/app/app.ts" : "package.json");
                 }
-                else if (string.Equals(model?.Template, "fullstack", StringComparison.OrdinalIgnoreCase))
+                else if (template == "fullstack")
                 {
+                    // 4. Fullstack (ASP.NET Core Web API + Angular)
                     string bePath = Path.Combine(projectPath, "backend");
                     string fePath = Path.Combine(projectPath, "frontend");
                     Directory.CreateDirectory(bePath);
                     Directory.CreateDirectory(fePath);
-                    GenerateWebApiStarterTemplate(bePath, $"{cleanName}Api");
-                    GenerateAngularStarterTemplate(fePath, $"{cleanName}Web");
+
+                    await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"Backend\" -o \"{bePath}\" --use-controllers --no-https", 90);
+                    await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    primaryFile = "backend/Program.cs";
                 }
-                else if (string.Equals(model?.Template, "html5", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(model?.Template, "web", StringComparison.OrdinalIgnoreCase))
+                else if (template == "static-web" || template == "html5" || template == "web")
                 {
-                    System.IO.File.WriteAllText(Path.Combine(projectPath, "index.html"), "<!DOCTYPE html>\n<html>\n<head>\n    <title>My Web Project</title>\n</head>\n<body>\n    <h1>Welcome to My Web Project</h1>\n</body>\n</html>", Encoding.UTF8);
+                    // 5. HTML5 / CSS3 / JS Static Web
+                    string html = @"<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>" + cleanName + @"</title>
+    <link rel=""stylesheet"" href=""style.css"">
+</head>
+<body>
+    <div class=""container"">
+        <h1>Xin chào!</h1>
+        <p>Dự án HTML5 / CSS3 / JS đã sẵn sàng phát triển.</p>
+    </div>
+    <script src=""script.js""></script>
+</body>
+</html>";
+                    string css = @"* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, sans-serif;
+    background-color: #0b0f19;
+    color: #f1f5f9;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    text-align: center;
+    padding: 2rem;
+}
+
+h1 {
+    color: #38bdf8;
+    margin-bottom: 1rem;
+}";
+                    string js = @"// Khởi chạy khi DOM đã sẵn sàng
+document.addEventListener(""DOMContentLoaded"", () => {
+    console.log(""Dự án Web đã sẵn sàng!"");
+});";
+                    System.IO.File.WriteAllText(Path.Combine(projectPath, "index.html"), html, Encoding.UTF8);
+                    System.IO.File.WriteAllText(Path.Combine(projectPath, "style.css"), css, Encoding.UTF8);
+                    System.IO.File.WriteAllText(Path.Combine(projectPath, "script.js"), js, Encoding.UTF8);
+                    primaryFile = "index.html";
+                }
+                else // empty
+                {
+                    // 6. Empty Project (Thư mục trống hoàn toàn)
+                    primaryFile = "";
                 }
 
                 return Ok(new
                 {
                     ok = true,
                     project = cleanName,
+                    primaryFile = primaryFile,
                     message = $"Tạo dự án '{cleanName}' thành công!"
                 });
             }
@@ -329,754 +407,60 @@ namespace BtoanAiNet.Controllers
             }
         }
 
-        private static void GenerateMvcStarterTemplate(string projectPath, string projectName)
+        private static async Task<(bool ok, string output)> RunCliProcessAsync(string workingDir, string executable, string arguments, int timeoutSeconds = 120)
         {
-            Directory.CreateDirectory(Path.Combine(projectPath, "Controllers"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Data"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Models"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Views", "Shared"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Views", "Products"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "wwwroot", "css"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "wwwroot", "js"));
-
-            string csproj = $@"<Project Sdk=""Microsoft.NET.Sdk.Web"">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""10.0.0"" />
-  </ItemGroup>
-</Project>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csproj, Encoding.UTF8);
-
-            string appsettings = @"{
-  ""Logging"": {
-    ""LogLevel"": {
-      ""Default"": ""Information"",
-      ""Microsoft.AspNetCore"": ""Warning""
-    }
-  },
-  ""AllowedHosts"": ""*"",
-  ""Database"": {
-    ""Provider"": ""Sqlite"",
-    ""SqliteConnection"": ""Data Source=app.db"",
-    ""SqlServerConnection"": ""Server=.;Database=MyAppDb;Trusted_Connection=True;TrustServerCertificate=True;""
-  }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "appsettings.json"), appsettings, Encoding.UTF8);
-
-            string dbContext = @"using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations;
-
-namespace App.Data
-{
-    public class Product
-    {
-        public int Id { get; set; }
-        [Required]
-        public string Name { get; set; } = string.Empty;
-        public decimal Price { get; set; }
-        public string Category { get; set; } = ""Chung"";
-        public int Stock { get; set; } = 10;
-    }
-
-    public class AppDbContext : DbContext
-    {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-        public DbSet<Product> Products => Set<Product>();
-    }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Data", "AppDbContext.cs"), dbContext, Encoding.UTF8);
-
-            string controller = @"using App.Data;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-namespace App.Controllers
-{
-    public class ProductsController : Controller
-    {
-        private readonly AppDbContext _db;
-        public ProductsController(AppDbContext db) => _db = db;
-
-        public async Task<IActionResult> Index()
-        {
-            var items = await _db.Products.ToListAsync();
-            return View(items);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Create(Product model)
-        {
-            if (ModelState.IsValid)
+            var psi = new ProcessStartInfo
             {
-                _db.Products.Add(model);
-                await _db.SaveChangesAsync();
-            }
-            return RedirectToAction(nameof(Index));
-        }
+                WorkingDirectory = workingDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
 
-        [HttpPost]
-        public async Task<IActionResult> Delete(int id)
-        {
-            var item = await _db.Products.FindAsync(id);
-            if (item != null)
+            if (OperatingSystem.IsWindows())
             {
-                _db.Products.Remove(item);
-                await _db.SaveChangesAsync();
+                psi.FileName = "cmd.exe";
+                psi.Arguments = $"/c {executable} {arguments}";
             }
-            return RedirectToAction(nameof(Index));
-        }
-    }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Controllers", "ProductsController.cs"), controller, Encoding.UTF8);
-
-            string viewStart = @"@{
-    Layout = ""_Layout"";
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Views", "_ViewStart.cshtml"), viewStart, Encoding.UTF8);
-
-            string layout = @"<!DOCTYPE html>
-<html lang=""vi"">
-<head>
-    <meta charset=""utf-8"" />
-    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
-    <title>@ViewData[""Title""] - Btoan MVC App</title>
-    <link href=""https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"" rel=""stylesheet"" />
-    <link href=""https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"" rel=""stylesheet"" />
-    <style>
-        body { background: #121212; color: #e0e0e0; font-family: system-ui, -apple-system, sans-serif; }
-        .card { background: #1e1e1e; border: 1px solid #333; }
-        .table { color: #e0e0e0; }
-        .table-dark { background-color: #252525; }
-        .navbar { background: #181818 !important; border-bottom: 1px solid #333; }
-    </style>
-</head>
-<body>
-    <nav class=""navbar navbar-expand-lg navbar-dark mb-4"">
-        <div class=""container"">
-            <a class=""navbar-brand fw-bold text-info"" href=""/""><i class=""bi bi-box-seam me-2""></i>Btoan MVC App (SQLite)</a>
-            <span class=""badge bg-success""><i class=""bi bi-database me-1""></i>SQLite: app.db</span>
-        </div>
-    </nav>
-    <div class=""container"">
-        @RenderBody()
-    </div>
-    <script src=""https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js""></script>
-</body>
-</html>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Views", "Shared", "_Layout.cshtml"), layout, Encoding.UTF8);
-
-            string viewIndex = @"@model IEnumerable<App.Data.Product>
-@{
-    ViewData[""Title""] = ""Quản lý Sản phẩm"";
-}
-
-<div class=""card p-4 shadow-sm mb-4"">
-    <div class=""d-flex justify-content-between align-items-center mb-3"">
-        <h4 class=""mb-0 text-white""><i class=""bi bi-grid-3x3-gap-fill text-primary me-2""></i>Danh sách Sản phẩm</h4>
-        <button class=""btn btn-sm btn-primary"" data-bs-toggle=""collapse"" data-bs-target=""#createForm""><i class=""bi bi-plus-lg me-1""></i>Thêm sản phẩm mới</button>
-    </div>
-
-    <div id=""createForm"" class=""collapse mb-4 p-3 bg-black rounded border border-secondary"">
-        <form asp-action=""Create"" method=""post"" class=""row g-2"">
-            <div class=""col-md-4"">
-                <input type=""text"" name=""Name"" class=""form-control form-control-sm bg-dark text-light border-secondary"" placeholder=""Tên sản phẩm..."" required />
-            </div>
-            <div class=""col-md-3"">
-                <input type=""number"" name=""Price"" class=""form-control form-control-sm bg-dark text-light border-secondary"" placeholder=""Giá (VNĐ)..."" required />
-            </div>
-            <div class=""col-md-3"">
-                <input type=""text"" name=""Category"" class=""form-control form-control-sm bg-dark text-light border-secondary"" placeholder=""Danh mục..."" value=""Thiết bị"" />
-            </div>
-            <div class=""col-md-2"">
-                <button type=""submit"" class=""btn btn-sm btn-success w-100""><i class=""bi bi-check-lg me-1""></i>Lưu</button>
-            </div>
-        </form>
-    </div>
-
-    <div class=""table-responsive"">
-        <table class=""table table-dark table-hover table-bordered align-middle"">
-            <thead>
-                <tr class=""table-secondary text-dark"">
-                    <th>#ID</th>
-                    <th>Tên sản phẩm</th>
-                    <th>Giá</th>
-                    <th>Danh mục</th>
-                    <th>Tồn kho</th>
-                    <th style=""width: 80px;"">Thao tác</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var p in Model)
+            else
+            {
+                psi.FileName = "/bin/bash";
+                psi.Arguments = $"-c \"{executable} {arguments}\"";
+                psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
+                string curPath = psi.Environment.ContainsKey("PATH") ? (psi.Environment["PATH"] ?? "") : (Environment.GetEnvironmentVariable("PATH") ?? "");
+                if (!curPath.Contains("/usr/share/dotnet"))
                 {
-                    <tr>
-                        <td><strong>#@p.Id</strong></td>
-                        <td class=""text-info fw-semibold"">@p.Name</td>
-                        <td>@p.Price.ToString(""N0"") đ</td>
-                        <td><span class=""badge bg-secondary"">@p.Category</span></td>
-                        <td><span class=""badge bg-info text-dark"">@p.Stock cái</span></td>
-                        <td>
-                            <form asp-action=""Delete"" method=""post"" onsubmit=""return confirm('Xóa sản phẩm này?')"">
-                                <input type=""hidden"" name=""id"" value=""@p.Id"" />
-                                <button type=""submit"" class=""btn btn-sm btn-outline-danger py-0 px-2""><i class=""bi bi-trash""></i></button>
-                            </form>
-                        </td>
-                    </tr>
+                    psi.Environment["PATH"] = $"/usr/share/dotnet:{curPath}";
                 }
-            </tbody>
-        </table>
-    </div>
-</div>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Views", "Products", "Index.cshtml"), viewIndex, Encoding.UTF8);
+            }
 
-            string program = @"using App.Data;
-using Microsoft.EntityFrameworkCore;
+            var sb = new StringBuilder();
+            using var proc = new Process { StartInfo = psi };
+            proc.OutputDataReceived += (s, e) => { if (e.Data != null) sb.AppendLine(e.Data); };
+            proc.ErrorDataReceived += (s, e) => { if (e.Data != null) sb.AppendLine(e.Data); };
 
-var builder = WebApplication.CreateBuilder(args);
+            try
+            {
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
 
-builder.Services.AddControllersWithViews();
-
-string sqliteConn = builder.Configuration[""Database:SqliteConnection""] ?? ""Data Source=app.db"";
-builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlite(sqliteConn));
-
-var app = builder.Build();
-
-// Auto-migrate & seed sample data
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-    if (!db.Products.Any())
-    {
-        db.Products.AddRange(
-            new Product { Name = ""Laptop Dell XPS 15"", Price = 35000000, Category = ""Laptop"", Stock = 5 },
-            new Product { Name = ""Bàn phím cơ Keychron Q1"", Price = 4200000, Category = ""Phụ kiện"", Stock = 12 },
-            new Product { Name = ""Chuột Logitech MX Master 3S"", Price = 2400000, Category = ""Phụ kiện"", Stock = 20 },
-            new Product { Name = ""Màn hình Dell UltraSharp 27 inch"", Price = 12500000, Category = ""Màn hình"", Stock = 8 },
-            new Product { Name = ""Tai nghe Sony WH-1000XM5"", Price = 7800000, Category = ""Âm thanh"", Stock = 15 }
-        );
-        db.SaveChanges();
-    }
-}
-
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler(""/Home/Error"");
-    app.UseHsts();
-}
-
-app.UseStaticFiles();
-app.UseRouting();
-app.UseAuthorization();
-
-app.MapControllerRoute(
-    name: ""default"",
-    pattern: ""{controller=Products}/{action=Index}/{id?}"");
-
-app.Run();";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Program.cs"), program, Encoding.UTF8);
-        }
-
-        private static void GenerateWebApiStarterTemplate(string projectPath, string projectName)
-        {
-            Directory.CreateDirectory(Path.Combine(projectPath, "Controllers"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Data"));
-
-            string csproj = $@"<Project Sdk=""Microsoft.NET.Sdk.Web"">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include=""Microsoft.AspNetCore.OpenApi"" Version=""10.0.0"" />
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""10.0.0"" />
-  </ItemGroup>
-</Project>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csproj, Encoding.UTF8);
-
-            string appsettings = @"{
-  ""Logging"": {
-    ""LogLevel"": {
-      ""Default"": ""Information"",
-      ""Microsoft.AspNetCore"": ""Warning""
-    }
-  },
-  ""AllowedHosts"": ""*"",
-  ""Database"": {
-    ""Provider"": ""Sqlite"",
-    ""SqliteConnection"": ""Data Source=app.db"",
-    ""SqlServerConnection"": ""Server=.;Database=MyAppDb;Trusted_Connection=True;TrustServerCertificate=True;""
-  }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "appsettings.json"), appsettings, Encoding.UTF8);
-
-            string dbContext = @"using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations;
-
-namespace App.Data
-{
-    public class TodoItem
-    {
-        public int Id { get; set; }
-        [Required]
-        public string Title { get; set; } = string.Empty;
-        public bool IsCompleted { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    }
-
-    public class AppDbContext : DbContext
-    {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-        public DbSet<TodoItem> Todos => Set<TodoItem>();
-    }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Data", "AppDbContext.cs"), dbContext, Encoding.UTF8);
-
-            string controller = @"using App.Data;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-namespace App.Controllers
-{
-    [ApiController]
-    [Route(""api/[controller]"")]
-    public class TodosController : ControllerBase
-    {
-        private readonly AppDbContext _db;
-        public TodosController(AppDbContext db) => _db = db;
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<TodoItem>>> GetTodos()
-        {
-            return await _db.Todos.OrderByDescending(t => t.Id).ToListAsync();
-        }
-
-        [HttpGet(""{id}"")]
-        public async Task<ActionResult<TodoItem>> GetTodo(int id)
-        {
-            var item = await _db.Todos.FindAsync(id);
-            if (item == null) return NotFound();
-            return item;
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<TodoItem>> CreateTodo(TodoItem item)
-        {
-            _db.Todos.Add(item);
-            await _db.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetTodo), new { id = item.Id }, item);
-        }
-
-        [HttpPut(""{id}"")]
-        public async Task<IActionResult> UpdateTodo(int id, TodoItem updated)
-        {
-            if (id != updated.Id) return BadRequest();
-            _db.Entry(updated).State = EntityState.Modified;
-            await _db.SaveChangesAsync();
-            return NoContent();
-        }
-
-        [HttpDelete(""{id}"")]
-        public async Task<IActionResult> DeleteTodo(int id)
-        {
-            var item = await _db.Todos.FindAsync(id);
-            if (item == null) return NotFound();
-            _db.Todos.Remove(item);
-            await _db.SaveChangesAsync();
-            return NoContent();
-        }
-    }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Controllers", "TodosController.cs"), controller, Encoding.UTF8);
-
-            string program = @"using App.Data;
-using Microsoft.EntityFrameworkCore;
-
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddControllers();
-builder.Services.AddOpenApi();
-
-string sqliteConn = builder.Configuration[""Database:SqliteConnection""] ?? ""Data Source=app.db"";
-builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlite(sqliteConn));
-
-var app = builder.Build();
-
-// Auto-migrate & seed sample data
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-    if (!db.Todos.Any())
-    {
-        db.Todos.AddRange(
-            new TodoItem { Title = ""Nghiên cứu kiến trúc Web IDE"", IsCompleted = true },
-            new TodoItem { Title = ""Tích hợp SQLite Studio vào trình duyệt"", IsCompleted = true },
-            new TodoItem { Title = ""Viết Reverse Proxy chống SSRF cho Live Preview"", IsCompleted = true },
-            new TodoItem { Title = ""Triển khai test thực tế bằng Browser Agent"", IsCompleted = false }
-        );
-        db.SaveChanges();
-    }
-}
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
-app.UseRouting();
-app.UseAuthorization();
-app.MapControllers();
-
-app.Run();";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "Program.cs"), program, Encoding.UTF8);
-        }
-
-        private static void GenerateAngularStarterTemplate(string projectPath, string projectName)
-        {
-            Directory.CreateDirectory(Path.Combine(projectPath, "src", "app", "pages", "admin-products"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "public"));
-
-            string packageJson = $@"{{
-  ""name"": ""{projectName.ToLowerInvariant()}"",
-  ""version"": ""0.0.0"",
-  ""scripts"": {{
-    ""ng"": ""ng"",
-    ""start"": ""ng serve"",
-    ""build"": ""ng build"",
-    ""watch"": ""ng build --watch --configuration development"",
-    ""test"": ""ng test""
-  }},
-  ""private"": true,
-  ""dependencies"": {{
-    ""@angular/animations"": ""^19.0.0"",
-    ""@angular/common"": ""^19.0.0"",
-    ""@angular/compiler"": ""^19.0.0"",
-    ""@angular/core"": ""^19.0.0"",
-    ""@angular/forms"": ""^19.0.0"",
-    ""@angular/platform-browser"": ""^19.0.0"",
-    ""@angular/platform-browser-dynamic"": ""^19.0.0"",
-    ""@angular/router"": ""^19.0.0"",
-    ""rxjs"": ""~7.8.0"",
-    ""tslib"": ""^2.3.0"",
-    ""zone.js"": ""~0.15.0""
-  }},
-  ""devDependencies"": {{
-    ""@angular-devkit/build-angular"": ""^19.0.0"",
-    ""@angular/cli"": ""^19.0.0"",
-    ""@angular/compiler-cli"": ""^19.0.0"",
-    ""typescript"": ""~5.6.2""
-  }}
-}}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "package.json"), packageJson, Encoding.UTF8);
-
-            string angularJson = $@"{{
-  ""$schema"": ""./node_modules/@angular/cli/lib/config/schema.json"",
-  ""version"": 1,
-  ""newProjectRoot"": ""projects"",
-  ""projects"": {{
-    ""{projectName.ToLowerInvariant()}"": {{
-      ""projectType"": ""application"",
-      ""schematics"": {{}},
-      ""root"": """",
-      ""sourceRoot"": ""src"",
-      ""prefix"": ""app"",
-      ""architect"": {{
-        ""build"": {{
-          ""builder"": ""@angular-devkit/build-angular:application"",
-          ""options"": {{
-            ""outputPath"": ""dist/{projectName.ToLowerInvariant()}"",
-            ""index"": ""src/index.html"",
-            ""browser"": ""src/main.ts"",
-            ""polyfills"": [""zone.js""],
-            ""tsConfig"": ""tsconfig.app.json"",
-            ""assets"": [""src/favicon.ico"", ""src/assets""],
-            ""styles"": [""src/styles.css""],
-            ""scripts"": []
-          }}
-        }},
-        ""serve"": {{
-          ""builder"": ""@angular-devkit/build-angular:dev-server"",
-          ""configurations"": {{
-            ""production"": {{
-              ""buildTarget"": ""{projectName.ToLowerInvariant()}:build:production""
-            }},
-            ""development"": {{
-              ""buildTarget"": ""{projectName.ToLowerInvariant()}:build:development""
-            }}
-          }},
-          ""defaultConfiguration"": ""development""
-        }}
-      }}
-    }}
-  }}
-}}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "angular.json"), angularJson, Encoding.UTF8);
-
-            string tsconfig = @"{
-  ""compileOnSave"": false,
-  ""compilerOptions"": {
-    ""outDir"": ""./dist/out-tsc"",
-    ""strict"": true,
-    ""noImplicitOverride"": true,
-    ""noPropertyAccessFromIndexSignature"": true,
-    ""noImplicitReturns"": true,
-    ""noFallthroughCasesInSwitch"": true,
-    ""skipLibCheck"": true,
-    ""isolatedModules"": true,
-    ""esModuleInterop"": true,
-    ""experimentalDecorators"": true,
-    ""moduleResolution"": ""bundler"",
-    ""importHelpers"": true,
-    ""target"": ""ES2022"",
-    ""module"": ""ES2022""
-  }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "tsconfig.json"), tsconfig, Encoding.UTF8);
-
-            string indexHtml = $@"<!doctype html>
-<html lang=""en"">
-<head>
-  <meta charset=""utf-8"">
-  <title>{projectName} - Btoan Studio App</title>
-  <base href=""/"">
-  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">
-  <link rel=""icon"" type=""image/x-icon"" href=""favicon.ico"">
-</head>
-<body>
-  <app-root></app-root>
-</body>
-</html>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "index.html"), indexHtml, Encoding.UTF8);
-
-            string stylesCss = @"/* Global Application Styles */
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #121212;
-  color: #e0e0e0;
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "styles.css"), stylesCss, Encoding.UTF8);
-
-            string mainTs = @"import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
-import { AppComponent } from './app/app.component';
-
-bootstrapApplication(AppComponent, appConfig)
-  .catch((err) => console.error(err));";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "main.ts"), mainTs, Encoding.UTF8);
-
-            string appConfig = @"import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
-import { provideRouter } from '@angular/router';
-import { routes } from './app.routes';
-
-export const appConfig: ApplicationConfig = {
-  providers: [
-    provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(routes)
-  ]
-};";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.config.ts"), appConfig, Encoding.UTF8);
-
-            string appRoutes = @"import { Routes } from '@angular/router';
-import { AdminProducts } from './pages/admin-products/admin-products';
-
-export const routes: Routes = [
-  { path: '', component: AdminProducts },
-  { path: 'admin-products', component: AdminProducts }
-];";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.routes.ts"), appRoutes, Encoding.UTF8);
-
-            string appComponent = @"import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
-
-@Component({
-  selector: 'app-root',
-  standalone: true,
-  imports: [RouterOutlet],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.css'
-})
-export class AppComponent {
-  title = '" + projectName + @"';
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.component.ts"), appComponent, Encoding.UTF8);
-
-            string appComponentHtml = @"<main class=""main"">
-  <router-outlet></router-outlet>
-</main>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.component.html"), appComponentHtml, Encoding.UTF8);
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "app.component.css"), "/* App Component CSS */", Encoding.UTF8);
-
-            // AdminProducts Component
-            string adminProductsTs = @"import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
-
-export interface ProductItem {
-  id: number;
-  name: string;
-  price: number;
-  stock: number;
-  category: string;
-}
-
-@Component({
-  selector: 'app-admin-products',
-  standalone: true,
-  imports: [CommonModule],
-  templateUrl: './admin-products.html',
-  styleUrl: './admin-products.css'
-})
-export class AdminProducts {
-  products: ProductItem[] = [
-    { id: 1, name: 'Bàn phím cơ Custom Btoan AI', price: 1850000, stock: 25, category: 'Gaming Gear' },
-    { id: 2, name: 'Chuột không dây Ultra-Light 4K', price: 1250000, stock: 40, category: 'Gaming Gear' },
-    { id: 3, name: 'Màn hình 27 inch 2K 165Hz IPS', price: 5400000, stock: 12, category: 'Màn hình' },
-    { id: 4, name: 'Tai nghe chụp tai chống ồn ANC', price: 2100000, stock: 18, category: 'Audio' }
-  ];
-
-  selectedProduct: ProductItem | null = null;
-
-  selectProduct(p: ProductItem) {
-    this.selectedProduct = p;
-  }
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.ts"), adminProductsTs, Encoding.UTF8);
-
-            string adminProductsHtml = @"<div class=""admin-container"">
-  <header class=""admin-header"">
-    <h1>📦 Quản lý Sản phẩm (Admin Products)</h1>
-    <span class=""badge"">Angular Standalone Component</span>
-  </header>
-
-  <div class=""product-grid"">
-    <div class=""card"" *ngFor=""let p of products"" (click)=""selectProduct(p)"">
-      <div class=""card-header"">
-        <span class=""cat-tag"">{{ p.category }}</span>
-        <span class=""stock-tag"">Kho: {{ p.stock }}</span>
-      </div>
-      <h3>{{ p.name }}</h3>
-      <p class=""price"">{{ p.price | number }} VNĐ</p>
-      <button class=""btn-action"">Xem Chi Tiết</button>
-    </div>
-  </div>
-
-  <div class=""details-box"" *ngIf=""selectedProduct"">
-    <h3>Đã chọn: {{ selectedProduct.name }}</h3>
-    <p>Giá niêm yết: {{ selectedProduct.price | number }} VNĐ — Tồn kho: {{ selectedProduct.stock }} cái</p>
-  </div>
-</div>";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.html"), adminProductsHtml, Encoding.UTF8);
-
-            string adminProductsCss = @".admin-container {
-  padding: 30px;
-  max-width: 1100px;
-  margin: 0 auto;
-}
-.admin-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #333;
-  padding-bottom: 15px;
-  margin-bottom: 25px;
-}
-.admin-header h1 {
-  margin: 0;
-  font-size: 24px;
-  color: #61dafb;
-}
-.badge {
-  background: #282c34;
-  color: #98c379;
-  padding: 5px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  border: 1px solid #98c379;
-}
-.product-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 20px;
-}
-.card {
-  background: #1e1e1e;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 16px;
-  transition: transform 0.2s, border-color 0.2s;
-  cursor: pointer;
-}
-.card:hover {
-  transform: translateY(-4px);
-  border-color: #61dafb;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  font-size: 12px;
-}
-.cat-tag { color: #e5c07b; }
-.stock-tag { color: #abb2bf; }
-.price {
-  font-size: 18px;
-  font-weight: bold;
-  color: #98c379;
-  margin: 12px 0;
-}
-.btn-action {
-  width: 100%;
-  padding: 8px;
-  background: #007acc;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.details-box {
-  margin-top: 30px;
-  background: #252526;
-  border-left: 4px solid #61dafb;
-  padding: 15px 20px;
-  border-radius: 4px;
-}";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.css"), adminProductsCss, Encoding.UTF8);
-
-            string adminProductsSpec = @"import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { AdminProducts } from './admin-products';
-
-describe('AdminProducts', () => {
-  let component: AdminProducts;
-  let fixture: ComponentFixture<AdminProducts>;
-
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [AdminProducts]
-    }).compileComponents();
-
-    fixture = TestBed.createComponent(AdminProducts);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
-  });
-
-  it('should create the component', () => {
-    expect(component).toBeTruthy();
-  });
-
-  it('should have initial products list', () => {
-    expect(component.products.length).toBeGreaterThan(0);
-  });
-});";
-            System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.spec.ts"), adminProductsSpec, Encoding.UTF8);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+                await proc.WaitForExitAsync(cts.Token);
+                return (proc.ExitCode == 0, sb.ToString());
+            }
+            catch (OperationCanceledException)
+            {
+                try { proc.Kill(true); } catch { }
+                return (false, $"Quá thời gian thực thi ({timeoutSeconds}s).\nOutput:\n{sb}");
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
         }
 
         // DELETE /api/ide/projects/{name} and POST /api/ide/projects/delete and POST /api/ide/delete-project
