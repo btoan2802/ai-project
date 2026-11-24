@@ -721,7 +721,7 @@ function getMonacoLanguage(fileName) {
 // ==========================================
 // 3. MULTI-TABS & FILE OPEN/SAVE
 // ==========================================
-async function openFileInEditor(filePath) {
+async function openFileInEditor(filePath, forceReload = false) {
     if (!monacoEditor) return;
 
     const lower = (filePath || "").toLowerCase();
@@ -730,12 +730,13 @@ async function openFileInEditor(filePath) {
         return;
     }
 
-    // Check if model already exists in memory
-    if (openTabsMap.has(filePath)) {
+    // Check if model already exists in memory and no forceReload requested
+    if (!forceReload && openTabsMap.has(filePath)) {
         const tab = openTabsMap.get(filePath);
         activeFilePath = filePath;
         monacoEditor.setModel(tab.model);
         updateEditorUI(tab);
+        renderTabBar();
         return;
     }
 
@@ -769,6 +770,7 @@ async function openFileInEditor(filePath) {
             activeFilePath = filePath;
             monacoEditor.setModel(model);
             updateEditorUI(tab);
+            renderTabBar();
 
         } else {
             alert("❌ " + (data.message || "Failed to load file content"));
@@ -776,6 +778,45 @@ async function openFileInEditor(filePath) {
     } catch (err) {
         alert("❌ Error opening file: " + err.message);
     }
+}
+
+// Tự động tải lại nội dung mới nhất từ đĩa cho toàn bộ các tab đang mở
+async function reloadOpenFileTabs(modifiedFiles = null) {
+    if (!monacoEditor || openTabsMap.size === 0) return;
+
+    const normModified = Array.isArray(modifiedFiles)
+        ? modifiedFiles.map(f => f.replace(/\\/g, '/').toLowerCase())
+        : null;
+
+    for (const [filePath, tab] of openTabsMap.entries()) {
+        const normPath = filePath.replace(/\\/g, '/').toLowerCase();
+        const shouldReload = !normModified || normModified.some(mf => normPath.endsWith(mf) || mf.endsWith(normPath));
+
+        if (shouldReload) {
+            try {
+                const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(filePath)}`, {
+                    headers: getApiHeaders()
+                });
+                const data = await res.json();
+                if (data.ok && typeof data.content === 'string') {
+                    if (tab.model) {
+                        tab.model.setValue(data.content);
+                    }
+                    tab.originalContent = data.content;
+                    tab.isDirty = false;
+                }
+            } catch (err) {
+                console.warn(`[ReloadTab] Failed to reload ${filePath}:`, err);
+            }
+        }
+    }
+
+    if (activeFilePath && openTabsMap.has(activeFilePath)) {
+        const currentTab = openTabsMap.get(activeFilePath);
+        monacoEditor.setModel(currentTab.model);
+        updateEditorUI(currentTab);
+    }
+    renderTabBar();
 }
 
 function updateEditorUI(tab) {
@@ -2502,15 +2543,16 @@ async function sendAgentTask() {
                 try { await refreshFileTree(); } catch(e) { console.warn(e); }
             }
 
-            // Nếu tệp đang mở trong Editor bị Agent chỉnh sửa, tự động tải lại nội dung mới nhất
-            if (activeFilePath && Array.isArray(data.modifiedFiles)) {
-                const normActive = activeFilePath.replace(/\\/g, '/').toLowerCase();
-                const wasModified = data.modifiedFiles.some(f => {
-                    const normF = f.replace(/\\/g, '/').toLowerCase();
-                    return normActive.endsWith(normF) || normF.endsWith(normActive);
-                });
-                if (wasModified && typeof openFileInEditor === 'function') {
-                    try { await openFileInEditor(activeFilePath); } catch(e) { console.warn(e); }
+            // Tự động làm mới lại toàn bộ các tab đang mở trong Monaco Editor có file bị sửa
+            if (typeof reloadOpenFileTabs === 'function') {
+                try { await reloadOpenFileTabs(data.modifiedFiles); } catch(e) { console.warn(e); }
+            }
+
+            // Tự động mở ngay file đầu tiên được tạo/sửa để người dùng thấy code ngay lập tức
+            if (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) {
+                const targetOpen = (!activeFilePath || !openTabsMap.has(activeFilePath)) ? data.modifiedFiles[0] : activeFilePath;
+                if (targetOpen && typeof openFileInEditor === 'function') {
+                    try { await openFileInEditor(targetOpen, true); } catch(e) { console.warn(e); }
                 }
             }
         } else {
@@ -2597,7 +2639,7 @@ function renderAgentResponse(data, container) {
                 ${data.modifiedFiles.map(f => `
                     <div class="p-1 px-2 rounded bg-black border border-secondary text-light extra-small d-flex align-items-center justify-content-between">
                         <span class="font-mono text-info"><i class="bi bi-file-earmark-code me-1"></i>${escapeHtml(f)}</span>
-                        <button class="btn btn-xs btn-outline-info py-0 px-1 extra-small" onclick="openFileInEditor('${escapeHtml(f.replace(/\\/g, '/'))}')">Xem</button>
+                        <button class="btn btn-xs btn-outline-info py-0 px-1 extra-small" onclick="openFileInEditor('${escapeHtml(f.replace(/\\/g, '/'))}', true)">Xem</button>
                     </div>
                 `).join('')}
             </div>

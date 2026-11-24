@@ -169,6 +169,11 @@ NỘI DUNG CÁC FILE LIÊN QUAN TRONG DỰ ÁN:
                 // Step 5: Write real files to disk & record FileVersion in DB
                 foreach (var proposal in request.ApprovedProposals)
                 {
+                    if (string.IsNullOrWhiteSpace(proposal.ProposedContent))
+                    {
+                        continue;
+                    }
+
                     if (request.ProjectId > 0)
                     {
                         await _workspaceService.SaveFileWithVersionAsync(request.ProjectId, proposal.RelativePath, proposal.ProposedContent, "AI", "Applied AI Agent proposal", projectRoot);
@@ -310,6 +315,7 @@ MÃ NGUỒN HIỆN TẠI:
                     {
                         string relPath = prop.GetProperty("relativePath").GetString() ?? "";
                         string fixedContent = prop.GetProperty("proposedContent").GetString() ?? "";
+                        if (string.IsNullOrWhiteSpace(fixedContent)) continue;
 
                         string fullPath = Path.Combine(projectRoot, relPath);
                         await _fileService.WriteFileAsync(fullPath, fixedContent);

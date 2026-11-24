@@ -2428,16 +2428,16 @@ Bạn đang làm việc trực tiếp trên thư mục dự án: '{cleanProj}'.
 
 CÁC CÔNG CỤ THỰC THI BẠN ĐƯỢC CẤP:
 - read_file(path): Đọc mã nguồn tệp nếu cần xem trước.
-- write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%.
+- write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC chứa toàn bộ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống (0 byte).
 - edit_file(path, target, replacement): Sửa đoạn code trong tệp.
-- delete_file(path): Xóa tệp.
-- run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build') tại thư mục dự án.
+- delete_file(path): Xóa tệp không cần thiết.
+- run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build', 'dotnet add package...') tại thư mục dự án.
 
-QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢN HỒI):
-1. ĐÃ CÓ CÂY THƯ MỤC DỰ ÁN: Toàn bộ danh sách tệp dự án đã được nạp sẵn ở [PROJECT FILE TREE]. Bạn hãy dùng ngay write_file hoặc edit_file để tạo/sửa code cho Controller, View hoặc Model.
-2. BATCH HÓA CODE ĐẦY ĐỦ: Viết mã nguồn hoàn chỉnh 100%, không để TODO hay cắt xén.
-3. BIÊN DỊCH KIỂM TRA: Sau khi sửa đổi/tạo file xong, gọi run_command(""dotnet build"") 1 lần duy nhất để kiểm tra.
-4. KẾT THÚC NGAY KHI BUILD THÀNH CÔNG: Khi dotnet build đã thành công (0 Error), bạn đã hoàn thành nhiệm vụ! Trả lời tóm tắt kết quả bằng tiếng Việt tự nhiên và dừng lại ngay, tuyệt đối không gọi thêm tool.";
+QUY TẮC BẮT BUỘC (VIẾT CODE ĐẦY ĐỦ & CHỐNG FILE RỖNG 0 BYTE):
+1. MÃ NGUỒN HOÀN CHỈNH 100%: Mọi file tạo mới hoặc chỉnh sửa (Models, DbContext, SeedData, Controllers, Views, Program.cs) BẮT BUỘC phải có đầy đủ code thực thi được ngay, có namespace, using, class, method đầy đủ. TUYỆT ĐỐI KHÔNG dùng comment giữ chỗ như '// code goes here', '// implement later', và TUYỆT ĐỐI KHÔNG tạo file rỗng 0 byte.
+2. NẠP ĐẦY ĐỦ CONTENT KHI GỌI write_file: Khi gọi write_file, truyền toàn bộ source code vào tham số 'content'. Ghi tuần tự từng file hoàn chỉnh (không nhồi nhiều file cùng lúc gây cắt cụt token).
+3. BIÊN DỊCH KIỂM TRA (dotnet build): Sau khi tạo/sửa xong các file, BẮT BUỘC gọi run_command(""dotnet build"") để kiểm chứng mã nguồn. Nếu có lỗi biên dịch, bạn phải đọc thông báo lỗi và tự sửa lại các file bị lỗi cho đến khi build thành công 0 Error(s).
+4. KẾT THÚC KHI BUILD THÀNH CÔNG: Khi dotnet build đã thành công (0 Error), bạn đã hoàn thành nhiệm vụ! Dừng gọi tool và trả lời tóm tắt kết quả chi tiết bằng tiếng Việt.";
 
             var toolsDefinition = new JsonArray
             {
@@ -2466,7 +2466,7 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                         new JsonObject
                         {
                             ["name"] = "write_file",
-                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án. Tự động tạo các thư mục cha nếu chưa tồn tại.",
+                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án với mã nguồn hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC phải chứa đầy đủ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống.",
                             ["parameters"] = new JsonObject
                             {
                                 ["type"] = "OBJECT",
@@ -2475,12 +2475,12 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                                     ["path"] = new JsonObject
                                     {
                                         ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Controllers/HomeController.cs', 'Views/Home/About.cshtml')."
+                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Controllers/HomeController.cs', 'Views/Home/About.cshtml', 'Models/Product.cs')."
                                     },
                                     ["content"] = new JsonObject
                                     {
                                         ["type"] = "STRING",
-                                        ["description"] = "Toàn bộ nội dung hoàn chỉnh của tệp."
+                                        ["description"] = "Toàn bộ mã nguồn hoàn chỉnh và đầy đủ của tệp (không để trống, không viết comment giữ chỗ)."
                                     }
                                 },
                                 ["required"] = new JsonArray { "path", "content" }
@@ -2503,12 +2503,12 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                                     ["target"] = new JsonObject
                                     {
                                         ["type"] = "STRING",
-                                        ["description"] = "Đoạn mã nguồn hiện tại trong tệp cần được thay thế."
+                                        ["description"] = "Đoạn mã nguồn hiện tại trong tệp cần được thay thế (chuỗi chính xác bao gồm cả thụt dòng)."
                                     },
                                     ["replacement"] = new JsonObject
                                     {
                                         ["type"] = "STRING",
-                                        ["description"] = "Đoạn mã nguồn mới thay thế vào."
+                                        ["description"] = "Đoạn mã nguồn mới thay thế vào (không để trống)."
                                     }
                                 },
                                 ["required"] = new JsonArray { "path", "target", "replacement" }
@@ -2592,7 +2592,7 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                         ["generationConfig"] = new JsonObject
                         {
                             ["temperature"] = isFastMode ? 0.2 : 0.4,
-                            ["maxOutputTokens"] = 8192
+                            ["maxOutputTokens"] = 16384
                         }
                     };
                     if (isFastMode)
@@ -2653,23 +2653,26 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                         // Record plan step and tool operation
                         if (toolName == "write_file" || toolName == "edit_file")
                         {
-                            string fPath = toolArgs?["path"]?.ToString() ?? "";
-                            toolOperations.Add(new
+                            string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
+                            if (!string.IsNullOrWhiteSpace(fPath))
                             {
-                                action = toolName == "write_file" ? "create" : "edit",
-                                path = fPath,
-                                summary = $"Cập nhật tệp {fPath}"
-                            });
-                            planSteps.Add($"Cập nhật tệp '{fPath}'");
+                                toolOperations.Add(new
+                                {
+                                    action = toolName == "write_file" ? "create" : "edit",
+                                    path = fPath,
+                                    summary = $"Cập nhật tệp {fPath}"
+                                });
+                                planSteps.Add($"Cập nhật tệp '{fPath}'");
+                            }
                         }
                         else if (toolName == "run_command")
                         {
-                            string cmd = toolArgs?["command"]?.ToString() ?? "";
+                            string cmd = ExtractStringArg(toolArgs, "command", "cmd", "script", "exec");
                             planSteps.Add($"Thực thi lệnh '{cmd}'");
                         }
                         else if (toolName == "read_file")
                         {
-                            string fPath = toolArgs?["path"]?.ToString() ?? "";
+                            string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
                             planSteps.Add($"Đọc nội dung tệp '{fPath}'");
                         }
 
@@ -2759,6 +2762,30 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
             }
         }
 
+        private static string ExtractStringArg(JsonObject? args, params string[] candidateKeys)
+        {
+            if (args == null) return string.Empty;
+            foreach (var key in candidateKeys)
+            {
+                if (args.TryGetPropertyValue(key, out var node) && node != null)
+                {
+                    try
+                    {
+                        if (node is JsonValue jVal && jVal.TryGetValue<string>(out var strVal))
+                        {
+                            return strVal ?? string.Empty;
+                        }
+                        return node.ToString();
+                    }
+                    catch
+                    {
+                        return node.ToString();
+                    }
+                }
+            }
+            return string.Empty;
+        }
+
         private static async Task<string> ExecuteAgentToolAsync(string projectPath, string toolName, JsonObject? args, List<string> modifiedFiles, List<string> executedCommands, Action<bool> setBuildPassed)
         {
             try
@@ -2767,11 +2794,12 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                 {
                     case "list_files":
                     {
-                        string dir = args?["directory"]?.ToString() ?? ".";
+                        string dir = ExtractStringArg(args, "directory", "dir", "path");
+                        if (string.IsNullOrWhiteSpace(dir)) dir = ".";
                         string targetDir = Path.GetFullPath(Path.Combine(projectPath, dir.TrimStart('/', '\\')));
                         if (!targetDir.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
-                            return "Error: Cannot access outside project directory";
+                            return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
                         if (!Directory.Exists(targetDir)) return $"Directory '{dir}' does not exist.";
                         var entries = Directory.GetFileSystemEntries(targetDir)
@@ -2784,64 +2812,91 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                     }
                     case "read_file":
                     {
-                        string path = args?["path"]?.ToString() ?? "";
-                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
+                        if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống khi gọi read_file.";
                         string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
-                            return "Error: Cannot access outside project directory";
+                            return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
-                        if (!System.IO.File.Exists(fullPath)) return $"Error: File '{path}' does not exist.";
+                        if (!System.IO.File.Exists(fullPath)) return $"ERROR: Tệp '{path}' không tồn tại trong dự án.";
                         return await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8);
                     }
                     case "write_file":
                     {
-                        string path = args?["path"]?.ToString() ?? "";
-                        string content = args?["content"]?.ToString() ?? "";
-                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename", "name");
+                        string content = ExtractStringArg(args, "content", "code", "new_content", "file_content", "body", "text");
+                        if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống khi gọi write_file.";
+
+                        // Chặn tuyệt đối ghi file rỗng 0 byte & Bắt AI truyền source code đầy đủ
+                        if (string.IsNullOrWhiteSpace(content))
+                        {
+                            return $"ERROR: Tham số 'content' cho tệp '{path}' đang bị trống (0 byte). Bạn BẮT BUỘC phải truyền toàn bộ mã nguồn hoàn chỉnh vào tham số 'content' khi gọi write_file. Tuyệt đối không tạo file rỗng.";
+                        }
+
                         string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
-                            return "Error: Cannot access outside project directory";
+                            return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
                         string dir = Path.GetDirectoryName(fullPath)!;
                         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                         await System.IO.File.WriteAllTextAsync(fullPath, content, Encoding.UTF8);
                         string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
                         if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
-                        return $"Successfully written file: {relPath} ({content.Length} bytes)";
+                        return $"Successfully written file: {relPath} ({content.Length} ký tự / {Encoding.UTF8.GetByteCount(content)} bytes).";
                     }
                     case "edit_file":
                     {
-                        string path = args?["path"]?.ToString() ?? "";
-                        string target = args?["target"]?.ToString() ?? "";
-                        string replacement = args?["replacement"]?.ToString() ?? "";
-                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
+                        string target = ExtractStringArg(args, "target", "old_content", "search", "existing_code", "find");
+                        string replacement = ExtractStringArg(args, "replacement", "new_content", "replace", "code", "new_code");
+
+                        if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống khi gọi edit_file.";
+                        if (string.IsNullOrEmpty(target)) return "ERROR: Tham số 'target' không được để trống khi gọi edit_file. Nếu muốn ghi đè toàn bộ tệp, hãy sử dụng write_file.";
+
                         string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
-                            return "Error: Cannot access outside project directory";
+                            return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
-                        if (!System.IO.File.Exists(fullPath)) return $"Error: File '{path}' does not exist.";
+                        if (!System.IO.File.Exists(fullPath)) return $"ERROR: Tệp '{path}' không tồn tại. Nếu bạn muốn tạo mới tệp này, hãy dùng write_file.";
                         string existing = await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8);
                         if (!existing.Contains(target))
                         {
-                            return $"Error: target string not found in '{path}'. Use read_file to check exact text.";
+                            string trimmed = target.Trim();
+                            if (existing.Contains(trimmed))
+                            {
+                                string updated = existing.Replace(trimmed, replacement);
+                                if (string.IsNullOrWhiteSpace(updated))
+                                {
+                                    return $"ERROR: Thao tác edit_file làm tệp '{path}' trở thành rỗng (0 byte). Thao tác bị từ chối. Hãy cung cấp replacement với code hoàn chỉnh.";
+                                }
+                                await System.IO.File.WriteAllTextAsync(fullPath, updated, Encoding.UTF8);
+                                string rPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
+                                if (!modifiedFiles.Contains(rPath)) modifiedFiles.Add(rPath);
+                                return $"Successfully edited file: {rPath}";
+                            }
+                            return $"ERROR: Không tìm thấy đoạn target trong '{path}'. Hãy dùng read_file để xem chính xác mã nguồn hiện tại, hoặc dùng write_file để ghi đè toàn bộ nội dung hoàn chỉnh của tệp.";
                         }
-                        string updated = existing.Replace(target, replacement);
-                        await System.IO.File.WriteAllTextAsync(fullPath, updated, Encoding.UTF8);
+                        string newContent = existing.Replace(target, replacement);
+                        if (string.IsNullOrWhiteSpace(newContent))
+                        {
+                            return $"ERROR: Thao tác edit_file làm tệp '{path}' trở thành rỗng (0 byte). Thao tác bị từ chối. Hãy cung cấp replacement với code hoàn chỉnh.";
+                        }
+                        await System.IO.File.WriteAllTextAsync(fullPath, newContent, Encoding.UTF8);
                         string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
                         if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
                         return $"Successfully edited file: {relPath}";
                     }
                     case "delete_file":
                     {
-                        string path = args?["path"]?.ToString() ?? "";
-                        if (string.IsNullOrWhiteSpace(path)) return "Error: path is required";
+                        string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
+                        if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống.";
                         string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
-                            return "Error: Cannot access outside project directory";
+                            return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
                         if (System.IO.File.Exists(fullPath))
                         {
@@ -2854,8 +2909,8 @@ QUY TẮC TỐC ĐỘ VÀ THỰC THI (TỐI ƯU HÓA TỐI ĐA THỜI GIAN PHẢ
                     }
                     case "run_command":
                     {
-                        string command = args?["command"]?.ToString() ?? "";
-                        if (string.IsNullOrWhiteSpace(command)) return "Error: command is required";
+                        string command = ExtractStringArg(args, "command", "cmd", "script", "exec");
+                        if (string.IsNullOrWhiteSpace(command)) return "ERROR: Tham số 'command' không được để trống.";
                         executedCommands.Add(command);
                         AutoFixMapStaticAssets(projectPath);
                         var (ok, output) = await RunCliProcessAsync(projectPath, command, "", 60);
