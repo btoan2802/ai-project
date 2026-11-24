@@ -1367,20 +1367,25 @@ async function send() {
             return;
         }
 
+        if (current_chat_id && !conversation_id) {
+            conversation_id = current_chat_id;
+            window.history.pushState({ cid: conversation_id }, "", "/c/" + conversation_id);
+        }
+
         if (geminiRes.title && geminiRes.title !== "Chat mới" && !geminiRes.title.startsWith("{")) {
             document.title = `${geminiRes.title} - Btoan AI`;
-            const activeItem = document.querySelector(`.chat-history-item[data-id="${current_chat_id}"]`) ||
-                document.querySelector(`.history-item[data-id="${current_chat_id}"]`);
+            const targetId = current_chat_id || conversation_id;
+            const activeItem = document.querySelector(`.chat-history-item[data-id="${targetId}"]`) ||
+                document.querySelector(`.history-item[data-id="${targetId}"]`) ||
+                document.querySelector(`.chat-history-item.active`);
             if (activeItem) {
                 const titleEl = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
                 if (titleEl) titleEl.innerText = geminiRes.title;
             }
-            setTimeout(() => { if (typeof loadHistory === "function") loadHistory(); }, 500);
-        }
-        if (current_chat_id && !conversation_id) {
-            conversation_id = current_chat_id;
-            window.history.pushState({ cid: conversation_id }, "", "/c/" + conversation_id);
-            if (typeof loadHistory === "function") loadHistory();
+            if (typeof loadHistory === "function") {
+                loadHistory();
+                setTimeout(() => loadHistory(), 700);
+            }
         }
 
         // 🔥 AI quyết định export

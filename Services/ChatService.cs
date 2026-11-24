@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using BtoanAiNet.Models;
 using BtoanAiNet.Repositories;
 using BtoanAiNet.ViewModels;
@@ -705,6 +706,58 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             catch { }
             return string.Empty;
         }
+        private static string ExtractArtifactSummary(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text) || !text.Contains("[ARTIFACT")) return string.Empty;
+            try
+            {
+                var match = Regex.Match(text, @"\[ARTIFACT(?:\s+type=[""']([^""']+)[""'])?(?:\s+title=[""']([^""']+)[""'])?\]([\s\S]*?)\[\/ARTIFACT\]", RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    string type = match.Groups[1].Value.ToLowerInvariant().Trim();
+                    string title = match.Groups[2].Value.Trim();
+                    string body = match.Groups[3].Value.Trim();
+                    if (string.IsNullOrWhiteSpace(type)) type = "docx";
+                    if (string.IsNullOrWhiteSpace(title)) title = "Tài liệu";
+
+                    if (type == "xlsx")
+                    {
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(body);
+                            if (doc.RootElement.TryGetProperty("sheets", out var sheets) && sheets.GetArrayLength() > 0)
+                            {
+                                var firstSheet = sheets[0];
+                                var cols = new List<string>();
+                                if (firstSheet.TryGetProperty("columns", out var columns))
+                                {
+                                    foreach (var col in columns.EnumerateArray()) cols.Add(col.GetString() ?? "");
+                                }
+                                string colsStr = string.Join(", ", cols.Where(c => !string.IsNullOrWhiteSpace(c)));
+                                return $"[Đã xuất file Excel: \"{title}.xlsx\" - Cấu trúc cột: {colsStr}]";
+                            }
+                        }
+                        catch { }
+                        return $"[Đã xuất file Excel: \"{title}.xlsx\"]";
+                    }
+                    else if (type == "pptx")
+                    {
+                        return $"[Đã xuất bài thuyết trình PowerPoint: \"{title}.pptx\"]";
+                    }
+                    else if (type == "pdf")
+                    {
+                        return $"[Đã xuất tài liệu PDF: \"{title}.pdf\"]";
+                    }
+                    else
+                    {
+                        return $"[Đã xuất tài liệu Word: \"{title}.docx\"]";
+                    }
+                }
+            }
+            catch { }
+            return string.Empty;
+        }
+
         public async IAsyncEnumerable<string> StreamChatAsync(ChatRequestModel requestModel, string webRootPath, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             int userId = requestModel.User_Id ?? 0;
@@ -806,7 +859,9 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
                 if (!string.IsNullOrWhiteSpace(a))
                 {
-                    historyMessages.Add(new JsonObject { ["role"] = "model", ["parts"] = new JsonArray { new JsonObject { ["text"] = a } } });
+                    string artSummary = ExtractArtifactSummary(a);
+                    string finalAnswerWithSummary = string.IsNullOrWhiteSpace(artSummary) ? a : $"{a}\n\n{artSummary}";
+                    historyMessages.Add(new JsonObject { ["role"] = "model", ["parts"] = new JsonArray { new JsonObject { ["text"] = finalAnswerWithSummary } } });
                 }
             }
 
@@ -817,11 +872,46 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                                         lastModelAnswer.Contains("file pdf") || lastModelAnswer.Contains("file powerpoint") ||
                                         lastModelAnswer.Contains("bảng tính") || lastModelAnswer.Contains("bảng excel");
 
+            // Check recent 3 bot answers to see if an Artifact was recently generated
+            var recentBotAnswers = historyChats.TakeLast(3).Where(c => !string.IsNullOrWhiteSpace(c.Answer)).Select(c => c.Answer!).ToList();
+            string lastAnswerWithArtifact = recentBotAnswers.LastOrDefault(ans => ans.Contains("[ARTIFACT")) ?? "";
+            bool hasRecentArtifact = !string.IsNullOrWhiteSpace(lastAnswerWithArtifact);
+
+            string recentArtType = "xlsx";
+            string recentArtTitle = "Tài liệu hoàn chỉnh";
+            if (hasRecentArtifact)
+            {
+                var matchArt = System.Text.RegularExpressions.Regex.Match(lastAnswerWithArtifact, @"\[ARTIFACT(?:\s+type=[""']([^""']+)[""'])?(?:\s+title=[""']([^""']+)[""'])?\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (matchArt.Success)
+                {
+                    if (!string.IsNullOrWhiteSpace(matchArt.Groups[1].Value)) recentArtType = matchArt.Groups[1].Value.ToLowerInvariant().Trim();
+                    if (!string.IsNullOrWhiteSpace(matchArt.Groups[2].Value)) recentArtTitle = matchArt.Groups[2].Value.Trim();
+                }
+            }
+
+            // User confirmation keywords
             bool isUserConfirmation = lowerExportQ == "có" || lowerExportQ == "co" || lowerExportQ == "ok" || 
                                      lowerExportQ == "ừ" || lowerExportQ == "u" || lowerExportQ == "được" || 
                                      lowerExportQ == "duoc" || lowerExportQ == "làm đi" || lowerExportQ == "xuất đi" ||
                                      lowerExportQ == "tạo đi" || lowerExportQ == "có nhé" || lowerExportQ == "xuất file đi" ||
                                      lowerExportQ == "tạo file đi" || lowerExportQ == "tải về" || lowerExportQ == "làm tiếp đi";
+
+            // Data fill or modification keywords
+            bool isDataFillOrModify = lowerExportQ.Contains("nhét dữ liệu") || lowerExportQ.Contains("nhet du lieu") ||
+                                      lowerExportQ.Contains("điền thêm dữ liệu") || lowerExportQ.Contains("dien them du lieu") ||
+                                      lowerExportQ.Contains("thêm dữ liệu") || lowerExportQ.Contains("them du lieu") ||
+                                      lowerExportQ.Contains("dữ liệu mẫu") || lowerExportQ.Contains("du lieu mau") ||
+                                      lowerExportQ.Contains("sửa lại file") || lowerExportQ.Contains("sua lai file") ||
+                                      lowerExportQ.Contains("bổ sung thêm") || lowerExportQ.Contains("bo sung them") ||
+                                      lowerExportQ.Contains("thêm dòng") || lowerExportQ.Contains("them dong") ||
+                                      lowerExportQ.Contains("thêm cột") || lowerExportQ.Contains("them cot") ||
+                                      lowerExportQ.Contains("điền điểm") || lowerExportQ.Contains("dien diem") ||
+                                      lowerExportQ.Contains("cho số liệu") || lowerExportQ.Contains("cho so lieu") ||
+                                      lowerExportQ.Contains("nhập dữ liệu") || lowerExportQ.Contains("nhap du lieu") ||
+                                      lowerExportQ.Contains("điền dữ liệu") || lowerExportQ.Contains("dien du lieu") ||
+                                      lowerExportQ.Contains("nhét data") || lowerExportQ.Contains("thêm data") ||
+                                      lowerExportQ.Contains("cho data") || lowerExportQ.Contains("điền data") ||
+                                      lowerExportQ.Contains("fill data") || lowerExportQ.Contains("add data");
 
             bool isExplicitExport = lowerExportQ.Contains("xuất file") || lowerExportQ.Contains("tạo file") || 
                                    lowerExportQ.Contains("tải file") || lowerExportQ.Contains("lưu vào word") || 
@@ -835,7 +925,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                                    lowerExportQ.Contains("powerpoint") || lowerExportQ.Contains("pptx") ||
                                    lowerExportQ.Contains("bài thuyết trình") || lowerExportQ.Contains("slide");
 
-            bool isArtifactRequired = isExplicitExport || (modelOfferedArtifact && isUserConfirmation);
+            bool isArtifactRequired = isExplicitExport || (modelOfferedArtifact && isUserConfirmation) || (hasRecentArtifact && isDataFillOrModify);
 
             if (contents != null)
             {
@@ -845,7 +935,8 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
 
                 if (isArtifactRequired && currentContents.Count > 0)
                 {
-                    string targetType = "docx";
+                    string targetType = recentArtType;
+                    string targetTitle = recentArtTitle;
                     if (lowerExportQ.Contains("excel") || lowerExportQ.Contains("xlsx") || lowerExportQ.Contains("bảng tính") || lastModelAnswer.Contains("excel") || lastModelAnswer.Contains("bảng tính"))
                     {
                         targetType = "xlsx";
@@ -858,12 +949,24 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                     {
                         targetType = "pptx";
                     }
+                    else if (lowerExportQ.Contains("word") || lowerExportQ.Contains("docx") || lastModelAnswer.Contains("word") || lastModelAnswer.Contains("docx"))
+                    {
+                        targetType = "docx";
+                    }
 
                     var lastMsg = currentContents[currentContents.Count - 1]?.AsObject();
-                    if (lastMsg != null && lastMsg["parts"] is JsonArray pArr && pArr.Count > 0)
+                    if (lastMsg != null && lastMsg["parts"] is JsonArray pArr && pArr.Count > 0 && pArr[0] != null)
                     {
                         string origUserText = pArr[0]?["text"]?.ToString() ?? "";
-                        pArr[0]["text"] = $"{origUserText}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"...\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG!]";
+                        var targetPart = pArr[0]!.AsObject();
+                        if (isDataFillOrModify && hasRecentArtifact)
+                        {
+                            targetPart["text"] = $"{origUserText}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu điền thêm/chỉnh sửa dữ liệu cho file {targetType.ToUpper()} '{targetTitle}' vừa tạo ở trên. Bạn BẮT BUỘC giữ nguyên cấu trúc các cột/tiêu đề và xuất lại thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"] chứa tối thiểu 10 đến 15 dòng dữ liệu mẫu thực tế hoàn chỉnh, số liệu phong phú sinh động, tuyệt đối không để bảng trống, không viết code tóm tắt, TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG!]";
+                        }
+                        else
+                        {
+                            targetPart["text"] = $"{origUserText}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"{targetTitle}\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG!]";
+                        }
                     }
                 }
 

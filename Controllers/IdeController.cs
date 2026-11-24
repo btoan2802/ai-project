@@ -313,8 +313,8 @@ namespace BtoanAiNet.Controllers
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""11.0.0"" />
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""9.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""10.0.0"" />
   </ItemGroup>
 </Project>";
             System.IO.File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csproj, Encoding.UTF8);
@@ -561,8 +561,8 @@ app.Run();";
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include=""Microsoft.AspNetCore.OpenApi"" Version=""10.0.0"" />
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""11.0.0"" />
-    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""9.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
+    <PackageReference Include=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""10.0.0"" />
   </ItemGroup>
 </Project>";
             System.IO.File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csproj, Encoding.UTF8);

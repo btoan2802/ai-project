@@ -187,61 +187,64 @@ namespace BtoanAiNet.Controllers
                     catch { }
                 }
 
-                // If this is a new conversation or title is "Chat mới", auto-generate title in Vietnamese
-                if (currentUid > 0 && conversationId > 0 && (isNewConv || string.IsNullOrWhiteSpace(convTitle)))
+                // Auto-generate title whenever Title == "Chat mới", empty, or isNewConv
+                if (currentUid > 0 && conversationId > 0)
                 {
                     try
                     {
                         var existing = await _conversationRepository.GetConversationByIdAsync(conversationId, currentUid);
-                        if (existing != null && (existing.Title == "Chat mới" || isNewConv))
+                        bool needsTitle = isNewConv || existing == null || string.IsNullOrWhiteSpace(existing.Title) || existing.Title == "Chat mới";
+                        if (needsTitle)
                         {
-                            var history = await _conversationRepository.GetChatHistoryAsync(conversationId, currentUid, 5);
-                            if (history.Count <= 1 || isNewConv)
+                            string qCandidate = model.Question ?? (model.Payload?["question"]?.ToString() ?? "");
+                            if (string.IsNullOrWhiteSpace(qCandidate) && model.Payload?["contents"] is System.Text.Json.Nodes.JsonArray cArr && cArr.Count > 0)
                             {
-                                string firstQText = history.FirstOrDefault()?.Question ?? model.Question ?? "";
-                                if (string.IsNullOrWhiteSpace(firstQText) && model.Payload?["contents"] is System.Text.Json.Nodes.JsonArray cArr2 && cArr2.Count > 0)
+                                var lastU = cArr.LastOrDefault(c => c?["role"]?.ToString() == "user");
+                                if (lastU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
                                 {
-                                    var firstU = cArr2.FirstOrDefault(c => c?["role"]?.ToString() == "user");
-                                    if (firstU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
-                                    {
-                                        firstQText = pArr[0]?["text"]?.ToString() ?? "";
-                                    }
+                                    qCandidate = pArr[0]?["text"]?.ToString() ?? "";
                                 }
+                            }
 
-                                string quickTitle = firstQText.Trim();
-                                string lowerQ = quickTitle.ToLowerInvariant();
-                                if (lowerQ == "có" || lowerQ == "ok" || lowerQ == "ừ" || lowerQ == "ê" || lowerQ == "chào" || string.IsNullOrWhiteSpace(quickTitle))
+                            string meaningfulQ = "";
+                            string lowerQC = (qCandidate ?? "").Trim().ToLowerInvariant();
+                            bool isFiller = lowerQC == "có" || lowerQC == "co" || lowerQC == "ok" || lowerQC == "ừ" || lowerQC == "u" || lowerQC == "được" || lowerQC == "chào" || lowerQC == "ê" || lowerQC.Length <= 1;
+                            if (!isFiller && !string.IsNullOrWhiteSpace(qCandidate))
+                            {
+                                meaningfulQ = qCandidate.Trim();
+                            }
+                            else
+                            {
+                                var history = await _conversationRepository.GetChatHistoryAsync(conversationId, currentUid, 10);
+                                var found = history.FirstOrDefault(h => {
+                                    string t = (h.Question ?? "").Trim().ToLowerInvariant();
+                                    return t != "có" && t != "co" && t != "ok" && t != "ừ" && t != "chào" && t != "ê" && t.Length > 2;
+                                });
+                                if (found != null && !string.IsNullOrWhiteSpace(found.Question))
                                 {
-                                    quickTitle = "Cuộc trò chuyện mới";
+                                    meaningfulQ = found.Question.Trim();
                                 }
-                                else if (quickTitle.Length > 35)
-                                {
-                                    quickTitle = quickTitle.Substring(0, 35) + "...";
-                                }
+                            }
 
+                            if (!string.IsNullOrWhiteSpace(meaningfulQ))
+                            {
+                                string quickTitle = meaningfulQ;
+                                if (quickTitle.Length > 35) quickTitle = quickTitle.Substring(0, 35) + "...";
                                 convTitle = quickTitle;
                                 await _conversationRepository.UpdateConversationTitleAsync(conversationId, quickTitle);
 
-                                // Background Gemini title generation without blocking the SSE done stream
-                                int cId = conversationId;
-                                string bgQText = firstQText;
-                                _ = Task.Run(async () =>
+                                try
                                 {
-                                    try
+                                    var refined = await _chatService.GenerateTitleAsync(meaningfulQ);
+                                    if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && refined.ToLowerInvariant() != "có" && refined.ToLowerInvariant() != "ok" && !refined.StartsWith("{") && !refined.StartsWith("["))
                                     {
-                                        using var scope = _scopeFactory.CreateScope();
-                                        var chatSvc = scope.ServiceProvider.GetRequiredService<IChatService>();
-                                        var convRepo = scope.ServiceProvider.GetRequiredService<IConversationRepository>();
-                                        var refined = await chatSvc.GenerateTitleAsync(bgQText);
-                                        if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && refined.ToLowerInvariant() != "có" && refined.ToLowerInvariant() != "ok" && !refined.StartsWith("{") && !refined.StartsWith("["))
-                                        {
-                                            await convRepo.UpdateConversationTitleAsync(cId, refined);
-                                        }
+                                        convTitle = refined;
+                                        await _conversationRepository.UpdateConversationTitleAsync(conversationId, refined);
                                     }
-                                    catch { }
-                                });
+                                }
+                                catch { }
                             }
-                            else
+                            else if (existing != null)
                             {
                                 convTitle = existing.Title;
                             }
