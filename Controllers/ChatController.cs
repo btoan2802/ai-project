@@ -195,39 +195,56 @@ namespace BtoanAiNet.Controllers
                         var existing = await _conversationRepository.GetConversationByIdAsync(conversationId, currentUid);
                         if (existing != null && (existing.Title == "Chat mới" || isNewConv))
                         {
-                            string qText = model.Question ?? (model.Payload?["question"]?.ToString() ?? "");
-                            if (string.IsNullOrWhiteSpace(qText) && model.Payload?["contents"] is System.Text.Json.Nodes.JsonArray cArr2 && cArr2.Count > 0)
+                            var history = await _conversationRepository.GetChatHistoryAsync(conversationId, currentUid, 5);
+                            if (history.Count <= 1 || isNewConv)
                             {
-                                var lastU = cArr2.LastOrDefault(c => c?["role"]?.ToString() == "user");
-                                if (lastU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
+                                string firstQText = history.FirstOrDefault()?.Question ?? model.Question ?? "";
+                                if (string.IsNullOrWhiteSpace(firstQText) && model.Payload?["contents"] is System.Text.Json.Nodes.JsonArray cArr2 && cArr2.Count > 0)
                                 {
-                                    qText = pArr[0]?["text"]?.ToString() ?? "";
-                                }
-                            }
-                            string quickTitle = qText.Trim();
-                            if (quickTitle.Length > 35) quickTitle = quickTitle.Substring(0, 35) + "...";
-                            if (string.IsNullOrWhiteSpace(quickTitle)) quickTitle = "Chat mới";
-                            convTitle = quickTitle;
-                            await _conversationRepository.UpdateConversationTitleAsync(conversationId, quickTitle);
-
-                            // Background Gemini title generation without blocking the SSE done stream
-                            int cId = conversationId;
-                            string bgQText = quickTitle;
-                            _ = Task.Run(async () =>
-                            {
-                                try
-                                {
-                                    using var scope = _scopeFactory.CreateScope();
-                                    var chatSvc = scope.ServiceProvider.GetRequiredService<IChatService>();
-                                    var convRepo = scope.ServiceProvider.GetRequiredService<IConversationRepository>();
-                                    var refined = await chatSvc.GenerateTitleAsync(bgQText);
-                                    if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && !refined.StartsWith("{") && !refined.StartsWith("["))
+                                    var firstU = cArr2.FirstOrDefault(c => c?["role"]?.ToString() == "user");
+                                    if (firstU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
                                     {
-                                        await convRepo.UpdateConversationTitleAsync(cId, refined);
+                                        firstQText = pArr[0]?["text"]?.ToString() ?? "";
                                     }
                                 }
-                                catch { }
-                            });
+
+                                string quickTitle = firstQText.Trim();
+                                string lowerQ = quickTitle.ToLowerInvariant();
+                                if (lowerQ == "có" || lowerQ == "ok" || lowerQ == "ừ" || lowerQ == "ê" || lowerQ == "chào" || string.IsNullOrWhiteSpace(quickTitle))
+                                {
+                                    quickTitle = "Cuộc trò chuyện mới";
+                                }
+                                else if (quickTitle.Length > 35)
+                                {
+                                    quickTitle = quickTitle.Substring(0, 35) + "...";
+                                }
+
+                                convTitle = quickTitle;
+                                await _conversationRepository.UpdateConversationTitleAsync(conversationId, quickTitle);
+
+                                // Background Gemini title generation without blocking the SSE done stream
+                                int cId = conversationId;
+                                string bgQText = firstQText;
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        using var scope = _scopeFactory.CreateScope();
+                                        var chatSvc = scope.ServiceProvider.GetRequiredService<IChatService>();
+                                        var convRepo = scope.ServiceProvider.GetRequiredService<IConversationRepository>();
+                                        var refined = await chatSvc.GenerateTitleAsync(bgQText);
+                                        if (!string.IsNullOrWhiteSpace(refined) && refined != "Chat mới" && refined.ToLowerInvariant() != "có" && refined.ToLowerInvariant() != "ok" && !refined.StartsWith("{") && !refined.StartsWith("["))
+                                        {
+                                            await convRepo.UpdateConversationTitleAsync(cId, refined);
+                                        }
+                                    }
+                                    catch { }
+                                });
+                            }
+                            else
+                            {
+                                convTitle = existing.Title;
+                            }
                         }
                         else if (existing != null)
                         {

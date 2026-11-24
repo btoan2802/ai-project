@@ -72,9 +72,9 @@ function typesetMathInElement(elem) {
         requestAnimationFrame(() => {
             if (elem.isConnected && window.MathJax) {
                 if (typeof MathJax.typesetPromise === "function") {
-                    MathJax.typesetPromise([elem]).catch(() => {});
+                    MathJax.typesetPromise([elem]).catch(() => { });
                 } else if (typeof MathJax.typeset === "function") {
-                    try { MathJax.typeset([elem]); } catch(e){}
+                    try { MathJax.typeset([elem]); } catch (e) { }
                 }
             }
         });
@@ -84,7 +84,7 @@ function typesetMathInElement(elem) {
         if (typeof MathJax.typesetPromise === "function") {
             MathJax.typesetPromise([elem]).catch(err => console.debug("MathJax typesetPromise:", err));
         } else if (typeof MathJax.typeset === "function") {
-            try { MathJax.typeset([elem]); } catch(e){}
+            try { MathJax.typeset([elem]); } catch (e) { }
         }
     }
 }
@@ -116,7 +116,7 @@ function setMode(m) {
         } else {
             status.innerHTML = `<span class="fw-semibold">⚡ Btoan 2.5 Flash</span>`;
             status.className = "badge bg-light text-dark ms-1 border d-inline-flex align-items-center";
-            status.style.backgroundColor = ""; 
+            status.style.backgroundColor = "";
             status.style.padding = "4px 10px";
             status.style.borderRadius = "20px";
         }
@@ -205,42 +205,38 @@ function detectThinking(userText) {
 }
 
 function userWantsExport(text = "") {
-    const t = String(text || "").toLowerCase()
+    const t = String(text || "").trim().toLowerCase();
 
-    return [
-        "xuất file",
-        "tải file",
-        "file word",
-        "bỏ vào word",
-        "cho vào word",
-        "vào word",
-        "bỏ vào excel",
-        "cho vào excel",
-        "vào excel",
-        "bỏ vào ppt",
-        "bỏ vào powerpoint",
-        "cho vào ppt",
-        "vào ppt",
-        "docx",
-        "pdf",
-        "xlsx",
-        "pptx",
-        "txt",
-        "lưu file",
-        "tạo file",
-        "download file",
-        "xuất word",
-        "xuất docx",
-        "tạo tài liệu",
-        "xuất tài liệu"
-    ].some(k => t.includes(k))
+    const explicitKeywords = [
+        "xuất file", "tải file", "file word", "bỏ vào word", "cho vào word", "vào word",
+        "bỏ vào excel", "cho vào excel", "vào excel", "bỏ vào ppt", "bỏ vào powerpoint",
+        "cho vào ppt", "vào ppt", "docx", "pdf", "xlsx", "pptx", "txt", "lưu file",
+        "tạo file", "download file", "xuất word", "xuất docx", "tạo tài liệu", "xuất tài liệu",
+        "tạo file excel", "xuất excel", "tạo file word", "tạo file pdf"
+    ];
+
+    if (explicitKeywords.some(k => t.includes(k))) return true;
+
+    // Check if user confirmed after bot offered file creation
+    const isConfirm = t === "có" || t === "co" || t === "ok" || t === "ừ" || t === "u" || 
+                      t === "được" || t === "duoc" || t === "làm đi" || t === "xuất đi" || 
+                      t === "tạo đi" || t === "có nhé" || t === "xuất file đi" || t === "tạo file đi";
+
+    const lastBot = String(lastAIAnswer || "").toLowerCase();
+    const botOffered = lastBot.includes("tạo file") || lastBot.includes("xuất file") || 
+                       lastBot.includes("file excel") || lastBot.includes("file word") || 
+                       lastBot.includes("bảng tính") || lastBot.includes("file pdf");
+
+    return isConfirm && botOffered;
 }
 
 function detectExportType(text = "") {
     const t = String(text || "").toLowerCase();
-    if (t.includes("excel") || t.includes("xlsx") || t.includes("bảng tính")) return "xlsx";
-    if (t.includes("powerpoint") || t.includes("pptx") || t.includes("slide") || t.includes("thuyết trình")) return "pptx";
-    if (t.includes("pdf")) return "pdf";
+    const lastBot = String(lastAIAnswer || "").toLowerCase();
+
+    if (t.includes("excel") || t.includes("xlsx") || t.includes("bảng tính") || lastBot.includes("excel") || lastBot.includes("bảng tính")) return "xlsx";
+    if (t.includes("powerpoint") || t.includes("pptx") || t.includes("slide") || t.includes("thuyết trình") || lastBot.includes("powerpoint") || lastBot.includes("ppt")) return "pptx";
+    if (t.includes("pdf") || lastBot.includes("pdf")) return "pdf";
     return "docx";
 }
 
@@ -774,7 +770,7 @@ function streamBot(text, exportType = null) {
 
             // Highlight syntax 1 lần duy nhất sau khi stream xong để tiết kiệm tài nguyên
             content.querySelectorAll("pre code").forEach(el => {
-                try { hljs.highlightElement(el); } catch(e){}
+                try { hljs.highlightElement(el); } catch (e) { }
             });
 
             content.querySelectorAll("pre").forEach(block => {
@@ -799,8 +795,8 @@ function streamBot(text, exportType = null) {
 
             if (window.MathJax) {
                 try {
-                    MathJax.typesetPromise([bubble]).catch(mjErr => {});
-                } catch(e){}
+                    MathJax.typesetPromise([bubble]).catch(mjErr => { });
+                } catch (e) { }
             }
         }
     }, 16);
@@ -1105,7 +1101,7 @@ async function callGemini(userText, images, files) {
     if (data?.conversation_title && data.conversation_title !== "Chat mới" && !data.conversation_title.startsWith("{")) {
         document.title = `${data.conversation_title} - Btoan AI`;
         const activeItem = document.querySelector(`.chat-history-item[data-id="${conversation_id}"]`) ||
-                           document.querySelector(`.history-item[data-id="${conversation_id}"]`);
+            document.querySelector(`.history-item[data-id="${conversation_id}"]`);
         if (activeItem) {
             const activeTitle = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
             if (activeTitle) activeTitle.innerText = data.conversation_title;
@@ -1374,7 +1370,7 @@ async function send() {
         if (geminiRes.title && geminiRes.title !== "Chat mới" && !geminiRes.title.startsWith("{")) {
             document.title = `${geminiRes.title} - Btoan AI`;
             const activeItem = document.querySelector(`.chat-history-item[data-id="${current_chat_id}"]`) ||
-                               document.querySelector(`.history-item[data-id="${current_chat_id}"]`);
+                document.querySelector(`.history-item[data-id="${current_chat_id}"]`);
             if (activeItem) {
                 const titleEl = activeItem.querySelector(".chat-title") || activeItem.querySelector(".history-title");
                 if (titleEl) titleEl.innerText = geminiRes.title;
@@ -1694,7 +1690,7 @@ async function send() {
             };
 
             const segmentPrompt = sanitizePrompt(videoPrompt);
-            
+
             // 🔥 TỐI ƯU CHO TIẾNG VIỆT (Gửi thêm chỉ dẫn tiếng Anh cho Google Veo)
             const hasVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(segmentPrompt);
             let finalVideoPrompt = segmentPrompt;
@@ -1996,14 +1992,14 @@ async function loadHistory() {
             return;
         }
 
-    data.forEach((c) => {
-        const div = document.createElement("div")
-        // Apply active class if this is the current conversation
-        const isActive = conversation_id == c.id;
-        div.className = `chat-history-item d-flex justify-content-between align-items-center ${isActive ? 'active' : ''}`;
-        div.setAttribute('data-id', c.id);
+        data.forEach((c) => {
+            const div = document.createElement("div")
+            // Apply active class if this is the current conversation
+            const isActive = conversation_id == c.id;
+            div.className = `chat-history-item d-flex justify-content-between align-items-center ${isActive ? 'active' : ''}`;
+            div.setAttribute('data-id', c.id);
 
-        div.innerHTML = `
+            div.innerHTML = `
     <div class="chat-title">${c.title}</div>
     <div class="dropdown" onclick="event.stopPropagation()">
         <button class="history-action-btn" data-bs-toggle="dropdown" aria-expanded="false">
@@ -2027,9 +2023,9 @@ async function loadHistory() {
     </div>
     `;
 
-        div.onclick = () => loadConversation(c.id);
-        list.appendChild(div);
-    });
+            div.onclick = () => loadConversation(c.id);
+            list.appendChild(div);
+        });
     } catch (err) {
         console.warn("Failed to load history:", err);
     }
@@ -2990,102 +2986,102 @@ async function checkProfile(user_id) {
         const res = await fetch("/ai/api/check_profile.php?user_id=" + user_id);
         const data = await res.json();
 
-    const fullName = data.full_name?.trim()
+        const fullName = data.full_name?.trim()
 
-    const name =
-        fullName ||
-        localStorage.getItem("full_name") ||
-        localStorage.getItem("username") ||
-        "User"
+        const name =
+            fullName ||
+            localStorage.getItem("full_name") ||
+            localStorage.getItem("username") ||
+            "User"
 
-    if (fullName) {
-        localStorage.setItem("full_name", fullName);
-    }
+        if (fullName) {
+            localStorage.setItem("full_name", fullName);
+        }
 
-    // ✅ set tên
-    document.getElementById("userName").innerText = name
-    updateWelcomeGreeting(name);
+        // ✅ set tên
+        document.getElementById("userName").innerText = name
+        updateWelcomeGreeting(name);
 
-    // ✅ avatar chữ cái đầu
-    const avatarEl = document.getElementById("userAvatar")
+        // ✅ avatar chữ cái đầu
+        const avatarEl = document.getElementById("userAvatar")
 
-    // reset
-    avatarEl.innerHTML = ""
-    avatarEl.style.background = "none"
+        // reset
+        avatarEl.innerHTML = ""
+        avatarEl.style.background = "none"
 
-    if (data.avatar) {
+        if (data.avatar) {
 
-        const url = data.avatar + "?t=" + Date.now()
+            const url = data.avatar + "?t=" + Date.now()
 
-        avatarEl.innerHTML = `
+            avatarEl.innerHTML = `
                 <img src="${url}" 
                     style="width:100%;height:100%;border-radius:50%">
             `
 
-    } else {
+        } else {
 
-        avatarEl.innerText = name.charAt(0).toUpperCase()
+            avatarEl.innerText = name.charAt(0).toUpperCase()
 
+            const colors = [
+                "linear-gradient(135deg,#6366f1,#4f46e5)",
+                "linear-gradient(135deg,#22c55e,#16a34a)",
+                "linear-gradient(135deg,#f59e0b,#d97706)",
+                "linear-gradient(135deg,#ef4444,#dc2626)"
+            ]
+
+            avatarEl.style.background = colors[name.length % colors.length]
+        }
+
+        // 🎨 màu avatar
         const colors = [
             "linear-gradient(135deg,#6366f1,#4f46e5)",
             "linear-gradient(135deg,#22c55e,#16a34a)",
             "linear-gradient(135deg,#f59e0b,#d97706)",
             "linear-gradient(135deg,#ef4444,#dc2626)"
         ]
-
         avatarEl.style.background = colors[name.length % colors.length]
-    }
 
-    // 🎨 màu avatar
-    const colors = [
-        "linear-gradient(135deg,#6366f1,#4f46e5)",
-        "linear-gradient(135deg,#22c55e,#16a34a)",
-        "linear-gradient(135deg,#f59e0b,#d97706)",
-        "linear-gradient(135deg,#ef4444,#dc2626)"
-    ]
-    avatarEl.style.background = colors[name.length % colors.length]
-
-    // Đồng bộ thông tin user vào Card dưới cùng của Sidebar
-    const sidebarNameEl = document.getElementById("sidebarUserName");
-    if (sidebarNameEl) sidebarNameEl.innerText = name;
-    const sidebarRoleEl = document.getElementById("sidebarUserRole");
-    if (sidebarRoleEl) sidebarRoleEl.innerText = data.role || "Developer / Member";
-    const sidebarAvatarEl = document.getElementById("sidebarUserAvatar");
-    if (sidebarAvatarEl) {
-        if (data.avatar) {
-            sidebarAvatarEl.innerHTML = `<img src="${data.avatar}?t=${Date.now()}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
-        } else {
-            sidebarAvatarEl.innerText = name.charAt(0).toUpperCase();
-            sidebarAvatarEl.style.background = colors[name.length % colors.length];
+        // Đồng bộ thông tin user vào Card dưới cùng của Sidebar
+        const sidebarNameEl = document.getElementById("sidebarUserName");
+        if (sidebarNameEl) sidebarNameEl.innerText = name;
+        const sidebarRoleEl = document.getElementById("sidebarUserRole");
+        if (sidebarRoleEl) sidebarRoleEl.innerText = data.role || "Developer / Member";
+        const sidebarAvatarEl = document.getElementById("sidebarUserAvatar");
+        if (sidebarAvatarEl) {
+            if (data.avatar) {
+                sidebarAvatarEl.innerHTML = `<img src="${data.avatar}?t=${Date.now()}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+            } else {
+                sidebarAvatarEl.innerText = name.charAt(0).toUpperCase();
+                sidebarAvatarEl.style.background = colors[name.length % colors.length];
+            }
         }
-    }
 
-    // 💾 lưu lại full_name để dùng sau
-    if (fullName) {
-        localStorage.setItem("full_name", fullName)
-    }
+        // 💾 lưu lại full_name để dùng sau
+        if (fullName) {
+            localStorage.setItem("full_name", fullName)
+        }
 
-    // =========================
-    // 🔥 LOGIC MỚI (QUAN TRỌNG)
-    // =========================
+        // =========================
+        // 🔥 LOGIC MỚI (QUAN TRỌNG)
+        // =========================
 
-    // 👉 LUÔN show chat (không dùng profileBox nữa)
-    document.getElementById("chatApp").style.display = "flex"
+        // 👉 LUÔN show chat (không dùng profileBox nữa)
+        document.getElementById("chatApp").style.display = "flex"
 
-    // 👉 nếu CHƯA có profile → bật popup
-    if (!data.has_profile) {
+        // 👉 nếu CHƯA có profile → bật popup
+        if (!data.has_profile) {
 
-        document.getElementById("profileModal").style.display = "flex"
+            document.getElementById("profileModal").style.display = "flex"
 
-        localStorage.setItem("has_profile", "0")
+            localStorage.setItem("has_profile", "0")
 
-    } else {
+        } else {
 
-        // 👉 có profile → đóng popup
-        document.getElementById("profileModal").style.display = "none"
+            // 👉 có profile → đóng popup
+            document.getElementById("profileModal").style.display = "none"
 
-        localStorage.setItem("has_profile", "1")
-    }
+            localStorage.setItem("has_profile", "1")
+        }
     } catch (e) {
         console.warn("Failed to check profile:", e);
     }
@@ -3787,7 +3783,7 @@ async function pollVideoStatus(job_id, containerBubble, chat_id) {
                         </div>
                     `;
                     scrollToBottom();
-                }, 1200); 
+                }, 1200);
                 return;
             }
 
@@ -3837,7 +3833,7 @@ document.addEventListener('keydown', (e) => {
 // 📥 FORCE DOWNLOAD VIDEO (VIA PROXY TO BYPASS CORS)
 async function forceDownloadVideo(url, filename, btn) {
     if (!url) return;
-    
+
     const originalContent = btn.innerHTML;
     try {
         btn.disabled = true;
@@ -3845,22 +3841,22 @@ async function forceDownloadVideo(url, filename, btn) {
 
         // Sử dụng proxy để né CORS và ép tải xuống chuẩn hơn
         const proxyUrl = `/ai/api/download_proxy.php?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
-        
+
         // Cách 1: Fetch qua proxy (để giữ UI loading)
         const response = await fetch(proxyUrl);
         if (!response.ok) throw new Error("Proxy error");
-        
+
         const blob = await response.blob();
         const blobUrl = window.URL.createObjectURL(blob);
-        
+
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = blobUrl;
         a.download = filename;
-        
+
         document.body.appendChild(a);
         a.click();
-        
+
         window.URL.revokeObjectURL(blobUrl);
         document.body.removeChild(a);
 
@@ -3868,7 +3864,7 @@ async function forceDownloadVideo(url, filename, btn) {
     } catch (err) {
         console.error("❌ Download error:", err);
         btn.innerHTML = `<i class='bx bx-error'></i> <span>Lỗi rồi!</span>`;
-        
+
         // Cách 2: Direct link qua proxy (fallback cuối cùng)
         const proxyUrl = `/ai/api/download_proxy.php?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
         window.location.href = proxyUrl;
@@ -3978,16 +3974,16 @@ function speakLyrics(btn) {
     }
     if (!textToSpeak) textToSpeak = "Giai điệu âm nhạc vui tươi từ Btoan AI!";
     textToSpeak = textToSpeak.replace(/\[GENMUSIC\].*$/gis, "").replace(/\[.*?\]/g, "");
-    
+
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.lang = "vi-VN";
     utterance.rate = 0.95;
     utterance.pitch = 1.05;
-    
+
     utterance.onend = () => {
         btn.innerHTML = `<i class="bi bi-volume-up me-1"></i> <span>Đọc lời hát</span>`;
     };
-    
+
     btn.innerHTML = `<i class="bi bi-stop-circle text-danger me-1"></i> <span class="text-danger">Dừng đọc</span>`;
     window.speechSynthesis.speak(utterance);
 }

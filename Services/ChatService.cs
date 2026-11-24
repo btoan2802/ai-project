@@ -642,7 +642,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                     }
                 };
 
-                var res = await _geminiService.GenerateContentAsync("gemini-3.5-flash", titlePayload);
+                var res = await _geminiService.GenerateContentAsync("gemini-flash-lite-latest", titlePayload);
                 string clean = "";
                 if (res.Success && res.ResponseData != null)
                 {
@@ -658,10 +658,21 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
 
                 clean = clean.Trim('"', '\'', '`', '\r', '\n', ' ');
+                string lowerClean = clean.ToLowerInvariant();
+                if (lowerClean == "có" || lowerClean == "ok" || lowerClean == "ừ" || lowerClean == "không" || lowerClean == "chào" || lowerClean == "ê")
+                {
+                    clean = "";
+                }
+
                 // Security & Validity check: if JSON, cut-off, or empty, fallback to clean user prompt
                 if (string.IsNullOrWhiteSpace(clean) || clean.StartsWith("{") || clean.StartsWith("[") || clean.Length < 3)
                 {
                     string fallback = firstPrompt.Trim();
+                    string lowerFallback = fallback.ToLowerInvariant();
+                    if (lowerFallback == "có" || lowerFallback == "ok" || lowerFallback == "ừ" || lowerFallback == "chào" || lowerFallback == "ê")
+                    {
+                        return "Cuộc trò chuyện mới";
+                    }
                     if (fallback.Length > 45) fallback = fallback.Substring(0, 45) + "...";
                     return fallback;
                 }
@@ -772,18 +783,14 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string trimmedQ = (question ?? "").Trim().ToLowerInvariant();
-            bool isShortChat = string.IsNullOrWhiteSpace(trimmedQ) || 
-                               trimmedQ.Length <= 10 || 
-                               trimmedQ == "ê" || trimmedQ == "ko" || trimmedQ == "không" || 
-                               trimmedQ == "um" || trimmedQ == "ừ" || trimmedQ == "ok" || 
-                               trimmedQ == "chào" || trimmedQ == "hi" || trimmedQ == "hello";
 
+            // ALWAYS load conversation history if conversationId > 0 so short answers like 'có', 'ok', 'làm đi' retain 100% context
             var historyChats = new List<Chat>();
-            if (!isShortChat && userId > 0 && conversationId > 0)
+            if (userId > 0 && conversationId > 0)
             {
                 try
                 {
-                    historyChats = await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 6);
+                    historyChats = await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 20);
                 }
                 catch { }
             }
@@ -793,29 +800,77 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             {
                 string q = chat.Question ?? "";
                 string a = chat.Answer ?? "";
-                historyMessages.Add(new JsonObject { ["role"] = "user", ["parts"] = new JsonArray { new JsonObject { ["text"] = q } } });
-                if (!string.IsNullOrEmpty(a))
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    historyMessages.Add(new JsonObject { ["role"] = "user", ["parts"] = new JsonArray { new JsonObject { ["text"] = q } } });
+                }
+                if (!string.IsNullOrWhiteSpace(a))
                 {
                     historyMessages.Add(new JsonObject { ["role"] = "model", ["parts"] = new JsonArray { new JsonObject { ["text"] = a } } });
                 }
             }
+
+            string lowerExportQ = trimmedQ;
+            string lastModelAnswer = historyChats.LastOrDefault(c => !string.IsNullOrWhiteSpace(c.Answer))?.Answer?.ToLowerInvariant() ?? "";
+            bool modelOfferedArtifact = lastModelAnswer.Contains("tạo file") || lastModelAnswer.Contains("xuất file") || 
+                                        lastModelAnswer.Contains("file excel") || lastModelAnswer.Contains("file word") ||
+                                        lastModelAnswer.Contains("file pdf") || lastModelAnswer.Contains("file powerpoint") ||
+                                        lastModelAnswer.Contains("bảng tính") || lastModelAnswer.Contains("bảng excel");
+
+            bool isUserConfirmation = lowerExportQ == "có" || lowerExportQ == "co" || lowerExportQ == "ok" || 
+                                     lowerExportQ == "ừ" || lowerExportQ == "u" || lowerExportQ == "được" || 
+                                     lowerExportQ == "duoc" || lowerExportQ == "làm đi" || lowerExportQ == "xuất đi" ||
+                                     lowerExportQ == "tạo đi" || lowerExportQ == "có nhé" || lowerExportQ == "xuất file đi" ||
+                                     lowerExportQ == "tạo file đi" || lowerExportQ == "tải về" || lowerExportQ == "làm tiếp đi";
+
+            bool isExplicitExport = lowerExportQ.Contains("xuất file") || lowerExportQ.Contains("tạo file") || 
+                                   lowerExportQ.Contains("tải file") || lowerExportQ.Contains("lưu vào word") || 
+                                   lowerExportQ.Contains("xuất word") || lowerExportQ.Contains("xuất docx") || 
+                                   lowerExportQ.Contains("tạo file docx") || lowerExportQ.Contains("vào word") ||
+                                   lowerExportQ.Contains("bỏ vào word") || lowerExportQ.Contains("cho vào word") ||
+                                   lowerExportQ.Contains("xuất excel") || lowerExportQ.Contains("tạo file excel") ||
+                                   lowerExportQ.Contains("file excel") || lowerExportQ.Contains("xlsx") ||
+                                   lowerExportQ.Contains("bảng tính") || lowerExportQ.Contains("xuất pdf") ||
+                                   lowerExportQ.Contains("tạo file pdf") || lowerExportQ.Contains("file pdf") ||
+                                   lowerExportQ.Contains("powerpoint") || lowerExportQ.Contains("pptx") ||
+                                   lowerExportQ.Contains("bài thuyết trình") || lowerExportQ.Contains("slide");
+
+            bool isArtifactRequired = isExplicitExport || (modelOfferedArtifact && isUserConfirmation);
 
             if (contents != null)
             {
                 var currentContents = new JsonArray();
                 foreach (var item in historyMessages) currentContents.Add(item?.DeepClone());
                 foreach (var item in contents) currentContents.Add(item?.DeepClone());
+
+                if (isArtifactRequired && currentContents.Count > 0)
+                {
+                    string targetType = "docx";
+                    if (lowerExportQ.Contains("excel") || lowerExportQ.Contains("xlsx") || lowerExportQ.Contains("bảng tính") || lastModelAnswer.Contains("excel") || lastModelAnswer.Contains("bảng tính"))
+                    {
+                        targetType = "xlsx";
+                    }
+                    else if (lowerExportQ.Contains("pdf") || lastModelAnswer.Contains("pdf"))
+                    {
+                        targetType = "pdf";
+                    }
+                    else if (lowerExportQ.Contains("ppt") || lowerExportQ.Contains("powerpoint") || lowerExportQ.Contains("slide") || lastModelAnswer.Contains("ppt") || lastModelAnswer.Contains("powerpoint"))
+                    {
+                        targetType = "pptx";
+                    }
+
+                    var lastMsg = currentContents[currentContents.Count - 1]?.AsObject();
+                    if (lastMsg != null && lastMsg["parts"] is JsonArray pArr && pArr.Count > 0)
+                    {
+                        string origUserText = pArr[0]?["text"]?.ToString() ?? "";
+                        pArr[0]["text"] = $"{origUserText}\n\n[HỆ THỐNG YÊU CẦU: Người dùng yêu cầu / xác nhận xuất tài liệu định dạng '{targetType}'. Bạn BẮT BUỘC chép trọn vẹn dữ liệu đầy đủ đẹp mắt vào thẻ [ARTIFACT type=\"{targetType}\" title=\"...\"]...[/ARTIFACT]. TUYỆT ĐỐI CẤM HỎI LẠI NGƯỜI DÙNG!]";
+                    }
+                }
+
                 payload["contents"] = currentContents;
             }
 
-            string lowerExportQ = (question ?? "").ToLowerInvariant();
-            bool isExportFollowup = lowerExportQ.Contains("bỏ vào word") || lowerExportQ.Contains("cho vào word") || 
-                                    lowerExportQ.Contains("vào word") || lowerExportQ.Contains("xuất file") || 
-                                    lowerExportQ.Contains("tạo file word") || lowerExportQ.Contains("tải file word") || 
-                                    lowerExportQ.Contains("lưu vào word") || lowerExportQ.Contains("xuất word") ||
-                                    lowerExportQ.Contains("xuất docx") || lowerExportQ.Contains("tạo file docx");
-
-            string currentSystemInstruction = (!isThinking && !isExportFollowup) ? FastSystemInstructionText : SystemInstructionText;
+            string currentSystemInstruction = (!isThinking && !isArtifactRequired) ? FastSystemInstructionText : SystemInstructionText;
             if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.CustomInstructions))
             {
                 currentSystemInstruction += "\n\n[HƯỚNG DẪN TÙY CHỈNH TỪ NGƯỜI DÙNG]:\n" + currentUser.CustomInstructions.Trim();

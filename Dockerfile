@@ -10,8 +10,8 @@ RUN dotnet restore "BtoanAiNet.csproj"
 COPY . .
 RUN dotnet publish "BtoanAiNet.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-# Stage 2: Runtime
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+# Stage 2: Runtime with .NET SDK for Web IDE terminal compilation & execution
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
 # Install bash, curl and git for terminal and workspace operations

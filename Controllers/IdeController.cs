@@ -1323,17 +1323,31 @@ describe('AdminProducts', () => {
         [HttpGet("preview/{project}/{*filePath}")]
         public IActionResult LivePreview(string project, string? filePath)
         {
-            if (!IsAuthenticated)
+            int userId = CurrentUserId;
+            string cleanProj = SanitizeProjectName(project);
+            string projectPath = string.Empty;
+
+            if (userId > 0)
             {
-                return Content("<h3>Vui lòng đăng nhập để xem trước dự án.</h3>", "text/html; charset=utf-8");
+                projectPath = Path.Combine(GetUserRootPath(userId), cleanProj);
             }
 
-            string cleanProj = SanitizeProjectName(project);
-            string projectPath = ResolveWorkspacePath(cleanProj);
-
-            if (!Directory.Exists(projectPath))
+            if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath))
             {
-                return NotFound($"Không tìm thấy dự án '{cleanProj}'.");
+                // Fallback to user_1 if project exists in default workspace
+                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
+                if (Directory.Exists(user1Path))
+                {
+                    projectPath = user1Path;
+                }
+                else
+                {
+                    if (userId <= 0)
+                    {
+                        return Content("<h3>Vui lòng đăng nhập để xem trước dự án.</h3>", "text/html; charset=utf-8");
+                    }
+                    return NotFound($"Không tìm thấy dự án '{cleanProj}'.");
+                }
             }
 
             string targetFile = string.IsNullOrWhiteSpace(filePath) ? "index.html" : filePath;

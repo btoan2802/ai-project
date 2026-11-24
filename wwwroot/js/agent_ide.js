@@ -1871,8 +1871,13 @@ function detectProjectType() {
         || files.some(f => f.path.includes("angular.json") || (f.path.includes("package.json") && f.path.includes("frontend"))) 
         || (activeProjectId && activeProjectId.toLowerCase().includes("angular"));
     
+    const hasIndexHtml = files.some(f => f.path === "index.html" || f.path.endsWith("/index.html") || f.path.endsWith("\\index.html"));
     if (hasAngular) {
         return { type: "angular", inFrontend: inFrontend };
+    }
+
+    if (hasIndexHtml && !files.some(f => f.path.endsWith(".csproj") || f.path.endsWith(".sln"))) {
+        return { type: "web" };
     }
 
     const hasDotnet = files.some(f => f.path.endsWith(".csproj") || f.path.endsWith(".sln"));
@@ -1950,9 +1955,9 @@ function runSmartAction() {
         return;
     }
 
-    // 4. Pure HTML / Web Static
-    if (ext === 'html' || ext === 'htm') {
-        triggerLivePreview();
+    // 4. Pure HTML / Web Static Project or File
+    if (ext === 'html' || ext === 'htm' || projInfo.type === 'web') {
+        openLivePreview();
         return;
     }
 
@@ -2248,19 +2253,24 @@ function downloadCurrentProjectZip() {
     window.location.href = `/api/ide/projects/download?project=${encodeURIComponent(activeProjectId)}`;
 }
 
+function triggerLivePreview() {
+    openLivePreview();
+}
+
 function openLivePreview() {
     if (!activeProjectId) {
         alert("Chưa có dự án nào được chọn. Hãy tạo hoặc mở dự án web có index.html để xem trước.");
         return;
     }
 
-    const previewUrl = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/index.html`;
+    const uid = localStorage.getItem("user_id") || "1";
+    const previewUrl = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/index.html?user_id=${encodeURIComponent(uid)}`;
     const iframe = document.getElementById("previewIframe");
     const badge = document.getElementById("previewModalUrlBadge");
     const newTabBtn = document.getElementById("previewOpenTabBtn");
 
     if (iframe) iframe.src = previewUrl;
-    if (badge) badge.innerText = previewUrl;
+    if (badge) badge.innerText = `/api/ide/preview/${activeProjectId}/index.html`;
     if (newTabBtn) newTabBtn.href = previewUrl;
 
     showModalSafely("previewModal");
