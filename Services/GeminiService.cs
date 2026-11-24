@@ -105,17 +105,19 @@ namespace BtoanAiNet.Services
             if (isThinkingMode || cleanModel.Contains("pro"))
             {
                 candidateModels.Add("gemini-2.5-pro");
+                candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-2.5-flash");
                 candidateModels.Add("gemini-pro-latest");
-                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             else
             {
-                // Gọi thẳng gemini-2.5-flash cho chế độ Btoan 2.5 Flash / Fast mode
+                // Gọi thẳng gemini-2.5-flash cho chế độ Btoan 2.5 Flash / Fast mode, kèm fallback siêu tốc sang gemini-3.5-flash-lite
                 candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-flash-latest");
                 candidateModels.Add("gemini-2.5-pro");
-                candidateModels.Add("gemini-pro-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -249,17 +251,19 @@ namespace BtoanAiNet.Services
             if (isThinkingMode || cleanModel.Contains("pro"))
             {
                 candidateModels.Add("gemini-2.5-pro");
+                candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-2.5-flash");
                 candidateModels.Add("gemini-pro-latest");
-                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             else
             {
-                // Gọi thẳng gemini-2.5-flash cho chế độ Btoan 2.5 Flash / Fast mode
+                // Gọi thẳng gemini-2.5-flash cho chế độ Btoan 2.5 Flash / Fast mode, kèm fallback siêu tốc sang gemini-3.5-flash-lite
                 candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-flash-latest");
                 candidateModels.Add("gemini-2.5-pro");
-                candidateModels.Add("gemini-pro-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
