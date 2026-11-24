@@ -2371,8 +2371,8 @@ async function openLivePreview() {
                 if (!html.includes('<base ') && !html.includes('<base>')) {
                     if (html.includes('<head>')) {
                         html = html.replace('<head>', `<head>\n<base href="${baseHref}">`);
-                    } else if (html.includes('<head ')) {
-                        html = html.replace(/<head[^>]*>/i, `$&<base href="${baseHref}">`);
+                    } else if (html.includes('<head ') || html.includes('<HEAD ')) {
+                        html = html.replace(/<head(\s+[^>]*)?>/i, `$&<base href="${baseHref}">`);
                     } else {
                         html = `<base href="${baseHref}">\n` + html;
                     }

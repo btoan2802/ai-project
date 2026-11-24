@@ -916,11 +916,11 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 string baseHref = $"/api/ide/preview/{cleanProj}/";
                 if (!htmlContent.Contains("<base ", StringComparison.OrdinalIgnoreCase) && !htmlContent.Contains("<base>", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (htmlContent.Contains("<head>", StringComparison.OrdinalIgnoreCase))
+                    if (htmlContent.Contains("<head>", StringComparison.OrdinalIgnoreCase) || htmlContent.Contains("<head ", StringComparison.OrdinalIgnoreCase))
                     {
                         htmlContent = System.Text.RegularExpressions.Regex.Replace(
                             htmlContent,
-                            "(<head[^>]*>)",
+                            "(<head(\\s+[^>]*)?>)",
                             $"$1\n    <base href=\"{baseHref}\">",
                             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     }
