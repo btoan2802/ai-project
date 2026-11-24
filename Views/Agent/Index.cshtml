@@ -35,7 +35,7 @@
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
     <!-- Btoan Studio IDE Dark Modern CSS -->
-    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261124_mobile" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261124_projectfix" asp-append-version="true" />
 </head>
 <body class="agent-ide-body">
 
@@ -443,10 +443,16 @@
                     </div>
                 </div>
                 
-                <div id="workspaceRootHeader" class="workspace-root-title">
-                    <i class="bi bi-chevron-down me-1.5 text-secondary"></i>
-                    <i class="bi bi-folder2-open text-warning me-1.5"></i>
-                    <span id="workspaceRootName" class="fw-semibold text-light">Chưa có dự án</span>
+                <div id="workspaceRootHeader" class="workspace-root-title d-flex align-items-center justify-content-between" oncontextmenu="if (typeof onProjectContextMenu === 'function') { onProjectContextMenu(event); return false; }" title="Chuột phải để Đổi tên, Xóa hoặc thao tác dự án">
+                    <div class="d-flex align-items-center text-truncate flex-grow-1">
+                        <i class="bi bi-chevron-down me-1.5 text-secondary"></i>
+                        <i class="bi bi-folder2-open text-warning me-1.5"></i>
+                        <span id="workspaceRootName" class="fw-semibold text-light text-truncate">Chưa có dự án</span>
+                    </div>
+                    <div class="workspace-root-actions d-flex align-items-center gap-1 pe-1">
+                        <button class="btn-icon extra-small text-secondary" onclick="promptRenameActiveProject(); event.stopPropagation();" title="Đổi tên dự án (F2)"><i class="bi bi-pencil"></i></button>
+                        <button class="btn-icon extra-small text-secondary hover-danger" onclick="confirmDeleteActiveProject(); event.stopPropagation();" title="Xóa dự án (Delete)"><i class="bi bi-trash3"></i></button>
+                    </div>
                 </div>
 
                 <div id="workspaceTreeContainer" class="flex-grow-1 overflow-y-auto px-1 py-1">
@@ -1176,6 +1182,18 @@
 
     <!-- 12. EXPLORER CONTEXT MENU (Antigravity Dark Modern) -->
     <div id="explorerContextMenu" class="explorer-context-menu" style="display: none;">
+        <!-- Project Root Items (Khi chuột phải vào dự án) -->
+        <div id="ctxProjectItems" style="display: none;">
+            <div class="context-menu-item" onclick="promptRenameActiveProject()"><i class="bi bi-pencil-square text-info me-2"></i>Đổi tên dự án... <span class="menu-shortcut">F2</span></div>
+            <div class="context-menu-item text-danger" onclick="confirmDeleteActiveProject()"><i class="bi bi-trash3 text-danger me-2"></i>Xóa vĩnh viễn dự án... <span class="menu-shortcut">Delete</span></div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="contextMenuInlineNewFile()"><i class="bi bi-file-earmark-plus text-primary me-2"></i>Tạo tệp mới...</div>
+            <div class="context-menu-item" onclick="contextMenuInlineNewFolder()"><i class="bi bi-folder-plus text-warning me-2"></i>Tạo thư mục mới...</div>
+            <div class="context-menu-item" onclick="downloadCurrentProjectZip()"><i class="bi bi-file-earmark-zip text-warning me-2"></i>Tải Zip dự án (.zip)</div>
+            <div class="context-menu-item" onclick="contextMenuOpenTerminal()"><i class="bi bi-terminal text-info me-2"></i>Mở Terminal tại đây</div>
+            <div class="context-menu-item" onclick="refreshFileTree()"><i class="bi bi-arrow-clockwise text-secondary me-2"></i>Làm mới cây thư mục</div>
+        </div>
+
         <!-- Folder / Container Items -->
         <div id="ctxFolderItems">
             <div class="context-menu-item" onclick="contextMenuInlineNewFile()"><i class="bi bi-file-earmark-plus text-primary me-2"></i>New File...</div>
@@ -1245,6 +1263,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261124_authfix" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261124_projectfix" asp-append-version="true"></script>
 </body>
 </html>

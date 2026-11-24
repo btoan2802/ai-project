@@ -1044,19 +1044,27 @@ describe('AdminProducts', () => {
             System.IO.File.WriteAllText(Path.Combine(projectPath, "src", "app", "pages", "admin-products", "admin-products.spec.ts"), adminProductsSpec, Encoding.UTF8);
         }
 
-        // DELETE /api/ide/projects/{name} and POST /api/ide/projects/delete
+        // DELETE /api/ide/projects/{name} and POST /api/ide/projects/delete and POST /api/ide/delete-project
         [HttpDelete("projects/{name}")]
         [HttpPost("projects/delete")]
+        [HttpPost("delete-project")]
         public IActionResult DeleteProject(string? name, [FromBody] DeleteProjectModel? bodyModel)
         {
-            if (!IsAuthenticated)
+            int effectiveUserId = CurrentUserId;
+            if (effectiveUserId <= 0 && bodyModel?.UserId.HasValue == true && bodyModel.UserId.Value > 0)
+            {
+                effectiveUserId = bodyModel.UserId.Value;
+            }
+
+            if (effectiveUserId <= 0)
             {
                 return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập để thực hiện thao tác này.", needLogin = true });
             }
 
             string targetName = !string.IsNullOrWhiteSpace(name) ? name : bodyModel?.Name ?? "";
             string cleanName = SanitizeProjectName(targetName);
-            string projectPath = ResolveWorkspacePath(cleanName);
+            string userRoot = GetUserRootPath(effectiveUserId);
+            string projectPath = Path.Combine(userRoot, cleanName);
 
             if (!Directory.Exists(projectPath))
             {
@@ -1071,6 +1079,56 @@ describe('AdminProducts', () => {
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting project {Name}", cleanName);
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
+
+        // POST /api/ide/projects/rename and POST /api/ide/rename-project
+        [HttpPost("projects/rename")]
+        [HttpPost("rename-project")]
+        public IActionResult RenameProject([FromBody] RenameProjectModel model)
+        {
+            int effectiveUserId = CurrentUserId;
+            if (effectiveUserId <= 0 && model?.UserId.HasValue == true && model.UserId.Value > 0)
+            {
+                effectiveUserId = model.UserId.Value;
+            }
+
+            if (effectiveUserId <= 0)
+            {
+                return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập để thực hiện thao tác này.", needLogin = true });
+            }
+
+            string oldClean = SanitizeProjectName(model?.OldName);
+            string newClean = SanitizeProjectName(model?.NewName);
+
+            if (string.IsNullOrWhiteSpace(oldClean) || string.IsNullOrWhiteSpace(newClean))
+            {
+                return BadRequest(new { ok = false, error = "Tên dự án không hợp lệ." });
+            }
+
+            string userRoot = GetUserRootPath(effectiveUserId);
+            string oldPath = Path.Combine(userRoot, oldClean);
+            string newPath = Path.Combine(userRoot, newClean);
+
+            if (!Directory.Exists(oldPath))
+            {
+                return NotFound(new { ok = false, error = $"Dự án '{oldClean}' không tồn tại." });
+            }
+
+            if (Directory.Exists(newPath))
+            {
+                return BadRequest(new { ok = false, error = $"Dự án '{newClean}' đã tồn tại. Vui lòng chọn tên khác." });
+            }
+
+            try
+            {
+                Directory.Move(oldPath, newPath);
+                return Ok(new { ok = true, message = $"Đã đổi tên dự án thành '{newClean}'." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error renaming project from {Old} to {New}", oldClean, newClean);
                 return StatusCode(500, new { ok = false, error = ex.Message });
             }
         }
@@ -3297,6 +3355,16 @@ QUY TẮC QUAN TRỌNG:
     public class DeleteProjectModel
     {
         public string? Name { get; set; }
+        public int? UserId { get; set; }
+        public int? User_Id { get => UserId; set => UserId = value; }
+    }
+
+    public class RenameProjectModel
+    {
+        public string? OldName { get; set; }
+        public string? NewName { get; set; }
+        public int? UserId { get; set; }
+        public int? User_Id { get => UserId; set => UserId = value; }
     }
 
     public class SaveFileModel

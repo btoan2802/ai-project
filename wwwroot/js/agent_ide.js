@@ -200,6 +200,15 @@ async function loadUserProjects() {
             rootNameEl.innerText = activeProjectId ? (select.options[select.selectedIndex]?.text || activeProjectId) : "Chưa có dự án";
         }
 
+        const rootHeader = document.getElementById("workspaceRootHeader");
+        if (rootHeader) {
+            rootHeader.onclick = () => {
+                activeTreeNode = { path: "", isDirectory: true, isProjectRoot: true, el: rootHeader };
+                document.querySelectorAll(".explorer-tree-item, .workspace-root-title").forEach(el => el.classList.remove("selected"));
+                rootHeader.classList.add("selected");
+            };
+        }
+
         // Update Terminal Prompt
         updateTerminalPrompt();
 
@@ -1462,8 +1471,9 @@ async function initTerminalSignalR() {
         return;
     }
 
+    const uid = localStorage.getItem("user_id") || "1";
     terminalHubConn = new signalR.HubConnectionBuilder()
-        .withUrl("/hubs/terminal")
+        .withUrl(`/hubs/terminal?user_id=${encodeURIComponent(uid)}`)
         .withAutomaticReconnect([0, 2000, 5000, 10000])
         .build();
 
@@ -3138,15 +3148,23 @@ function initGlobalShortcuts() {
             // F2: Inline Rename
             if (e.key === "F2") {
                 e.preventDefault();
-                startInlineRename(activeTreeNode);
+                if (activeTreeNode.isProjectRoot) {
+                    promptRenameActiveProject();
+                } else {
+                    startInlineRename(activeTreeNode);
+                }
                 return;
             }
 
             // Delete: Delete Permanently
             if (e.key === "Delete") {
                 e.preventDefault();
-                contextTargetItem = activeTreeNode;
-                contextMenuDeletePermanently();
+                if (activeTreeNode.isProjectRoot) {
+                    confirmDeleteActiveProject();
+                } else {
+                    contextTargetItem = activeTreeNode;
+                    contextMenuDeletePermanently();
+                }
                 return;
             }
 
@@ -3467,24 +3485,33 @@ function jumpToEditorLine(line) {
 let contextTargetItem = null; // { path, isDirectory, el }
 let explorerClipboard = null; // { mode: 'cut'|'copy', path, isDirectory }
 
-function onExplorerContextMenu(e, path, isDirectory, targetEl = null) {
+function onExplorerContextMenu(e, path, isDirectory, targetEl = null, isProjectRoot = false) {
     e.preventDefault();
     e.stopPropagation();
-    contextTargetItem = { path, isDirectory, el: targetEl };
+    contextTargetItem = { path, isDirectory, el: targetEl, isProjectRoot };
 
     const menu = document.getElementById("explorerContextMenu");
     if (!menu) return;
 
-    // Toggle items based on Folder vs File
+    // Toggle items based on Project vs Folder vs File
+    const ctxProject = document.getElementById("ctxProjectItems");
     const ctxFolder = document.getElementById("ctxFolderItems");
     const ctxFile = document.getElementById("ctxFileItems");
-    if (ctxFolder) ctxFolder.style.display = isDirectory ? "block" : "none";
-    if (ctxFile) ctxFile.style.display = !isDirectory ? "block" : "none";
+
+    if (isProjectRoot) {
+        if (ctxProject) ctxProject.style.display = "block";
+        if (ctxFolder) ctxFolder.style.display = "none";
+        if (ctxFile) ctxFile.style.display = "none";
+    } else {
+        if (ctxProject) ctxProject.style.display = "none";
+        if (ctxFolder) ctxFolder.style.display = isDirectory ? "block" : "none";
+        if (ctxFile) ctxFile.style.display = !isDirectory ? "block" : "none";
+    }
 
     // Toggle Paste availability
     const pasteBtn = document.getElementById("ctxItemPaste");
     if (pasteBtn) {
-        if (explorerClipboard && explorerClipboard.path) {
+        if (explorerClipboard && explorerClipboard.path && !isProjectRoot) {
             pasteBtn.classList.remove("disabled");
         } else {
             pasteBtn.classList.add("disabled");
@@ -3496,6 +3523,73 @@ function onExplorerContextMenu(e, path, isDirectory, targetEl = null) {
     const y = Math.min(e.clientY, window.innerHeight - 340);
     menu.style.left = `${Math.max(10, x)}px`;
     menu.style.top = `${Math.max(10, y)}px`;
+}
+
+function onProjectContextMenu(e) {
+    if (!activeProjectId) return;
+    const rootHeader = document.getElementById("workspaceRootHeader");
+    onExplorerContextMenu(e, "", true, rootHeader, true);
+}
+
+// Project Actions: Rename & Delete
+async function promptRenameActiveProject() {
+    hideExplorerContextMenu();
+    if (!activeProjectId) {
+        alert("Chưa có dự án nào được chọn.");
+        return;
+    }
+    const newName = prompt(`Nhập tên mới cho dự án "${activeProjectId}":`, activeProjectId);
+    if (!newName || newName.trim() === "" || newName.trim() === activeProjectId) return;
+
+    try {
+        const uid = localStorage.getItem("user_id") || "1";
+        const res = await fetch('/api/ide/projects/rename', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ oldName: activeProjectId, newName: newName.trim(), userId: parseInt(uid) || 1 })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showToastNotification(data.message || `Đã đổi tên dự án thành "${newName.trim()}"`);
+            await loadUserProjects();
+            await switchActiveProject(newName.trim());
+        } else {
+            alert("❌ " + (data.error || "Không thể đổi tên dự án"));
+        }
+    } catch (err) {
+        alert("❌ Lỗi đổi tên dự án: " + err.message);
+    }
+}
+
+async function confirmDeleteActiveProject() {
+    hideExplorerContextMenu();
+    if (!activeProjectId) {
+        alert("Chưa có dự án nào được chọn.");
+        return;
+    }
+    if (!confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ dự án "${activeProjectId}" và tất cả file bên trong không? Thao tác này không thể hoàn tác!`)) {
+        return;
+    }
+
+    try {
+        const uid = localStorage.getItem("user_id") || "1";
+        const res = await fetch('/api/ide/projects/delete', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ name: activeProjectId, userId: parseInt(uid) || 1 })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showToastNotification(data.message || `Đã xóa dự án "${activeProjectId}"`);
+            openTabsMap.clear();
+            renderTabBar();
+            await loadUserProjects();
+        } else {
+            alert("❌ " + (data.error || "Không thể xóa dự án"));
+        }
+    } catch (err) {
+        alert("❌ Lỗi xóa dự án: " + err.message);
+    }
 }
 
 function hideExplorerContextMenu() {

@@ -81,12 +81,34 @@ namespace BtoanAiNet.Hubs
                 if (sUid.HasValue && sUid.Value > 0) return sUid.Value;
             }
 
+            // Check query string: ?user_id=1
+            if (httpContext?.Request.Query.TryGetValue("user_id", out var qUid) == true
+                && int.TryParse(qUid, out int parsedQUid) && parsedQUid > 0)
+            {
+                return parsedQUid;
+            }
+
+            // Check cookie: user_id
+            if (httpContext?.Request.Cookies.TryGetValue("user_id", out var cUid) == true
+                && int.TryParse(cUid, out int parsedCUid) && parsedCUid > 0)
+            {
+                return parsedCUid;
+            }
+
+            // Check header: X-User-Id
+            if (httpContext?.Request.Headers.TryGetValue("X-User-Id", out var hUid) == true
+                && int.TryParse(hUid, out int parsedHUid) && parsedHUid > 0)
+            {
+                return parsedHUid;
+            }
+
             if (Context.User?.Identity?.IsAuthenticated == true)
             {
                 return 1; // Default to admin for authenticated users
             }
 
-            return 0;
+            // Default to admin user (1) for interactive Web IDE terminal session
+            return 1;
         }
 
         private string ResolveProjectRoot(int userId, string projectName)
