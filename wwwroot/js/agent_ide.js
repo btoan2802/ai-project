@@ -763,6 +763,38 @@ async function restoreOpenTabsState() {
     return false;
 }
 
+function showImagePreviewModal(filePath) {
+    const uid = localStorage.getItem("user_id") || "1";
+    const cleanPath = filePath.replace(/\\/g, '/').replace(/^\//, '');
+    const src = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/${cleanPath}?user_id=${encodeURIComponent(uid)}&t=${Date.now()}`;
+    const modalId = "ideImagePreviewModal";
+    let modal = document.getElementById(modalId);
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = modalId;
+        modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);";
+        modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+        document.body.appendChild(modal);
+    }
+    const fileName = filePath.split(/[\\/]/).pop();
+    modal.innerHTML = `
+        <div style="background:#1e1e2e;border:1px solid #313244;border-radius:12px;padding:16px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 32px rgba(0,0,0,0.5);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid #313244;padding-bottom:8px;">
+                <span style="color:#cdd6f4;font-weight:600;font-size:14px;"><i class="bi bi-file-earmark-image me-1 text-info"></i> ${escapeHtml(fileName)}</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('${modalId}').style.display='none'"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#11111b;border-radius:8px;padding:16px;background-image:linear-gradient(45deg, #181825 25%, transparent 25%), linear-gradient(-45deg, #181825 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #181825 75%), linear-gradient(-45deg, transparent 75%, #181825 75%);background-size:20px 20px;background-position:0 0, 0 10px, 10px -10px, -10px 0px;">
+                <img src="${src}" alt="${escapeHtml(fileName)}" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.4);" />
+            </div>
+            <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px;">
+                <a href="${src}" target="_blank" class="btn btn-sm btn-outline-primary" style="font-size:12px;"><i class="bi bi-box-arrow-up-right me-1"></i> Mở tab mới</a>
+                <a href="${src}" download="${escapeHtml(fileName)}" class="btn btn-sm btn-primary" style="font-size:12px;"><i class="bi bi-download me-1"></i> Tải về</a>
+            </div>
+        </div>
+    `;
+    modal.style.display = "flex";
+}
+
 // ==========================================
 // 3. MULTI-TABS & FILE OPEN/SAVE
 // ==========================================
@@ -772,6 +804,10 @@ async function openFileInEditor(filePath, forceReload = false) {
     const lower = (filePath || "").toLowerCase();
     if (lower.endsWith('.db') || lower.endsWith('.sqlite') || lower.endsWith('.sqlite3')) {
         await openSqliteStudio(filePath);
+        return;
+    }
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.svg') || lower.endsWith('.ico')) {
+        showImagePreviewModal(filePath);
         return;
     }
 
@@ -2692,6 +2728,11 @@ async function sendAgentTask() {
 
                     const chunkLines = chunk.split("\n");
                     for (const cl of chunkLines) {
+                        const trimmedLine = cl.trim();
+                        if (trimmedLine.startsWith(":") || !trimmedLine) {
+                            // SSE comment / keepalive ping -> ignore
+                            continue;
+                        }
                         if (cl.startsWith("event:")) {
                             eventType = cl.substring(6).trim();
                         } else if (cl.startsWith("data:")) {
@@ -2774,7 +2815,15 @@ async function sendAgentTask() {
     } catch (err) {
         clearTimeout(timeoutId);
         const isAbort = err.name === 'AbortError';
-        agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
+        let errHtml = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
+        errHtml += `
+            <div class="mt-2 d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-warning" style="font-size: 11px;" onclick="continueAgentRemaining(${JSON.stringify(task)})">
+                    <i class="bi bi-play-circle me-1"></i> Tiếp tục tạo các file còn lại
+                </button>
+            </div>
+        `;
+        agentMsg.innerHTML = errHtml;
         if (typeof refreshFileTree === 'function') {
             try { await refreshFileTree(); } catch(e) { console.warn(e); }
         }
@@ -2782,6 +2831,15 @@ async function sendAgentTask() {
         clearInterval(ticker);
     }
 }
+
+window.continueAgentRemaining = function(origPrompt) {
+    const input = document.getElementById("agentPromptInput");
+    if (input) {
+        input.value = `Tiếp tục hoàn thiện các tệp còn thiếu trong dự án theo yêu cầu: "${origPrompt}". BẮT BUỘC gọi write_file để tạo các tệp chưa có với code hoàn chỉnh 100%.`;
+        input.focus();
+        runAgentTask();
+    }
+};
 
 function renderAgentResponse(data, container) {
     container.innerHTML = "";

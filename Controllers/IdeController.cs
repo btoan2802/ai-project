@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using SkiaSharp;
 
 namespace BtoanAiNet.Controllers
 {
@@ -1928,11 +1929,19 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                             _logger.LogWarning("Failed to generate image for {Path}: {Error}", img.Path, imgEx.Message);
                         }
 
-                        // Fallback: If image generation failed, write a beautiful SVG placeholder so HTML never breaks
+                        // Fallback: If image generation failed, write a beautiful binary image or SVG placeholder
                         if (!imageSaved)
                         {
-                            string svgContent = GenerateSvgPlaceholder(Path.GetFileNameWithoutExtension(img.Path));
-                            await System.IO.File.WriteAllTextAsync(fullImgPath, svgContent, Encoding.UTF8);
+                            string imgExt = Path.GetExtension(fullImgPath).ToLowerInvariant();
+                            if (imgExt == ".svg")
+                            {
+                                string svgContent = GenerateSvgPlaceholder(Path.GetFileNameWithoutExtension(img.Path));
+                                await System.IO.File.WriteAllTextAsync(fullImgPath, svgContent, Encoding.UTF8);
+                            }
+                            else
+                            {
+                                GenerateArtisticBinaryImage(fullImgPath, img.Prompt ?? Path.GetFileNameWithoutExtension(img.Path), img.Path, "16:9");
+                            }
                         }
 
                         successCount++;
@@ -2021,16 +2030,24 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 _logger.LogWarning("GenerateProjectImage error: {Message}", ex.Message);
             }
 
-            // Fallback SVG
-            string svg = GenerateSvgPlaceholder(Path.GetFileNameWithoutExtension(targetPath));
-            await System.IO.File.WriteAllTextAsync(fullPath, svg, Encoding.UTF8);
+            // Fallback: Real binary image or SVG
+            string fallbackExt = Path.GetExtension(fullPath).ToLowerInvariant();
+            if (fallbackExt == ".svg")
+            {
+                string svg = GenerateSvgPlaceholder(Path.GetFileNameWithoutExtension(targetPath));
+                await System.IO.File.WriteAllTextAsync(fullPath, svg, Encoding.UTF8);
+            }
+            else
+            {
+                GenerateArtisticBinaryImage(fullPath, model.Prompt, targetPath, "16:9");
+            }
 
             return Ok(new
             {
                 ok = true,
                 path = targetPath,
                 url = $"/api/ide/preview/{cleanProj}/{targetPath}",
-                message = "Đã tạo ảnh minh họa SVG cho dự án."
+                message = "Đã tạo ảnh minh họa cho dự án thành công."
             });
         }
 
@@ -2598,9 +2615,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 Response.Headers["Connection"] = "keep-alive";
             }
 
+            var sseLock = new SemaphoreSlim(1, 1);
+
             async Task SendSseEventAsync(string eventType, object data)
             {
                 if (!isStream) return;
+                await sseLock.WaitAsync();
                 try
                 {
                     string json = JsonSerializer.Serialize(data);
@@ -2610,7 +2630,42 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                     await Response.Body.FlushAsync();
                 }
                 catch { }
+                finally
+                {
+                    sseLock.Release();
+                }
             }
+
+            async Task SendKeepaliveCommentAsync()
+            {
+                if (!isStream) return;
+                await sseLock.WaitAsync();
+                try
+                {
+                    byte[] bytes = Encoding.UTF8.GetBytes(": keepalive\n\n");
+                    await Response.Body.WriteAsync(bytes, 0, bytes.Length);
+                    await Response.Body.FlushAsync();
+                }
+                catch { }
+                finally
+                {
+                    sseLock.Release();
+                }
+            }
+
+            using var keepaliveCts = new CancellationTokenSource();
+            var keepaliveTask = isStream ? Task.Run(async () =>
+            {
+                while (!keepaliveCts.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(3000, keepaliveCts.Token);
+                        await SendKeepaliveCommentAsync();
+                    }
+                    catch { break; }
+                }
+            }) : Task.CompletedTask;
 
             string selectedModel = "gemini-flash-latest";
             if (string.Equals(model.Model, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
@@ -2707,6 +2762,11 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG (AUTONOMOUS 4-STEP LOOP):
 
 4. BƯỚC 4: TỰ ĐỘNG BIÊN DỊCH & TỰ SỬA LỖI (SELF-HEALING BUILD VERIFICATION):
    - Đối với dự án .NET: BẮT BUỘC gọi run_command(""dotnet build""). Nếu có lỗi biên dịch, bạn phải đọc lỗi và tự sửa lại các tệp cho đến khi build thành công 0 Error(s).
+
+5. NGUYÊN TẮC GHI TỆP TUẦN TỰ (STREAMING PROGRESS):
+   - Khi tạo hoặc sửa nhiều tệp (ví dụ: 'index.html', 'style.css', 'script.js' hoặc các ảnh):
+   - BẮT BUỘC gọi 'write_file' hoặc 'generate_image' TUẦN TỰ TỪNG FILE MỘT trong mỗi lượt tool call (mỗi lượt tạo 1 file hoàn chỉnh 100%, hệ thống xác nhận xong mới chuyển sang file tiếp theo).
+   - TUYỆT ĐỐI KHÔNG dồn tất cả các file vào 1 lượt gọi duy nhất để tránh nghẽn luồng truyền dữ liệu SSE và tránh bị cắt cụt token.
 
 TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 - Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (generate_image / write_file / edit_file / run_command) ngay từ lượt đầu tiên để trực tiếp tạo/sửa code thật trong dự án.
@@ -2924,13 +2984,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 while (currentTurn < maxTurns)
                 {
                     currentTurn++;
-
-                    await SendSseEventAsync("turn_start", new
-                    {
-                        turn = currentTurn,
-                        maxTurns = maxTurns,
-                        message = $"[Lượt {currentTurn}/{maxTurns}] Đang phân tích và xử lý..."
-                    });
+                    await SendSseEventAsync("turn_start", new { turn = currentTurn, message = $"Btoan Agent đang phân tích & lên phương án thực thi (Lượt {currentTurn}/{maxTurns})..." });
 
                     var payload = new JsonObject
                     {
@@ -3005,43 +3059,26 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                         foreach (var (toolName, toolArgs) in functionCalls)
                         {
-                            string toolTarget = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "output_path", "outputPath", "command", "directory");
-                            string toolMsg = toolName switch
-                            {
-                                "generate_image" => $"🎨 Đang tạo ảnh minh họa '{toolTarget}'...",
-                                "write_file" => $"📝 Đang ghi tệp '{toolTarget}'...",
-                                "edit_file" => $"✏️ Đang chỉnh sửa tệp '{toolTarget}'...",
-                                "read_file" => $"📖 Đang đọc tệp '{toolTarget}'...",
-                                "list_files" => "📂 Đang duyệt cây thư mục...",
-                                "run_command" => $"🔨 Đang chạy lệnh '{toolTarget}'...",
-                                "delete_file" => $"🗑️ Đang xóa tệp '{toolTarget}'...",
-                                _ => $"⚙️ Đang thực thi {toolName}..."
-                            };
-
-                            await SendSseEventAsync("tool_start", new
-                            {
-                                turn = currentTurn,
-                                tool = toolName,
-                                target = toolTarget,
-                                message = toolMsg
-                            });
+                            string toolAction = toolName == "write_file" ? "create" : toolName == "edit_file" ? "edit" : toolName == "generate_image" ? "image" : "cmd";
+                            string toolTarget = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename", "output_path", "outputPath", "command", "cmd");
+                            await SendSseEventAsync("tool_start", new { tool = toolName, action = toolAction, target = toolTarget, message = $"Đang thực thi: {toolName} ({toolTarget})..." });
 
                             _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
 
                             // Execute the tool on the real workspace filesystem
                             string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
 
+                            await SendSseEventAsync("tool_done", new { tool = toolName, action = toolAction, target = toolTarget, message = $"Đã xong: {toolName} ({toolTarget})" });
+
                             // Record plan step and tool operation
-                            string toolAction = "read";
                             if (toolName == "write_file" || toolName == "edit_file")
                             {
                                 string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
                                 if (!string.IsNullOrWhiteSpace(fPath))
                                 {
-                                    toolAction = toolName == "write_file" ? "create" : "edit";
                                     toolOperations.Add(new
                                     {
-                                        action = toolAction,
+                                        action = toolName == "write_file" ? "create" : "edit",
                                         path = fPath,
                                         summary = $"Cập nhật tệp {fPath}"
                                     });
@@ -3050,12 +3087,11 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             }
                             else if (toolName == "generate_image")
                             {
-                                toolAction = "image";
                                 string outPath = ExtractStringArg(toolArgs, "output_path", "outputPath", "path");
                                 string pPrompt = ExtractStringArg(toolArgs, "prompt", "description");
                                 toolOperations.Add(new
                                 {
-                                    action = "image",
+                                    action = "create",
                                     path = outPath,
                                     summary = $"Tạo hình ảnh: {pPrompt}"
                                 });
@@ -3063,10 +3099,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             }
                             else if (toolName == "run_command")
                             {
-                                toolAction = "command";
                                 string cmd = ExtractStringArg(toolArgs, "command", "cmd", "script", "exec");
                                 planSteps.Add($"Thực thi lệnh '{cmd}'");
-                                await SendSseEventAsync("command_output", new { command = cmd, output = toolResult });
                             }
                             else if (toolName == "read_file")
                             {
@@ -3077,16 +3111,6 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             {
                                 planSteps.Add("Khảo sát cấu trúc tệp dự án");
                             }
-
-                            await SendSseEventAsync("tool_done", new
-                            {
-                                turn = currentTurn,
-                                tool = toolName,
-                                target = toolTarget,
-                                action = toolAction,
-                                message = toolMsg.Replace("Đang", "Đã").Replace("...", ""),
-                                result = toolResult.Length > 300 ? toolResult.Substring(0, 300) + "..." : toolResult
-                            });
 
                             functionResponseParts.Add(new JsonObject
                             {
@@ -3237,27 +3261,35 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     _logger.LogWarning(ex, "Failed to persist assistant agent chat message");
                 }
 
-                var resultObj = new
-                {
-                    ok = true,
-                    projectName = cleanProj,
-                    plan = planSteps,
-                    explanation = finalExplanation,
-                    modifiedFiles = modifiedFiles,
-                    operations = toolOperations,
-                    buildPassed = buildPassed,
-                    executedCommands = executedCommands
-                };
-
                 if (isStream)
                 {
-                    await SendSseEventAsync("done", resultObj);
+                    await SendSseEventAsync("done", new
+                    {
+                        ok = true,
+                        projectName = cleanProj,
+                        plan = planSteps,
+                        explanation = finalExplanation,
+                        modifiedFiles = modifiedFiles,
+                        operations = toolOperations,
+                        buildPassed = buildPassed,
+                        executedCommands = executedCommands
+                    });
                     return;
                 }
                 else
                 {
                     Response.ContentType = "application/json; charset=utf-8";
-                    await Response.WriteAsJsonAsync(resultObj);
+                    await Response.WriteAsJsonAsync(new
+                    {
+                        ok = true,
+                        projectName = cleanProj,
+                        plan = planSteps,
+                        explanation = finalExplanation,
+                        modifiedFiles = modifiedFiles,
+                        operations = toolOperations,
+                        buildPassed = buildPassed,
+                        executedCommands = executedCommands
+                    });
                     return;
                 }
             }
@@ -3267,15 +3299,18 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 if (isStream)
                 {
                     await SendSseEventAsync("error", new { ok = false, error = ex.Message });
-                    return;
                 }
                 else
                 {
                     Response.StatusCode = 500;
-                    Response.ContentType = "application/json; charset=utf-8";
                     await Response.WriteAsJsonAsync(new { ok = false, error = ex.Message });
-                    return;
                 }
+            }
+            finally
+            {
+                keepaliveCts.Cancel();
+                try { await keepaliveTask; } catch { }
+                sseLock.Dispose();
             }
         }
 
@@ -3389,15 +3424,31 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             catch { }
                         }
 
+                        string ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                        string format = ext == ".png" ? "image/png" : ext == ".webp" ? "image/webp" : ext == ".svg" ? "image/svg+xml" : "image/jpeg";
+
                         if (!generated)
                         {
-                            string svg = GenerateSvgPlaceholder(prompt, outputPath);
-                            await System.IO.File.WriteAllTextAsync(fullPath, svg, Encoding.UTF8);
+                            if (ext == ".svg")
+                            {
+                                string svg = GenerateSvgPlaceholder(prompt, outputPath);
+                                await System.IO.File.WriteAllTextAsync(fullPath, svg, Encoding.UTF8);
+                            }
+                            else
+                            {
+                                GenerateArtisticBinaryImage(fullPath, prompt, outputPath, aspectRatio);
+                            }
                         }
 
                         string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
                         if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
-                        return $"SUCCESS: Đã tạo và lưu hình ảnh minh họa thật vào '{relPath}'.";
+                        return JsonSerializer.Serialize(new
+                        {
+                            status = "success",
+                            saved_path = relPath,
+                            format = format,
+                            message = $"Đã tạo và lưu hình ảnh minh họa thật vào '{relPath}'. Bạn hãy dùng chính xác <img src=\"{relPath}\"> trong mã HTML/CSS."
+                        });
                     }
                     case "read_file":
                     {
@@ -3538,6 +3589,101 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
   <text x=""400"" y=""310"" font-family=""system-ui, sans-serif"" font-size=""26"" font-weight=""bold"" fill=""#f8fafc"" text-anchor=""middle"">{title}</text>
   <text x=""400"" y=""350"" font-family=""system-ui, sans-serif"" font-size=""16"" fill=""#94a3b8"" text-anchor=""middle"">{sub}</text>
 </svg>";
+        }
+
+        private static void GenerateArtisticBinaryImage(string fullPath, string prompt, string filename, string? aspectRatio)
+        {
+            try
+            {
+                int width = 800;
+                int height = 500;
+                if (aspectRatio == "1:1") { width = 600; height = 600; }
+                else if (aspectRatio == "4:3") { width = 800; height = 600; }
+                else if (aspectRatio == "9:16") { width = 450; height = 800; }
+
+                using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul));
+                var canvas = surface.Canvas;
+
+                string pLower = ((prompt ?? "") + " " + (filename ?? "")).ToLowerInvariant();
+                SKColor color1, color2, accent;
+
+                if (pLower.Contains("tỏ tình") || pLower.Contains("love") || pLower.Contains("heart") || pLower.Contains("yêu") || pLower.Contains("romance") || pLower.Contains("lãng mạn") || pLower.Contains("couple"))
+                {
+                    color1 = new SKColor(244, 63, 94);  // #f43f5e Rose
+                    color2 = new SKColor(139, 92, 246); // #8b5cf6 Violet
+                    accent = new SKColor(251, 113, 133); // #fb7185
+                }
+                else if (pLower.Contains("shop") || pLower.Contains("cafe") || pLower.Contains("coffee") || pLower.Contains("food") || pLower.Contains("bán hàng"))
+                {
+                    color1 = new SKColor(245, 158, 11); // #f59e0b Amber
+                    color2 = new SKColor(120, 53, 15);  // #78350f Dark Amber
+                    accent = new SKColor(251, 191, 36);
+                }
+                else if (pLower.Contains("tech") || pLower.Contains("code") || pLower.Contains("dark") || pLower.Contains("cyber") || pLower.Contains("dashboard"))
+                {
+                    color1 = new SKColor(15, 23, 42);   // #0f172a
+                    color2 = new SKColor(30, 41, 59);   // #1e293b
+                    accent = new SKColor(56, 189, 248); // #38bdf8
+                }
+                else
+                {
+                    color1 = new SKColor(99, 102, 241); // #6366f1 Indigo
+                    color2 = new SKColor(14, 165, 233); // #0ea5e9 Cyan
+                    accent = new SKColor(129, 140, 248);
+                }
+
+                // 1. Draw smooth gradient background
+                using (var paint = new SKPaint())
+                {
+                    paint.Shader = SKShader.CreateLinearGradient(
+                        new SKPoint(0, 0),
+                        new SKPoint(width, height),
+                        new[] { color1, color2 },
+                        SKShaderTileMode.Clamp);
+                    canvas.DrawRect(0, 0, width, height, paint);
+                }
+
+                // 2. Draw aesthetic ambient radial glow
+                using (var glowPaint = new SKPaint
+                {
+                    Color = accent.WithAlpha(60),
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Fill
+                })
+                {
+                    canvas.DrawCircle(width / 2f, height / 2f - 20, Math.Min(width, height) / 3f, glowPaint);
+                }
+
+                // 3. Draw subtle inner frame card
+                using (var strokePaint = new SKPaint
+                {
+                    Color = new SKColor(255, 255, 255, 45),
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = 2.5f
+                })
+                {
+                    canvas.DrawRoundRect(new SKRoundRect(new SKRect(width * 0.08f, height * 0.08f, width * 0.92f, height * 0.92f), 20, 20), strokePaint);
+                }
+
+                // 4. Encode to 100% valid binary image
+                using var image = surface.Snapshot();
+                string ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                var format = ext switch
+                {
+                    ".png" => SKEncodedImageFormat.Png,
+                    ".webp" => SKEncodedImageFormat.Webp,
+                    _ => SKEncodedImageFormat.Jpeg
+                };
+
+                using var data = image.Encode(format, 92);
+                using var fileStream = System.IO.File.Create(fullPath);
+                data.SaveTo(fileStream);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GenerateArtisticBinaryImage error: {ex.Message}");
+            }
         }
 
         private static string DetectLanguage(string path)
