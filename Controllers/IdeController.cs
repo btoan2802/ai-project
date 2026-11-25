@@ -2000,17 +2000,22 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                                 Directory.CreateDirectory(parent);
                             }
 
-                            // SAFETY GUARD: Do NOT wipe existing file if op.Content is null or empty
+                            // SAFETY GUARD: Do NOT wipe existing file if op.Content is empty or whitespace
                             if (string.IsNullOrWhiteSpace(op.Content))
                             {
-                                if (System.IO.File.Exists(fullPath) && new FileInfo(fullPath).Length > 0)
+                                if (System.IO.File.Exists(fullPath))
                                 {
-                                    // File already exists with real content on disk (e.g. written by autonomous agent)
-                                    // Preserve existing content!
+                                    // File already exists with real content on disk - preserve existing content!
                                     successCount++;
                                     appliedFiles.Add(op.Path.Replace('\\', '/'));
                                     continue;
                                 }
+                            }
+                            if (System.IO.File.Exists(fullPath) && (op.Content == null || op.Content.Trim().Length == 0))
+                            {
+                                successCount++;
+                                appliedFiles.Add(op.Path.Replace('\\', '/'));
+                                continue;
                             }
 
                             await System.IO.File.WriteAllTextAsync(fullPath, op.Content ?? "", Encoding.UTF8);
@@ -2807,9 +2812,10 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 }
             }) : Task.CompletedTask;
 
-            string selectedModel = "gemini-3.5-flash";
+            string selectedModel = "gemini-3.5-flash-lite";
             if (string.Equals(model.Model, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(model.Model, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase))
+                string.Equals(model.Model, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(model.Mode, "thinking", StringComparison.OrdinalIgnoreCase))
             {
                 selectedModel = "gemini-3.5-flash";
             }
@@ -2890,7 +2896,9 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG (AUTONOMOUS 4-STEP LOOP):
    - Với ứng dụng công cụ, tiện ích, tính toán, quản lý, game logic (ví dụ: web tính điểm cấp 3 / xét tuyển đại học, máy tính cầm tay, to-do list, quản lý chi tiêu, bảng biểu, dashboard):
      + TUYỆT ĐỐI KHÔNG gọi 'generate_image'. Bắt tay ngay vào BƯỚC 3 để tạo các file mã nguồn hoàn chỉnh ('index.html', 'style.css', 'script.js').
      + Thiết kế giao diện hiện đại với CSS Gradient/Cards/Tables, và viết logic JavaScript tính toán chính xác 100% (ví dụ: tính điểm trung bình học kỳ/cả năm, tính điểm xét tốt nghiệp THPT, tính điểm tổ hợp xét tuyển đại học A00, A01, B00, C00, D01... theo chuẩn quy chế Việt Nam).
-   - Chỉ gọi 'generate_image' (tối đa 1-2 lần) khi người dùng yêu cầu trang thực sự cần hình ảnh minh họa thực tế (như shop/web bán hàng, landing page sản phẩm, blog du lịch/ẩm thực, thiệp tỏ tình).
+   - Với trang web giới thiệu, portfolio cá nhân, bán hàng/shop, blog:
+     + BẮT BUỘC phải tạo đầy đủ 3 tệp mã nguồn ('index.html', 'style.css', 'script.js') trước hoặc đồng thời!
+     + Chỉ gọi 'generate_image' tối đa 1 lần (ví dụ: 'images/avatar.jpg' hoặc 'images/banner.jpg'). TUYỆT ĐỐI KHÔNG DỪNG LẠI khi chỉ mới tạo ảnh mà chưa hoàn thiện các tệp mã nguồn 'index.html', 'style.css', 'script.js'!
 
 3. BƯỚC 3: PHÂN TÁCH TỆP CHUẨN 100% & BẮT BUỘC HOÀN THÀNH TẤT CẢ FILE TRONG PLAN:
    - ĐỐI VỚI DỰ ÁN WEB (HTML / CSS / JS):

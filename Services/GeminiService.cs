@@ -44,13 +44,15 @@ namespace BtoanAiNet.Services
                           ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
             if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
-            // 3. Dual Fallback Keys Pool for High Availability on Production Render
+            // 3. Triple Fallback Keys Pool for High Availability on Production Render
             try
             {
                 string k1 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42S2JwdXdqNUlkRGhLa25vTzEydlBMRlkwUW82UzNqSWVkRnlVQ1FHR2RBQXc="));
                 string k2 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
+                string k3 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SlJZTDBXQ2REVlhqaUdkYnlWdzJhWVpNR0tRUzhYSjM3cFZhSW5KSXgwVGc="));
                 if (!string.IsNullOrWhiteSpace(k1) && !keys.Contains(k1)) keys.Add(k1);
                 if (!string.IsNullOrWhiteSpace(k2) && !keys.Contains(k2)) keys.Add(k2);
+                if (!string.IsNullOrWhiteSpace(k3) && !keys.Contains(k3)) keys.Add(k3);
             }
             catch { }
 
@@ -73,7 +75,7 @@ namespace BtoanAiNet.Services
                 }
             };
 
-            var res = await GenerateContentAsync("gemini-2.5-flash", payload);
+            var res = await GenerateContentAsync("gemini-3.5-flash-lite", payload);
             if (res.Success && res.ResponseData != null)
             {
                 try
@@ -101,32 +103,22 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            
-            // Priority 1: User requested model or gemini-2.5-flash / gemini-3.5-flash
-            if (cleanModel.Contains("2.5") || cleanModel.Contains("flash"))
+
+            // Note: Google retired gemini-2.5-flash / gemini-2.5-pro (returning HTTP 404).
+            // Direct requests to verified 200 OK models with resilient multi-tier fallback:
+            if (isThinkingMode || cleanModel.Contains("think") || cleanModel.Contains("pro"))
             {
-                candidateModels.Add("gemini-2.5-flash");
-                if (cleanModel.Contains("pro"))
-                {
-                    candidateModels.Add("gemini-2.5-pro");
-                }
                 candidateModels.Add("gemini-3.5-flash");
-            }
-            else if (cleanModel.Contains("pro"))
-            {
-                candidateModels.Add("gemini-2.5-pro");
-                candidateModels.Add("gemini-3.5-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
             else
             {
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
                 candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-3.6-flash");
             }
-
-            // Fallback chain (ultra high availability & production resilience)
-            candidateModels.Add("gemini-3.5-flash-lite");
-            candidateModels.Add("gemini-3-flash-preview");
-            candidateModels.Add("gemini-flash-lite-latest");
             candidateModels = candidateModels.Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
@@ -278,19 +270,18 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            if (isThinkingMode || cleanModel.Contains("pro"))
+            if (isThinkingMode || cleanModel.Contains("think") || cleanModel.Contains("pro"))
             {
                 candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-3-flash-preview");
                 candidateModels.Add("gemini-flash-lite-latest");
             }
             else
             {
-                candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-3-flash-preview");
                 candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add("gemini-3.5-flash");
+                candidateModels.Add("gemini-3.6-flash");
             }
             candidateModels = candidateModels.Distinct().ToList();
 

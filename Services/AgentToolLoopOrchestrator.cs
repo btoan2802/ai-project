@@ -51,7 +51,7 @@ namespace BtoanAiNet.Services
                     ["tools"] = new JsonArray { new JsonObject { ["functionDeclarations"] = toolsSchema.DeepClone() } }
                 };
 
-                var (success, responseData, _, error) = await _geminiService.GenerateContentAsync("gemini-2.5-pro", payload);
+                var (success, responseData, _, error) = await _geminiService.GenerateContentAsync("gemini-3.5-flash-lite", payload);
                 if (!success || responseData == null)
                 {
                     return $"AI Generation Failed: {error}";

@@ -330,34 +330,23 @@ function updateTerminalPrompt() {
 function onProjectChanged() {
     const select = document.getElementById("projectSelect");
     if (!select) return;
-    activeProjectId = select.value;
-    localStorage.setItem("antigravity_last_project", activeProjectId);
+    const chosen = select.value;
+    switchActiveProject(chosen);
+}
 
-    if (activeProjectId) {
-        hideEmptyWorkspaceState();
-        const rootNameEl = document.getElementById("workspaceRootName");
-        if (rootNameEl) {
-            rootNameEl.innerText = select.options[select.selectedIndex]?.text || activeProjectId;
-        }
-        updateTerminalPrompt();
-        refreshFileTree();
-        loadGitStatus();
-        loadAgentChatHistory(activeProjectId);
-        if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-            terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
-        }
-    } else {
+async function switchActiveProject(projName) {
+    if (!projName) {
+        openTabsMap.clear();
+        activeFilePath = null;
+        renderTabBar();
         showEmptyWorkspaceState();
         updateTerminalPrompt();
         const container = document.getElementById("workspaceTreeContainer");
         if (container) {
             container.innerHTML = `<div class="text-secondary extra-small p-3 text-center">Chưa có dự án nào.</div>`;
         }
+        return;
     }
-}
-
-async function switchActiveProject(projName) {
-    if (!projName) return;
 
     // 1. Save old project's tabs state before switching
     if (activeProjectId && activeProjectId !== projName) {
@@ -368,6 +357,12 @@ async function switchActiveProject(projName) {
     openTabsMap.clear();
     activeFilePath = null;
     renderTabBar();
+    if (monacoEditor) {
+        try {
+            const emptyModel = monaco.editor.createModel("", "plaintext");
+            monacoEditor.setModel(emptyModel);
+        } catch {}
+    }
 
     activeProjectId = projName;
     localStorage.setItem("antigravity_last_project", activeProjectId);
@@ -892,7 +887,15 @@ async function openFileInEditor(filePath, forceReload = false) {
     }
 
     // Verify file actually exists in current workspaceFilesList before firing network request
-    if (Array.isArray(workspaceFilesList) && workspaceFilesList.length > 0) {
+    if (Array.isArray(workspaceFilesList)) {
+        if (workspaceFilesList.length === 0) {
+            console.debug(`[IDE] Skip opening file on empty workspace: ${cleanPath}`);
+            if (openTabsMap.has(cleanPath)) {
+                openTabsMap.delete(cleanPath);
+                renderTabBar();
+            }
+            return;
+        }
         const fileExists = workspaceFilesList.some(f => !f.isDir && (
             (f.path && f.path.replace(/\\/g, '/').toLowerCase() === cleanPath.toLowerCase()) ||
             (f.name && f.name.toLowerCase() === cleanPath.toLowerCase()) ||
@@ -900,6 +903,10 @@ async function openFileInEditor(filePath, forceReload = false) {
         ));
         if (!fileExists) {
             console.debug(`[IDE] Skip opening non-existent file: ${cleanPath}`);
+            if (openTabsMap.has(cleanPath)) {
+                openTabsMap.delete(cleanPath);
+                renderTabBar();
+            }
             return;
         }
     }
@@ -943,12 +950,13 @@ async function openFileInEditor(filePath, forceReload = false) {
 
         } else {
             console.debug("[IDE] File content not available:", cleanPath, data.error || data.message);
+            if (openTabsMap.has(cleanPath)) {
+                openTabsMap.delete(cleanPath);
+                renderTabBar();
+            }
         }
     } catch (err) {
         console.warn("[IDE] Error opening file:", err);
-        if (typeof showToastNotification === 'function') {
-            showToastNotification("⚠️ Lỗi mở tệp: " + err.message);
-        }
     }
 }
 
@@ -3101,9 +3109,12 @@ function renderAgentResponse(data, container) {
         const isAlreadyApplied = Boolean(data.alreadyApplied || (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) || (opsList.length > 0 && opsList.every(o => o.alreadyApplied)));
 
         const actionFooterHtml = isAlreadyApplied ? `
-            <div class="alert alert-success extra-small py-1.5 px-2 mb-0 d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-check2-circle me-1.5 text-success"></i> Đã tự động áp dụng vào dự án (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)</span>
-                <button class="btn btn-sm btn-outline-light extra-small py-0.5 px-2" onclick="refreshFileTree()"><i class="bi bi-arrow-clockwise"></i> Đồng bộ</button>
+            <div class="alert alert-success extra-small py-1.5 px-2 mb-0 d-flex align-items-center justify-content-between gap-2">
+                <span><i class="bi bi-check2-circle me-1.5 text-success"></i> Đã tự động cập nhật vào dự án (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)</span>
+                <div class="d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-info text-dark fw-bold extra-small py-0.5 px-2" onclick="openLivePreview()"><i class="bi bi-globe me-1"></i> Preview</button>
+                    <button class="btn btn-sm btn-outline-light extra-small py-0.5 px-2" onclick="refreshFileTree()"><i class="bi bi-arrow-clockwise"></i> Đồng bộ</button>
+                </div>
             </div>
         ` : `
             <button id="btnBatchAcceptAll" class="btn-batch-accept w-100" onclick="applyAllAgentOperations()">
@@ -3223,8 +3234,10 @@ async function applyAllAgentOperations() {
     }
 
     // Safety: ensure any operation without content fetches its disk content before apply
+    const validOps = [];
     for (const op of ops) {
-        if ((!op.content || op.content.length === 0) && op.path) {
+        if (!op || !op.path) continue;
+        if ((!op.content || op.content.length === 0)) {
             try {
                 const uid = localStorage.getItem("user_id") || "1";
                 const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(proj)}&file=${encodeURIComponent(op.path)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
@@ -3236,12 +3249,16 @@ async function applyAllAgentOperations() {
                 }
             } catch (e) {}
         }
+        // Never send empty or whitespace content to apply-batch to avoid wiping disk files
+        if (op.content && op.content.trim().length > 0) {
+            validOps.push(op);
+        }
     }
 
     const btn = document.getElementById("btnBatchAcceptAll");
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<div class="spinner-border spinner-border-sm me-1"></div> Đang sinh ảnh AI & tạo ${ops.length + imgs.length} tệp...`;
+        btn.innerHTML = `<div class="spinner-border spinner-border-sm me-1"></div> Đang đồng bộ & áp dụng ${validOps.length + imgs.length} tệp...`;
     }
 
     try {
@@ -3250,7 +3267,7 @@ async function applyAllAgentOperations() {
             headers: getApiHeaders(),
             body: JSON.stringify({
                 project: proj,
-                operations: ops,
+                operations: validOps,
                 images: imgs
             })
         });
@@ -3260,17 +3277,17 @@ async function applyAllAgentOperations() {
             hideEmptyWorkspaceState();
             await refreshFileTree();
 
-            // Tự động mở file index.html hoặc file đầu tiên
-            const indexFile = ops.find(o => o.path.endsWith("index.html") || o.path === "index.html");
+            // Tự động mở file index.html hoặc file đầu tiên với forceReload: true
+            const indexFile = validOps.find(o => o.path.endsWith("index.html") || o.path === "index.html");
             if (indexFile) {
-                openFileInEditor(indexFile.path);
-            } else if (ops[0]?.path) {
-                openFileInEditor(ops[0].path);
+                await openFileInEditor(indexFile.path, true);
+            } else if (validOps[0]?.path) {
+                await openFileInEditor(validOps[0].path, true);
             }
 
             // In thông báo vào Terminal Output
             if (xtermInstance) {
-                xtermInstance.writeln(`\r\n\x1b[32m[Antigravity Agent] Đã áp dụng thành công ${data.appliedCount || (ops.length + imgs.length)} tệp và hình ảnh vào dự án "${proj}"!\x1b[0m`);
+                xtermInstance.writeln(`\r\n\x1b[32m[Antigravity Agent] Đã áp dụng thành công ${data.appliedCount || (validOps.length + imgs.length)} tệp và hình ảnh vào dự án "${proj}"!\x1b[0m`);
                 xtermInstance.write(`\r\n${terminalPrompt}`);
             }
 

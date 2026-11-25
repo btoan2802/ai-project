@@ -919,7 +919,7 @@ async function streamGeminiChat(userText, images, files, onChunk) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            model: mode === "thinking" ? "gemini-2.5-pro" : "gemini-2.5-flash",
+            model: mode === "thinking" ? "gemini-3.5-flash" : "gemini-3.5-flash-lite",
             payload: { ...payload, mode: mode },
             user_id: localStorage.getItem("user_id") || "1",
             conversation_id: conversation_id,
@@ -1094,7 +1094,7 @@ async function callGemini(userText, images, files) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: mode === "thinking" ? "gemini-2.5-pro" : "gemini-2.5-flash",
+                model: mode === "thinking" ? "gemini-3.5-flash" : "gemini-3.5-flash-lite",
                 payload: {
                     ...payload,
                     mode: mode
