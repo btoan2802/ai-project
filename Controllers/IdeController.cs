@@ -2796,6 +2796,99 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             }
         }
 
+        // POST /api/ide/run-command (Fallback REST endpoint for Terminal when SignalR disconnects)
+        [HttpPost("run-command")]
+        public async Task<IActionResult> RunCommandEndpoint([FromBody] RunCommandRequestModel model)
+        {
+            if (model == null || string.IsNullOrWhiteSpace(model.Command))
+            {
+                return BadRequest(new { exitCode = 1, output = "", error = "Command is required" });
+            }
+
+            int uid = (model.UserId.HasValue && model.UserId.Value > 0) ? model.UserId.Value : (CurrentUserId > 0 ? CurrentUserId : 1);
+            string cleanProj = SanitizeProjectName(model.Project);
+            string root = Path.Combine(AppContext.BaseDirectory, "App_Data", "UserWorkspaces", $"user_{uid}", cleanProj);
+            if (!Directory.Exists(root))
+            {
+                root = ResolveWorkspacePath(model.Project);
+            }
+
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                try { Directory.CreateDirectory(root); } catch { }
+            }
+
+            string rawCmd = model.Command.Trim();
+            // Strict sandbox & command injection prevention
+            if (rawCmd.Contains("..") || rawCmd.Contains("cd /") || rawCmd.Contains("cd \\") ||
+                rawCmd.Contains("rm -rf /") || rawCmd.Contains("del /s") || rawCmd.Contains("format "))
+            {
+                return BadRequest(new
+                {
+                    exitCode = 1,
+                    output = "",
+                    error = "Lệnh chứa ký tự điều hướng hoặc thao tác nguy hiểm không được phép trong sandbox."
+                });
+            }
+
+            try
+            {
+                bool isWindows = OperatingSystem.IsWindows();
+                var psi = new ProcessStartInfo
+                {
+                    WorkingDirectory = Directory.Exists(root) ? root : AppContext.BaseDirectory,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
+                };
+
+                if (isWindows)
+                {
+                    string script = $"$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;\n{rawCmd}";
+                    byte[] bytes = Encoding.Unicode.GetBytes(script);
+                    string encoded = Convert.ToBase64String(bytes);
+
+                    psi.FileName = "powershell.exe";
+                    psi.Arguments = $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}";
+                }
+                else
+                {
+                    psi.FileName = "/bin/bash";
+                    psi.Arguments = $"-c \"{rawCmd.Replace("\"", "\\\"")}\"";
+                }
+
+                using var proc = Process.Start(psi);
+                if (proc == null)
+                {
+                    return StatusCode(500, new { exitCode = 1, output = "", error = "Không thể khởi chạy tiến trình." });
+                }
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                string stdout = await proc.StandardOutput.ReadToEndAsync(cts.Token);
+                string stderr = await proc.StandardError.ReadToEndAsync(cts.Token);
+                await proc.WaitForExitAsync(cts.Token);
+
+                return Ok(new
+                {
+                    exitCode = proc.ExitCode,
+                    output = stdout,
+                    error = stderr
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                return StatusCode(408, new { exitCode = 124, output = "", error = "Lệnh chạy vượt quá thời gian cho phép (45s timeout)." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "RunCommand execution error");
+                return StatusCode(500, new { exitCode = 1, output = "", error = ex.Message });
+            }
+        }
+
         // ==========================================
         // 5. BTOAN AGENT FULL-PROJECT CHAT & RUN
         // ==========================================
@@ -2951,16 +3044,22 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 }
             }) : Task.CompletedTask;
 
-            string selectedModel = "gemini-3.5-flash-lite";
+            string selectedModel = "gemini-2.5-flash";
             if (!string.IsNullOrWhiteSpace(model.Model))
             {
-                if (model.Model.Contains("3.8") || model.Model.Contains("pro"))
+                string mLower = model.Model.Trim().ToLowerInvariant();
+                if (mLower.Contains("pro"))
                 {
-                    selectedModel = "gemini-3.8-flash";
+                    selectedModel = "gemini-2.5-pro";
+                }
+                else if (mLower.Contains("lite"))
+                {
+                    selectedModel = "gemini-2.5-flash-lite";
                 }
                 else
                 {
-                    selectedModel = "gemini-3.5-flash-lite";
+                    // Both Btoan 3.5 Flash and Btoan 2.5 Flash route to gemini-2.5-flash
+                    selectedModel = "gemini-2.5-flash";
                 }
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
@@ -4718,6 +4817,13 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
     {
         public string? Project { get; set; }
         public string Command { get; set; } = string.Empty;
+    }
+
+    public class RunCommandRequestModel
+    {
+        public string? Project { get; set; }
+        public string? Command { get; set; }
+        public int? UserId { get; set; }
     }
 
     public class BatchOperationsModel

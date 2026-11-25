@@ -2089,22 +2089,29 @@ async function runCustomTerminalCmd(cmd) {
     }
 
     try {
-        const res = await fetch('/api/ide/terminal', {
+        const uid = localStorage.getItem("user_id") || "1";
+        const res = await fetch('/api/ide/run-command', {
             method: 'POST',
             headers: getApiHeaders(),
             body: JSON.stringify({
                 project: activeProjectId,
-                command: cmd
+                command: cmd,
+                userId: parseInt(uid) || 1
             })
         });
         const data = await res.json();
-        if (data.ok) {
+        if (data && (data.exitCode === 0 || data.ok)) {
             if (xtermInstance) {
-                xtermInstance.writeln(data.output || "(Command completed)");
+                const outText = data.output || data.message || "(Command completed)";
+                xtermInstance.writeln(outText.replace(/\r?\n/g, '\r\n'));
                 xtermInstance.write(`\r\n${terminalPrompt}`);
             }
         } else {
-            showRestrictedLoginPrompt(data.message || "Thực thi terminal bị từ chối.");
+            if (xtermInstance) {
+                const errText = data.error || data.message || "Lỗi thực thi lệnh";
+                xtermInstance.writeln(`\x1b[31m${errText.replace(/\r?\n/g, '\r\n')}\x1b[0m`);
+                xtermInstance.write(`\r\n${terminalPrompt}`);
+            }
         }
     } catch (err) {
         if (xtermInstance) {
@@ -2960,7 +2967,7 @@ async function sendAgentTask() {
     container.appendChild(agentMsg);
     container.scrollTop = container.scrollHeight;
 
-    const model = document.getElementById("agentModelSelect")?.value || "gemini-3.5-flash-lite";
+    const model = document.getElementById("agentModelSelect")?.value || "gemini-2.5-flash";
     const mode = document.getElementById("agentModeSelect")?.value || "fast";
 
     // Animated Live Progress Ticker with Real-Time Event Binding

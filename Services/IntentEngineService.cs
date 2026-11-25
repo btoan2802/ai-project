@@ -130,7 +130,7 @@ The JSON object must have these fields:
             {
                 try
                 {
-                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={key}";
+                    string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}";
                     var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
                     var response = await _httpClient.PostAsync(url, content);
                     if (!response.IsSuccessStatusCode) continue;

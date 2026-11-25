@@ -31,7 +31,18 @@ namespace BtoanAiNet.Services
 
             // 1. From appsettings.json (Highest Priority)
             string? singleKey = _configuration["Gemini:ApiKey"];
-            if (!string.IsNullOrWhiteSpace(singleKey) && !singleKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(singleKey.Trim());
+            if (!string.IsNullOrWhiteSpace(singleKey))
+            {
+                var split = singleKey.Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var s in split)
+                {
+                    string trimmed = s.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed) && !trimmed.Contains("YOUR_GEMINI_API_KEY"))
+                    {
+                        keys.Add(trimmed);
+                    }
+                }
+            }
 
             var arrayKeys = _configuration.GetSection("Gemini:ApiKeys").Get<string[]>();
             if (arrayKeys != null)
@@ -42,7 +53,18 @@ namespace BtoanAiNet.Services
             // 2. From Environment Variable (GEMINI_API_KEY or Gemini__ApiKey)
             string? envKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") 
                           ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
-            if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
+            if (!string.IsNullOrWhiteSpace(envKey))
+            {
+                var split = envKey.Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var s in split)
+                {
+                    string trimmed = s.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed) && !trimmed.Contains("YOUR_GEMINI_API_KEY"))
+                    {
+                        keys.Add(trimmed);
+                    }
+                }
+            }
 
             // 3. Dual Fallback Keys Pool for High Availability on Production Render
             try
@@ -102,27 +124,31 @@ namespace BtoanAiNet.Services
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
 
-            // High Availability & Tested Working Fallback Chain:
-            // Priority 1: gemini-3.5-flash-lite (Rock solid 200 OK, full function calling, high RPM)
-            // Priority 2: gemini-flash-lite-latest (Fast lite backup)
-            // Priority 3: gemini-3.8-flash (Advanced reasoning/pro backup)
-            if (cleanModel.Contains("3.8") || cleanModel.Contains("pro"))
+            // High Availability Fallback Chain:
+            // Priority 1: gemini-2.5-flash (Standard workhorse, fast & Senior reasoning)
+            // Priority 2: gemini-2.5-flash-lite (Ultra-fast, high quota limits)
+            // Priority 3: gemini-2.0-flash (Stable fallback)
+            if (cleanModel.Contains("pro") || isThinkingMode)
             {
-                candidateModels.Add("gemini-3.8-flash");
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add("gemini-2.5-pro");
+                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-2.0-flash");
+            }
+            else if (cleanModel.Contains("lite"))
+            {
+                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-2.0-flash");
             }
             else
             {
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
-                candidateModels.Add("gemini-3.8-flash");
-                if (!string.IsNullOrWhiteSpace(cleanModel) && !cleanModel.Contains("2.5") && !cleanModel.Contains("lite"))
-                {
-                    candidateModels.Add(cleanModel);
-                }
+                // Both Btoan 3.5 Flash and Btoan 2.5 Flash route directly to gemini-2.5-flash
+                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-2.0-flash");
             }
-            candidateModels = candidateModels.Where(m => !m.Contains("2.5")).Distinct().ToList();
+            candidateModels = candidateModels.Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
@@ -210,33 +236,40 @@ namespace BtoanAiNet.Services
                         if (!response.IsSuccessStatusCode)
                         {
                             int statusCode = (int)response.StatusCode;
-                            // Fast retry on temporary spikes: 503, 429, 500, 502
-                            if (statusCode == 503 || statusCode == 429 || statusCode == 500 || statusCode == 502)
+                            bool isLimitZero = rawResponse.Contains("limit: 0", StringComparison.OrdinalIgnoreCase)
+                                            || rawResponse.Contains("quota limit: 0", StringComparison.OrdinalIgnoreCase)
+                                            || rawResponse.Contains("limit of 0", StringComparison.OrdinalIgnoreCase)
+                                            || rawResponse.Contains("resource has been exhausted", StringComparison.OrdinalIgnoreCase);
+
+                            if (statusCode == 429 || statusCode == 503)
                             {
-                                if (statusCode == 429 && onStatusUpdate != null)
+                                if (isLimitZero)
                                 {
-                                    try { await onStatusUpdate("⏳ Hạn mức AI đang bận (429), đang tự động điều tiết và luân chuyển khóa..."); } catch { }
-                                }
-                                await Task.Delay(2000);
-                                try
-                                {
-                                    using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
-                                    var retryResponse = await _httpClient.PostAsync(url, content, retryCts.Token);
-                                    if (retryResponse.IsSuccessStatusCode)
+                                    Console.WriteLine($"[GeminiService] Model {currentModel} limit: 0 or quota exhausted. Skipping immediately to next fallback model.");
+                                    if (onStatusUpdate != null)
                                     {
-                                        string retryRaw = await retryResponse.Content.ReadAsStringAsync(retryCts.Token);
-                                        var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
-                                        if (retryJson != null && retryJson.ContainsKey("candidates"))
-                                        {
-                                            Console.WriteLine($"[t_gemini_retry_success] Model: {currentModel} recovered on attempt 2!");
-                                            return (true, retryJson, retryRaw, null);
-                                        }
+                                        try { await onStatusUpdate($"Model {currentModel} đạt giới hạn (limit: 0), chuyển ngay sang model dự phòng..."); } catch { }
                                     }
+                                    lastError = $"[{currentModel}] HTTP 429 (limit: 0): {rawResponse}";
+                                    break; // Skip rest of keys for this model, move to next model in candidateModels
                                 }
-                                catch { }
+                                else
+                                {
+                                    // Rate limit (RPM) exceeded: wait 3 seconds before rotating key/model
+                                    Console.WriteLine($"[GeminiService] Model {currentModel} hit 429 RPM limit. Waiting 3s before retry/rotation...");
+                                    if (onStatusUpdate != null)
+                                    {
+                                        try { await onStatusUpdate("⏳ Hạn mức RPM đang bận (429), đợi 3 giây và tự động luân chuyển khóa/model..."); } catch { }
+                                    }
+                                    await Task.Delay(3000);
+                                }
+                            }
+                            else if (statusCode == 500 || statusCode == 502)
+                            {
+                                await Task.Delay(1500);
                             }
 
-                            string snippet = rawResponse.Length > 150 ? rawResponse.Substring(0, 150) : rawResponse;
+                            string snippet = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) : rawResponse;
                             lastError = $"[{currentModel}] HTTP {(int)response.StatusCode}: {snippet}";
                             continue;
                         }
@@ -282,19 +315,26 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            if (isThinkingMode || cleanModel.Contains("pro") || cleanModel.Contains("3.8"))
+            if (isThinkingMode || cleanModel.Contains("pro"))
             {
-                candidateModels.Add("gemini-3.8-flash");
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add("gemini-2.5-pro");
+                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-2.0-flash");
+            }
+            else if (cleanModel.Contains("lite"))
+            {
+                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-2.0-flash");
             }
             else
             {
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
-                candidateModels.Add("gemini-3.8-flash");
+                candidateModels.Add("gemini-2.5-flash");
+                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-2.0-flash");
             }
-            candidateModels = candidateModels.Where(m => !m.Contains("2.5")).Distinct().ToList();
+            candidateModels = candidateModels.Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
@@ -383,33 +423,32 @@ namespace BtoanAiNet.Services
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        if ((int)response.StatusCode == 503)
-                        {
-                            try
-                            {
-                                await Task.Delay(200, cancellationToken);
-                                response.Dispose();
-                                using var retryReq = new HttpRequestMessage(HttpMethod.Post, url)
-                                {
-                                    Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
-                                };
-                                using var ctsRetry = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                                ctsRetry.CancelAfter(TimeSpan.FromSeconds(25));
-                                response = await _httpClient.SendAsync(retryReq, HttpCompletionOption.ResponseHeadersRead, ctsRetry.Token);
-                            }
-                            catch { }
-                        }
-                    }
+                        int statusCode = (int)response.StatusCode;
+                        string rawErr = "";
+                        try { rawErr = await response.Content.ReadAsStringAsync(cancellationToken); } catch { }
 
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        string errSnippet = "";
-                        try
+                        bool isLimitZero = rawErr.Contains("limit: 0", StringComparison.OrdinalIgnoreCase)
+                                        || rawErr.Contains("quota limit: 0", StringComparison.OrdinalIgnoreCase)
+                                        || rawErr.Contains("limit of 0", StringComparison.OrdinalIgnoreCase)
+                                        || rawErr.Contains("resource has been exhausted", StringComparison.OrdinalIgnoreCase);
+
+                        if (statusCode == 429 || statusCode == 503)
                         {
-                            string rawErr = await response.Content.ReadAsStringAsync(cancellationToken);
-                            errSnippet = rawErr.Length > 200 ? rawErr.Substring(0, 200) : rawErr;
+                            if (isLimitZero)
+                            {
+                                Console.WriteLine($"[GeminiService.Stream] Model {currentModel} limit: 0 or quota exhausted. Skipping immediately to next fallback model.");
+                                response.Dispose();
+                                lastStreamError = $"[{currentModel}] HTTP 429 (limit: 0): {rawErr}";
+                                break; // skip to next candidate model
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[GeminiService.Stream] Model {currentModel} hit 429 RPM limit. Waiting 3s before retry/rotation...");
+                                await Task.Delay(3000, cancellationToken);
+                            }
                         }
-                        catch { }
+
+                        string errSnippet = rawErr.Length > 200 ? rawErr.Substring(0, 200) : rawErr;
                         lastStreamError = $"[{currentModel}] HTTP {(int)response.StatusCode}: {errSnippet}";
                         Console.WriteLine($"[GeminiService.Stream] HTTP {(int)response.StatusCode} on {currentModel}: {errSnippet}");
                         response.Dispose();
