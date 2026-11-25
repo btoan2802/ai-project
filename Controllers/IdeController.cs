@@ -3048,6 +3048,10 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG CHUẨN ANTIGRAVITY (AUTONOMOUS 4-S
    - Đối với dự án biên dịch (.NET /.csproj hoặc Node/Angular/package.json): BẮT BUỘC gọi run_command(""dotnet build"") hoặc run_command(""npm run build"") trước khi kết thúc.
    - Nếu ExitCode != 0, bạn phải đọc chi tiết lỗi compiler, gọi read_file + patch_file sửa lỗi và chạy lại build cho tới khi đạt 0 Error(s).
 
+NĂNG LỰC THỊ GIÁC (MULTIMODAL VISION):
+- Nếu người dùng có đính kèm ảnh chụp màn hình (screenshot) hoặc ảnh giao diện: Bạn BẮT BUỘC phải quan sát kỹ bức ảnh được gửi kèm trong lượt chat (giao diện, hình ảnh hiển thị, bảng số liệu, màu sắc, bố cục hoặc chi tiết bị sai lệch).
+- Hãy đối chiếu những gì bạn nhìn thấy trên ảnh với mã nguồn dự án, sau đó gọi read_file / patch_file / write_file hoặc generate_image để sửa dứt điểm lỗi hiển thị mà người dùng phản ánh.
+
 TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 - Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (write_file / patch_file / run_command / generate_image) ngay từ lượt đầu tiên.
 - Khi đã hoàn thành tất cả các file và xác thực build 0 Error(s), dừng gọi tool và trả lời tóm tắt bằng tiếng Việt.";
@@ -3315,16 +3319,36 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             }
             catch { }
 
+            var userParts = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["text"] = $"{agentSystemInstruction}\n\n[CONTEXT FILES]:\n{sbContext}\n\n[USER REQUEST]: {model.Prompt}"
+                }
+            };
+
+            if (!string.IsNullOrWhiteSpace(model.ImageBase64))
+            {
+                try
+                {
+                    string cleanB64 = System.Text.RegularExpressions.Regex.Replace(model.ImageBase64, @"^data:image\/[^;]+;base64,", "").Trim();
+                    string mime = !string.IsNullOrWhiteSpace(model.ImageMimeType) ? model.ImageMimeType : "image/jpeg";
+                    userParts.Add(new JsonObject
+                    {
+                        ["inlineData"] = new JsonObject
+                        {
+                            ["mimeType"] = mime,
+                            ["data"] = cleanB64
+                        }
+                    });
+                }
+                catch { }
+            }
+
             messages.Add(new JsonObject
             {
                 ["role"] = "user",
-                ["parts"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["text"] = $"{agentSystemInstruction}\n\n[CONTEXT FILES]:\n{sbContext}\n\n[USER REQUEST]: {model.Prompt}"
-                    }
-                }
+                ["parts"] = userParts
             });
 
             var modifiedFiles = new List<string>();
@@ -4691,6 +4715,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
         public string? OpenFileContent { get; set; }
         public List<ContextFileModel>? ContextFiles { get; set; }
         public bool Stream { get; set; } = true;
+        public string? ImageBase64 { get; set; }
+        public string? ImageMimeType { get; set; }
     }
 
     public class ContextFileModel

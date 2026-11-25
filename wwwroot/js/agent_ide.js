@@ -2831,6 +2831,66 @@ function removeContextChip() {
     if (chip) chip.style.display = "none";
 }
 
+let currentAttachedImageBase64 = null;
+let currentAttachedImageMimeType = null;
+
+window.openFileMentionPicker = function() {
+    const input = document.getElementById("agentTaskInput");
+    if (input) {
+        if (!input.value.endsWith("@") && !input.value.endsWith("@ ")) {
+            input.value = input.value ? (input.value + " @") : "@";
+        }
+        input.focus();
+        showMentionPopup();
+    }
+};
+
+window.triggerAgentImageUpload = function() {
+    const fileInput = document.getElementById("agentImageFileInput");
+    if (fileInput) fileInput.click();
+};
+
+window.onAgentImageFileSelected = function(event) {
+    const file = event.target.files && event.target.files[0];
+    if (file) {
+        window.attachAgentImageFile(file);
+    }
+};
+
+window.attachAgentImageFile = function(file) {
+    if (!file || !file.type.startsWith("image/")) {
+        if (typeof showToastNotification === 'function') showToastNotification("⚠️ Chỉ hỗ trợ đính kèm tệp hình ảnh (PNG, JPG, WebP)!");
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        currentAttachedImageBase64 = e.target.result;
+        currentAttachedImageMimeType = file.type || "image/jpeg";
+
+        const chip = document.getElementById("agentImageChip");
+        const thumb = document.getElementById("agentImageThumb");
+        const nameEl = document.getElementById("agentImageName");
+
+        if (thumb) thumb.src = currentAttachedImageBase64;
+        if (nameEl) nameEl.textContent = file.name || "Screenshot.png";
+        if (chip) chip.style.display = "inline-flex";
+
+        if (typeof showToastNotification === 'function') showToastNotification("📸 Đã đính kèm ảnh chụp màn hình lỗi!");
+        const input = document.getElementById("agentTaskInput");
+        if (input) input.focus();
+    };
+    reader.readAsDataURL(file);
+};
+
+window.removeAttachedImage = function() {
+    currentAttachedImageBase64 = null;
+    currentAttachedImageMimeType = null;
+    const chip = document.getElementById("agentImageChip");
+    if (chip) chip.style.display = "none";
+    const fileInput = document.getElementById("agentImageFileInput");
+    if (fileInput) fileInput.value = "";
+};
+
 async function sendAgentTask() {
     const input = document.getElementById("agentTaskInput");
     if (!input) return;
@@ -2851,6 +2911,20 @@ async function sendAgentTask() {
     const userMsg = document.createElement("div");
     userMsg.className = "p-2 rounded bg-dark border border-secondary text-light extra-small";
     userMsg.innerText = task;
+
+    if (currentAttachedImageBase64) {
+        const userImg = document.createElement("img");
+        userImg.src = currentAttachedImageBase64;
+        userImg.style.maxWidth = "220px";
+        userImg.style.maxHeight = "150px";
+        userImg.style.borderRadius = "6px";
+        userImg.style.marginBottom = "6px";
+        userImg.style.objectFit = "cover";
+        userImg.style.cursor = "pointer";
+        const currentB64 = currentAttachedImageBase64;
+        userImg.onclick = () => window.open(currentB64, "_blank");
+        userMsgWrapper.appendChild(userImg);
+    }
     userMsgWrapper.appendChild(userMsg);
     container.appendChild(userMsgWrapper);
 
@@ -2933,6 +3007,10 @@ async function sendAgentTask() {
     }
 
     try {
+        const payloadImageBase64 = currentAttachedImageBase64;
+        const payloadImageMimeType = currentAttachedImageMimeType;
+        window.removeAttachedImage();
+
         const res = await fetch('/api/ide/agent-run', {
             method: 'POST',
             headers: {
@@ -2946,7 +3024,9 @@ async function sendAgentTask() {
                 prompt: task,
                 mode: mode,
                 model: model,
-                stream: true
+                stream: true,
+                imageBase64: payloadImageBase64 || null,
+                imageMimeType: payloadImageMimeType || null
             })
         });
         clearTimeout(timeoutId);
@@ -5238,6 +5318,26 @@ window.addEventListener('DOMContentLoaded', () => {
                 }
             }).observe(termPanes);
         }
+    }
+
+    // Setup paste listener on agentTaskInput to support pasting screenshots directly (Ctrl+V)
+    const taskInput = document.getElementById("agentTaskInput");
+    if (taskInput) {
+        taskInput.addEventListener("paste", (e) => {
+            if (e.clipboardData && e.clipboardData.items) {
+                for (let i = 0; i < e.clipboardData.items.length; i++) {
+                    const item = e.clipboardData.items[i];
+                    if (item.type.indexOf("image") !== -1) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (file) {
+                            window.attachAgentImageFile(file);
+                        }
+                        return;
+                    }
+                }
+            }
+        });
     }
 
     // Ctrl + Enter shortcut for SQLite Query input

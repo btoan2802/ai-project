@@ -823,17 +823,26 @@
                             <span id="activeChipText"></span>
                             <i class="bi bi-x ms-1 cursor-pointer" onclick="removeContextChip()"></i>
                         </div>
+                        <div class="context-file-chip" id="agentImageChip" style="display: none;">
+                            <img id="agentImageThumb" src="" style="width: 20px; height: 20px; object-fit: cover; border-radius: 4px; margin-right: 4px;" />
+                            <span id="agentImageName" class="text-truncate" style="max-width: 140px;">Screenshot.png</span>
+                            <i class="bi bi-x ms-1 cursor-pointer" onclick="removeAttachedImage()"></i>
+                        </div>
                     </div>
 
                     <!-- Textarea -->
-                    <textarea id="agentTaskInput" class="agent-textarea" placeholder="Ask anything, @@ to mention, / for commands..." oninput="onPromptInput(event)" onkeydown="onPromptKeyDown(event)"></textarea>
+                    <textarea id="agentTaskInput" class="agent-textarea" placeholder="Hỏi Agent, dán ảnh chụp màn hình lỗi (Ctrl+V), @@ để gắn tệp..." oninput="onPromptInput(event)" onkeydown="onPromptKeyDown(event)"></textarea>
 
                     <!-- Bottom Controls Inside Box (Image 3 1:1 Match) -->
                     <div class="prompt-bottom-bar">
                         <div class="d-flex align-items-center gap-1.5">
-                            <button class="btn-prompt-pill" type="button" onclick="openFileMentionPicker()" title="Add Context File (@@)">
-                                <i class="bi bi-plus-lg"></i>
+                            <button class="btn-prompt-pill" type="button" onclick="triggerAgentImageUpload()" title="Đính kèm ảnh chụp màn hình / Báo lỗi (Ctrl+V)">
+                                <i class="bi bi-image text-info"></i>
                             </button>
+                            <button class="btn-prompt-pill" type="button" onclick="openFileMentionPicker()" title="Thêm file mã nguồn vào ngữ cảnh (@@)">
+                                <i class="bi bi-paperclip"></i>
+                            </button>
+                            <input type="file" id="agentImageFileInput" accept="image/*" style="display: none;" onchange="onAgentImageFileSelected(event)">
                             <div class="position-relative">
                                 <div id="agentModelPill" class="agent-model-pill" onclick="toggleModelDropdown(event)" title="Choose Model">
                                     <span id="currentModelLabel">⚡ Btoan 3.5 Flash</span>
@@ -1267,6 +1276,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261126_antigravity_complete_v1" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261126_vision_paste_v1" asp-append-version="true"></script>
 </body>
 </html>
