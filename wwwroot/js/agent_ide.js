@@ -830,7 +830,7 @@ async function openFileInEditor(filePath, forceReload = false) {
 
     try {
         const uid = localStorage.getItem("user_id") || "1";
-        const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(filePath)}&user_id=${encodeURIComponent(uid)}`, {
+        const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(filePath)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
             headers: getApiHeaders()
         });
         const data = await res.json();
@@ -2993,18 +2993,29 @@ function renderAgentResponse(data, container) {
         }).join('');
 
         const totalItems = opsList.length + imgsList.length;
+        const isAlreadyApplied = Boolean(data.alreadyApplied || (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) || (opsList.length > 0 && opsList.every(o => o.alreadyApplied)));
+
+        const actionFooterHtml = isAlreadyApplied ? `
+            <div class="alert alert-success extra-small py-1.5 px-2 mb-0 d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-check2-circle me-1.5 text-success"></i> Đã tự động áp dụng vào dự án (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)</span>
+                <button class="btn btn-sm btn-outline-light extra-small py-0.5 px-2" onclick="refreshFileTree()"><i class="bi bi-arrow-clockwise"></i> Đồng bộ</button>
+            </div>
+        ` : `
+            <button id="btnBatchAcceptAll" class="btn-batch-accept w-100" onclick="applyAllAgentOperations()">
+                <i class="bi bi-check2-all fs-6"></i> Áp dụng tất cả (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)
+            </button>
+        `;
+
         opsCard.innerHTML = `
             <div class="agent-operations-header">
-                <span><i class="bi bi-files me-1.5 text-info"></i> ${totalItems} tệp & hình ảnh đề xuất</span>
-                <span class="badge bg-secondary extra-small">AI Scaffolding</span>
+                <span><i class="bi bi-files me-1.5 text-info"></i> ${totalItems} tệp & hình ảnh ${isAlreadyApplied ? 'đã tạo' : 'đề xuất'}</span>
+                <span class="badge ${isAlreadyApplied ? 'bg-success' : 'bg-secondary'} extra-small">${isAlreadyApplied ? 'Live Applied' : 'AI Scaffolding'}</span>
             </div>
             <div class="d-flex flex-column gap-1.5 my-1">
                 ${opsHtml}
                 ${imgsHtml}
             </div>
-            <button id="btnBatchAcceptAll" class="btn-batch-accept w-100" onclick="applyAllAgentOperations()">
-                <i class="bi bi-check2-all fs-6"></i> Áp dụng tất cả (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)
-            </button>
+            ${actionFooterHtml}
         `;
         container.appendChild(opsCard);
     }
@@ -3056,12 +3067,28 @@ async function runScaffoldingAndApplyAll() {
     }
 }
 
-function reviewSingleOperation(index) {
+async function reviewSingleOperation(index) {
     if (!window.currentAgentOperations || !window.currentAgentOperations[index]) return;
     const op = window.currentAgentOperations[index];
+    let content = op.content;
+    if ((!content || content.length === 0) && op.path) {
+        try {
+            const uid = localStorage.getItem("user_id") || "1";
+            const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(op.path)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
+                headers: getApiHeaders()
+            });
+            const data = await res.json();
+            if (data.ok && data.content) {
+                content = data.content;
+                op.content = content;
+            }
+        } catch (e) {
+            console.warn("Failed to fetch op content for review", e);
+        }
+    }
     activeDiffProposal = {
         file: op.path,
-        content: op.content || "",
+        content: content || "",
         original: "" // File mới thì original là rỗng
     };
     reviewAgentDiff();
@@ -3088,6 +3115,22 @@ async function applyAllAgentOperations() {
         activeProjectId = proj;
         const select = document.getElementById("projectSelect");
         if (select) select.value = proj;
+    }
+
+    // Safety: ensure any operation without content fetches its disk content before apply
+    for (const op of ops) {
+        if ((!op.content || op.content.length === 0) && op.path) {
+            try {
+                const uid = localStorage.getItem("user_id") || "1";
+                const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(proj)}&file=${encodeURIComponent(op.path)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
+                    headers: getApiHeaders()
+                });
+                const data = await res.json();
+                if (data.ok && data.content) {
+                    op.content = data.content;
+                }
+            } catch (e) {}
+        }
     }
 
     const btn = document.getElementById("btnBatchAcceptAll");

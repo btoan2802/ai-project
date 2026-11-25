@@ -1948,6 +1948,19 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                                 Directory.CreateDirectory(parent);
                             }
 
+                            // SAFETY GUARD: Do NOT wipe existing file if op.Content is null or empty
+                            if (string.IsNullOrWhiteSpace(op.Content))
+                            {
+                                if (System.IO.File.Exists(fullPath) && new FileInfo(fullPath).Length > 0)
+                                {
+                                    // File already exists with real content on disk (e.g. written by autonomous agent)
+                                    // Preserve existing content!
+                                    successCount++;
+                                    appliedFiles.Add(op.Path.Replace('\\', '/'));
+                                    continue;
+                                }
+                            }
+
                             await System.IO.File.WriteAllTextAsync(fullPath, op.Content ?? "", Encoding.UTF8);
                             successCount++;
                             appliedFiles.Add(op.Path.Replace('\\', '/'));
@@ -3153,11 +3166,23 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                 string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
                                 if (!string.IsNullOrWhiteSpace(fPath))
                                 {
+                                    string contentOnDisk = "";
+                                    if (TryGetSafeFilePath(projectPath, fPath, out string fullSafePath) && System.IO.File.Exists(fullSafePath))
+                                    {
+                                        try { contentOnDisk = await System.IO.File.ReadAllTextAsync(fullSafePath, Encoding.UTF8); } catch {}
+                                    }
+                                    if (string.IsNullOrEmpty(contentOnDisk))
+                                    {
+                                        contentOnDisk = ExtractStringArg(toolArgs, "content", "code", "text", "body") ?? "";
+                                    }
+
                                     toolOperations.Add(new
                                     {
                                         action = toolName == "write_file" ? "create" : "edit",
                                         path = fPath,
-                                        summary = $"Cập nhật tệp {fPath}"
+                                        content = contentOnDisk,
+                                        summary = $"Cập nhật tệp {fPath}",
+                                        alreadyApplied = true
                                     });
                                     planSteps.Add($"Cập nhật tệp '{fPath}'");
                                 }
@@ -3170,7 +3195,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                 {
                                     action = "create",
                                     path = outPath,
-                                    summary = $"Tạo hình ảnh: {pPrompt}"
+                                    summary = $"Tạo hình ảnh: {pPrompt}",
+                                    alreadyApplied = true
                                 });
                                 planSteps.Add($"Tạo hình ảnh minh họa '{outPath}'");
                             }
@@ -3349,7 +3375,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         modifiedFiles = modifiedFiles,
                         operations = toolOperations,
                         buildPassed = buildPassed,
-                        executedCommands = executedCommands
+                        executedCommands = executedCommands,
+                        alreadyApplied = true
                     });
                     return;
                 }
@@ -3365,7 +3392,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         modifiedFiles = modifiedFiles,
                         operations = toolOperations,
                         buildPassed = buildPassed,
-                        executedCommands = executedCommands
+                        executedCommands = executedCommands,
+                        alreadyApplied = true
                     });
                     return;
                 }
