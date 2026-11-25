@@ -760,13 +760,27 @@ async function restoreOpenTabsState() {
             const tabPaths = JSON.parse(raw);
             if (Array.isArray(tabPaths) && tabPaths.length > 0) {
                 // Filter out any paths that belong to another project or have invalid project prefix
-                const validPaths = tabPaths.map(p => {
+                let validPaths = tabPaths.map(p => {
                     let clean = p.replace(/\\/g, '/').replace(/^\/+/, '');
                     if (clean.startsWith(activeProjectId + '/')) {
                         clean = clean.substring(activeProjectId.length + 1);
                     }
                     return clean;
                 }).filter(p => !p.includes('/') || !p.startsWith('project-'));
+
+                // Verify against actual workspaceFilesList to avoid 404s
+                if (Array.isArray(workspaceFilesList) && workspaceFilesList.length > 0) {
+                    validPaths = validPaths.filter(p => {
+                        const low = p.toLowerCase();
+                        return workspaceFilesList.some(f => !f.isDir && (
+                            (f.path && f.path.replace(/\\/g, '/').toLowerCase() === low) ||
+                            (f.name && f.name.toLowerCase() === low) ||
+                            (f.path && f.path.replace(/\\/g, '/').toLowerCase().endsWith('/' + low))
+                        ));
+                    });
+                } else if (Array.isArray(workspaceFilesList) && workspaceFilesList.length === 0) {
+                    return false;
+                }
 
                 for (const p of validPaths) {
                     await openFileInEditor(p, true);
@@ -877,6 +891,19 @@ async function openFileInEditor(filePath, forceReload = false) {
         }
     }
 
+    // Verify file actually exists in current workspaceFilesList before firing network request
+    if (Array.isArray(workspaceFilesList) && workspaceFilesList.length > 0) {
+        const fileExists = workspaceFilesList.some(f => !f.isDir && (
+            (f.path && f.path.replace(/\\/g, '/').toLowerCase() === cleanPath.toLowerCase()) ||
+            (f.name && f.name.toLowerCase() === cleanPath.toLowerCase()) ||
+            (f.path && f.path.replace(/\\/g, '/').toLowerCase().endsWith('/' + cleanPath.toLowerCase()))
+        ));
+        if (!fileExists) {
+            console.debug(`[IDE] Skip opening non-existent file: ${cleanPath}`);
+            return;
+        }
+    }
+
     try {
         const uid = localStorage.getItem("user_id") || "1";
         const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(cleanPath)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
@@ -915,10 +942,7 @@ async function openFileInEditor(filePath, forceReload = false) {
             try { monacoEditor.layout(); } catch {}
 
         } else {
-            console.warn("[IDE] Could not load file:", cleanPath, data.error || data.message);
-            if (typeof showToastNotification === 'function') {
-                showToastNotification("⚠️ Không thể tải nội dung tệp: " + (data.message || data.error || cleanPath));
-            }
+            console.debug("[IDE] File content not available:", cleanPath, data.error || data.message);
         }
     } catch (err) {
         console.warn("[IDE] Error opening file:", err);

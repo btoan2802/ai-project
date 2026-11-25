@@ -2886,18 +2886,20 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG (AUTONOMOUS 4-STEP LOOP):
 1. BƯỚC 1: KHẢO SÁT & HIỂU RÕ DỰ ÁN
    - Nếu dự án đã có sẵn tệp, sử dụng read_file để hiểu ngữ cảnh trước khi sửa.
 
-2. BƯỚC 2: TẠO HÌNH ẢNH MINH HỌA THẬT (ĐỐI VỚI DỰ ÁN WEB / GIAO DIỆN)
-   - Nếu dự án cần hình ảnh minh họa (ảnh nền hero banner, avatar, sản phẩm...):
-   - Bạn có thể gọi 'generate_image' 1 lần (tối đa 2 lần) cho các hình ảnh chính quan trọng nhất (ví dụ: 'images/banner.jpg', 'images/avatar.jpg'). Không tạo quá nhiều ảnh thừa để tiết kiệm thời gian phản hồi cho người dùng.
-   - Sau đó trong 'index.html', dùng chính xác đường dẫn thẻ <img src=""images/banner.jpg""> hoặc CSS background-image: url('images/banner.jpg').
+2. BƯỚC 2: PHÂN LOẠI YÊU CẦU & XỬ LÝ HÌNH ẢNH MINH HỌA
+   - Với ứng dụng công cụ, tiện ích, tính toán, quản lý, game logic (ví dụ: web tính điểm cấp 3 / xét tuyển đại học, máy tính cầm tay, to-do list, quản lý chi tiêu, bảng biểu, dashboard):
+     + TUYỆT ĐỐI KHÔNG gọi 'generate_image'. Bắt tay ngay vào BƯỚC 3 để tạo các file mã nguồn hoàn chỉnh ('index.html', 'style.css', 'script.js').
+     + Thiết kế giao diện hiện đại với CSS Gradient/Cards/Tables, và viết logic JavaScript tính toán chính xác 100% (ví dụ: tính điểm trung bình học kỳ/cả năm, tính điểm xét tốt nghiệp THPT, tính điểm tổ hợp xét tuyển đại học A00, A01, B00, C00, D01... theo chuẩn quy chế Việt Nam).
+   - Chỉ gọi 'generate_image' (tối đa 1-2 lần) khi người dùng yêu cầu trang thực sự cần hình ảnh minh họa thực tế (như shop/web bán hàng, landing page sản phẩm, blog du lịch/ẩm thực, thiệp tỏ tình).
 
-3. BƯỚC 3: PHÂN TÁCH TỆP CHUẨN 100% (TUYỆT ĐỐI KHÔNG DỒN 1 TỆP):
+3. BƯỚC 3: PHÂN TÁCH TỆP CHUẨN 100% & BẮT BUỘC HOÀN THÀNH TẤT CẢ FILE TRONG PLAN:
    - ĐỐI VỚI DỰ ÁN WEB (HTML / CSS / JS):
      + BẮT BUỘC tạo tối thiểu 3 tệp riêng biệt:
        * 'index.html': Chỉ chứa khung cấu trúc HTML ngữ nghĩa, liên kết <link rel=""stylesheet"" href=""style.css""> trong <head> và <script src=""script.js""></script> ở cuối <body>.
        * 'style.css': Chứa toàn bộ định kiểu CSS hiện đại, màu sắc gradient, responsive Flexbox/Grid, hiệu ứng animation.
        * 'script.js': Chứa logic JavaScript, DOM events, animations.
      + Bạn có thể gọi 'write_file' tuần tự hoặc song song các tệp để tạo nhanh chóng và đầy đủ mã nguồn hoàn chỉnh 100%.
+     + BẮT BUỘC tạo đủ toàn bộ các tệp mã nguồn đã nêu trong Kế hoạch (Plan) trước khi kết thúc lượt chạy.
    - ĐỐI VỚI DỰ ÁN BACKEND .NET / ASP.NET CORE:
      + BẮT BUỘC chia đúng cấu trúc MVC: Models/, Data/, Controllers/, Views/, Program.cs.
 
@@ -3152,7 +3154,10 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         payload["generationConfig"]!["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
                     }
 
-                    var (success, resData, _, error) = await _geminiService.GenerateContentAsync(selectedModel, payload);
+                    var (success, resData, _, error) = await _geminiService.GenerateContentAsync(selectedModel, payload, async msg =>
+                    {
+                        await SendSseEventAsync("status", new { stage = "fallback", message = msg });
+                    });
                     if (!success || resData == null)
                     {
                         finalExplanation = $"Lỗi kết nối AI: {error}";

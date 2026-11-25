@@ -7,7 +7,7 @@ namespace BtoanAiNet.Services
 {
     public interface IGeminiService
     {
-        Task<(bool Success, JsonObject? ResponseData, string? RawResponse, string? ErrorMessage)> GenerateContentAsync(string model, JsonObject payload);
+        Task<(bool Success, JsonObject? ResponseData, string? RawResponse, string? ErrorMessage)> GenerateContentAsync(string model, JsonObject payload, Func<string, Task>? onStatusUpdate = null);
         IAsyncEnumerable<string> StreamContentAsync(string model, JsonObject payload, CancellationToken cancellationToken = default);
         Task<string> GenerateTextAsync(string prompt);
     }
@@ -87,7 +87,7 @@ namespace BtoanAiNet.Services
             return string.Empty;
         }
 
-        public async Task<(bool Success, JsonObject? ResponseData, string? RawResponse, string? ErrorMessage)> GenerateContentAsync(string model, JsonObject payload)
+        public async Task<(bool Success, JsonObject? ResponseData, string? RawResponse, string? ErrorMessage)> GenerateContentAsync(string model, JsonObject payload, Func<string, Task>? onStatusUpdate = null)
         {
             bool isThinkingMode = false;
             if (payload.ContainsKey("mode") && payload["mode"]?.ToString()?.Equals("thinking", StringComparison.OrdinalIgnoreCase) == true)
@@ -102,20 +102,32 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            if (isThinkingMode || cleanModel.Contains("pro"))
+            
+            // Priority 1: User requested model or gemini-2.5-flash / gemini-3.5-flash
+            if (cleanModel.Contains("2.5") || cleanModel.Contains("flash"))
             {
+                candidateModels.Add("gemini-2.5-flash");
+                if (cleanModel.Contains("pro"))
+                {
+                    candidateModels.Add("gemini-2.5-pro");
+                }
                 candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-3-flash-preview");
-                candidateModels.Add("gemini-flash-lite-latest");
+            }
+            else if (cleanModel.Contains("pro"))
+            {
+                candidateModels.Add("gemini-2.5-pro");
+                candidateModels.Add("gemini-3.5-flash");
             }
             else
             {
                 candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-3-flash-preview");
-                candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add("gemini-2.5-flash");
             }
+
+            // Fallback chain (ultra high availability & production resilience)
+            candidateModels.Add("gemini-3.5-flash-lite");
+            candidateModels.Add("gemini-3-flash-preview");
+            candidateModels.Add("gemini-flash-lite-latest");
             candidateModels = candidateModels.Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
@@ -154,9 +166,20 @@ namespace BtoanAiNet.Services
             }
 
             string lastError = "All API keys failed or were blocked.";
+            int modelAttemptCount = 0;
             
             foreach (var currentModel in candidateModels)
             {
+                modelAttemptCount++;
+                if (modelAttemptCount > 1 && onStatusUpdate != null)
+                {
+                    try
+                    {
+                        await onStatusUpdate("⏳ Máy chủ AI đang bận, tự động chuyển kênh dự phòng và tiếp tục...");
+                    }
+                    catch { }
+                }
+
                 var modelPayload = payload.DeepClone() as JsonObject ?? new JsonObject();
                 // Strip custom non-Gemini properties that client or middleware might include
                 modelPayload.Remove("mode");
@@ -192,24 +215,28 @@ namespace BtoanAiNet.Services
                         if (!response.IsSuccessStatusCode)
                         {
                             int statusCode = (int)response.StatusCode;
-                            // Automatic retry on temporary spikes: 503 (high demand) or 429 (rate limit)
-                            if (statusCode == 503 || statusCode == 429)
+                            // Automatic retry on temporary spikes: 503 (high demand), 429 (rate limit), 500, 502
+                            if (statusCode == 503 || statusCode == 429 || statusCode == 500 || statusCode == 502)
                             {
-                                int retryDelay = statusCode == 429 ? 1200 : 800;
-                                for (int attempt = 1; attempt <= 2; attempt++)
+                                int[] retryDelays = new[] { 1500, 3000 };
+                                for (int attempt = 0; attempt < retryDelays.Length; attempt++)
                                 {
-                                    await Task.Delay(retryDelay * attempt);
-                                    var retryResponse = await _httpClient.PostAsync(url, content);
-                                    if (retryResponse.IsSuccessStatusCode)
+                                    await Task.Delay(retryDelays[attempt]);
+                                    try
                                     {
-                                        string retryRaw = await retryResponse.Content.ReadAsStringAsync();
-                                        var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
-                                        if (retryJson != null && retryJson.ContainsKey("candidates"))
+                                        var retryResponse = await _httpClient.PostAsync(url, content);
+                                        if (retryResponse.IsSuccessStatusCode)
                                         {
-                                            Console.WriteLine($"[t_gemini_retry_success] Model: {currentModel} recovered on attempt {attempt} in {swAttempt.ElapsedMilliseconds} ms!");
-                                            return (true, retryJson, retryRaw, null);
+                                            string retryRaw = await retryResponse.Content.ReadAsStringAsync();
+                                            var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
+                                            if (retryJson != null && retryJson.ContainsKey("candidates"))
+                                            {
+                                                Console.WriteLine($"[t_gemini_retry_success] Model: {currentModel} recovered on attempt {attempt + 1}!");
+                                                return (true, retryJson, retryRaw, null);
+                                            }
                                         }
                                     }
+                                    catch { }
                                 }
                             }
 
