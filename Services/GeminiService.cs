@@ -191,17 +191,24 @@ namespace BtoanAiNet.Services
 
                         if (!response.IsSuccessStatusCode)
                         {
-                            if ((int)response.StatusCode == 503)
+                            int statusCode = (int)response.StatusCode;
+                            // Automatic retry on temporary spikes: 503 (high demand) or 429 (rate limit)
+                            if (statusCode == 503 || statusCode == 429)
                             {
-                                await Task.Delay(300);
-                                var retryResponse = await _httpClient.PostAsync(url, content);
-                                if (retryResponse.IsSuccessStatusCode)
+                                int retryDelay = statusCode == 429 ? 1200 : 800;
+                                for (int attempt = 1; attempt <= 2; attempt++)
                                 {
-                                    string retryRaw = await retryResponse.Content.ReadAsStringAsync();
-                                    var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
-                                    if (retryJson != null && retryJson.ContainsKey("candidates"))
+                                    await Task.Delay(retryDelay * attempt);
+                                    var retryResponse = await _httpClient.PostAsync(url, content);
+                                    if (retryResponse.IsSuccessStatusCode)
                                     {
-                                        return (true, retryJson, retryRaw, null);
+                                        string retryRaw = await retryResponse.Content.ReadAsStringAsync();
+                                        var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
+                                        if (retryJson != null && retryJson.ContainsKey("candidates"))
+                                        {
+                                            Console.WriteLine($"[t_gemini_retry_success] Model: {currentModel} recovered on attempt {attempt} in {swAttempt.ElapsedMilliseconds} ms!");
+                                            return (true, retryJson, retryRaw, null);
+                                        }
                                     }
                                 }
                             }

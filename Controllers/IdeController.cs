@@ -3122,6 +3122,10 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             {
                 while (currentTurn < maxTurns)
                 {
+                    if (currentTurn > 0)
+                    {
+                        await Task.Delay(400);
+                    }
                     currentTurn++;
                     await SendSseEventAsync("turn_start", new { turn = currentTurn, message = $"Btoan Agent đang phân tích & lên phương án thực thi (Lượt {currentTurn}/{maxTurns})..." });
 
