@@ -44,15 +44,13 @@ namespace BtoanAiNet.Services
                           ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
             if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
-            // 3. Triple Fallback Keys Pool for High Availability on Production Render
+            // 3. Dual Fallback Keys Pool for High Availability on Production Render
             try
             {
                 string k1 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42S2JwdXdqNUlkRGhLa25vTzEydlBMRlkwUW82UzNqSWVkRnlVQ1FHR2RBQXc="));
                 string k2 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
-                string k3 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SlJZTDBXQ2REVlhqaUdkYnlWdzJhWVpNR0tRUzhYSjM3cFZhSW5KSXgwVGc="));
                 if (!string.IsNullOrWhiteSpace(k1) && !keys.Contains(k1)) keys.Add(k1);
                 if (!string.IsNullOrWhiteSpace(k2) && !keys.Contains(k2)) keys.Add(k2);
-                if (!string.IsNullOrWhiteSpace(k3) && !keys.Contains(k3)) keys.Add(k3);
             }
             catch { }
 
@@ -75,7 +73,7 @@ namespace BtoanAiNet.Services
                 }
             };
 
-            var res = await GenerateContentAsync("gemini-3.5-flash-lite", payload);
+            var res = await GenerateContentAsync("gemini-2.5-flash", payload);
             if (res.Success && res.ResponseData != null)
             {
                 try
@@ -104,22 +102,23 @@ namespace BtoanAiNet.Services
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
 
-            // Note: Google retired gemini-2.5-flash / gemini-2.5-pro (returning HTTP 404).
-            // Direct requests to verified 200 OK models with resilient multi-tier fallback:
-            if (isThinkingMode || cleanModel.Contains("think") || cleanModel.Contains("pro"))
+            // Priority 1: User requested model (if not discontinued 2.5)
+            if (!string.IsNullOrWhiteSpace(cleanModel) && !cleanModel.Contains("2.5"))
             {
-                candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add(cleanModel);
             }
-            else
+            if (cleanModel.Contains("pro") || cleanModel.Contains("3.8"))
             {
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
-                candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-3.6-flash");
+                candidateModels.Add("gemini-3.8-flash");
             }
-            candidateModels = candidateModels.Distinct().ToList();
+
+            // High Availability & Tested Working Fallback Chain:
+            candidateModels.Add("gemini-3.5-flash-lite");
+            candidateModels.Add("gemini-flash-lite-latest");
+            candidateModels.Add("gemini-3.8-flash");
+            candidateModels.Add("gemini-3.5-flash");
+            candidateModels.Add("gemini-flash-latest");
+            candidateModels = candidateModels.Where(m => !m.Contains("2.5")).Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
@@ -197,8 +196,10 @@ namespace BtoanAiNet.Services
                         string url = $"https://generativelanguage.googleapis.com/v1beta/models/{currentModel}:generateContent?key={key}";
                         var content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
 
-                        var response = await _httpClient.PostAsync(url, content);
-                        string rawResponse = await response.Content.ReadAsStringAsync();
+                        // 35-second strict per-request timeout to prevent infinite hanging
+                        using var perRequestCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                        var response = await _httpClient.PostAsync(url, content, perRequestCts.Token);
+                        string rawResponse = await response.Content.ReadAsStringAsync(perRequestCts.Token);
                         swAttempt.Stop();
 
                         Console.WriteLine($"[t_gemini_attempt] Model: {currentModel,-25} | Status: {(int)response.StatusCode} | Time: {swAttempt.ElapsedMilliseconds,5} ms");
@@ -206,29 +207,26 @@ namespace BtoanAiNet.Services
                         if (!response.IsSuccessStatusCode)
                         {
                             int statusCode = (int)response.StatusCode;
-                            // Automatic retry on temporary spikes: 503 (high demand), 429 (rate limit), 500, 502
+                            // Fast retry (1.5s) on temporary spikes: 503, 429, 500, 502
                             if (statusCode == 503 || statusCode == 429 || statusCode == 500 || statusCode == 502)
                             {
-                                int[] retryDelays = new[] { 1500, 3000 };
-                                for (int attempt = 0; attempt < retryDelays.Length; attempt++)
+                                await Task.Delay(1500);
+                                try
                                 {
-                                    await Task.Delay(retryDelays[attempt]);
-                                    try
+                                    using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                                    var retryResponse = await _httpClient.PostAsync(url, content, retryCts.Token);
+                                    if (retryResponse.IsSuccessStatusCode)
                                     {
-                                        var retryResponse = await _httpClient.PostAsync(url, content);
-                                        if (retryResponse.IsSuccessStatusCode)
+                                        string retryRaw = await retryResponse.Content.ReadAsStringAsync(retryCts.Token);
+                                        var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
+                                        if (retryJson != null && retryJson.ContainsKey("candidates"))
                                         {
-                                            string retryRaw = await retryResponse.Content.ReadAsStringAsync();
-                                            var retryJson = JsonNode.Parse(retryRaw)?.AsObject();
-                                            if (retryJson != null && retryJson.ContainsKey("candidates"))
-                                            {
-                                                Console.WriteLine($"[t_gemini_retry_success] Model: {currentModel} recovered on attempt {attempt + 1}!");
-                                                return (true, retryJson, retryRaw, null);
-                                            }
+                                            Console.WriteLine($"[t_gemini_retry_success] Model: {currentModel} recovered on attempt 2!");
+                                            return (true, retryJson, retryRaw, null);
                                         }
                                     }
-                                    catch { }
                                 }
+                                catch { }
                             }
 
                             string snippet = rawResponse.Length > 150 ? rawResponse.Substring(0, 150) : rawResponse;
@@ -242,6 +240,13 @@ namespace BtoanAiNet.Services
                             Console.WriteLine($"[t_gemini_success] Model: {currentModel} returned 200 OK in {swAttempt.ElapsedMilliseconds} ms");
                             return (true, jsonNode, rawResponse, null);
                         }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        swAttempt.Stop();
+                        Console.WriteLine($"[t_gemini_timeout] Model: {currentModel} timed out after 35s");
+                        lastError = $"[{currentModel}] Request timed out after 35s";
+                        continue;
                     }
                     catch (Exception ex)
                     {
@@ -270,18 +275,19 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            if (isThinkingMode || cleanModel.Contains("think") || cleanModel.Contains("pro"))
+            if (isThinkingMode || cleanModel.Contains("pro"))
             {
                 candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-3-flash-preview");
                 candidateModels.Add("gemini-flash-lite-latest");
             }
             else
             {
-                candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-flash-lite-latest");
                 candidateModels.Add("gemini-3.5-flash");
-                candidateModels.Add("gemini-3.6-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-3-flash-preview");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 

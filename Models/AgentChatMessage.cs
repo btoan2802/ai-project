@@ -28,6 +28,12 @@ namespace BtoanAiNet.Models
         [Column("content")]
         public string Content { get; set; } = string.Empty;
 
+        [Column("thought_text")]
+        public string? ThoughtText { get; set; }
+
+        [Column("checkpoint_id")]
+        public string? CheckpointId { get; set; }
+
         [Column("plan_json")]
         public string? PlanJson { get; set; }
 

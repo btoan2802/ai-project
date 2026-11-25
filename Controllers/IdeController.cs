@@ -360,7 +360,12 @@ namespace BtoanAiNet.Controllers
             return projectPath;
         }
 
-        private bool TryGetSafeFilePath(string workspacePath, string relativePath, out string fullPath)
+        public static bool ResolveSafeProjectPath(string workspacePath, string relativePath, out string fullPath)
+        {
+            return TryGetSafeFilePathStatic(workspacePath, relativePath, out fullPath);
+        }
+
+        public static bool TryGetSafeFilePathStatic(string workspacePath, string relativePath, out string fullPath)
         {
             fullPath = string.Empty;
             if (string.IsNullOrWhiteSpace(workspacePath) || string.IsNullOrWhiteSpace(relativePath)) return false;
@@ -377,6 +382,11 @@ namespace BtoanAiNet.Controllers
 
             fullPath = combined;
             return true;
+        }
+
+        private bool TryGetSafeFilePath(string workspacePath, string relativePath, out string fullPath)
+        {
+            return TryGetSafeFilePathStatic(workspacePath, relativePath, out fullPath);
         }
 
         // ==========================================
@@ -1129,6 +1139,10 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             }
 
             string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
+            }
             string root = ResolveWorkspacePath(cleanProj);
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
@@ -1183,7 +1197,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, project = "", tree = (object?)null });
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
                 return Ok(new { ok = true, project = project ?? "", tree = (object?)null });
@@ -1251,7 +1270,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, query = q, count = 0, results = Array.Empty<object>() });
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (!Directory.Exists(root))
             {
                 return Ok(new { ok = true, query = q, count = 0, results = Array.Empty<object>() });
@@ -1351,7 +1375,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, isRepo = false, branch = "main", staged = Array.Empty<object>(), unstaged = Array.Empty<object>(), count = 0, files = Array.Empty<object>() });
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (!Directory.Exists(root) || !Directory.Exists(Path.Combine(root, ".git")))
             {
                 return Ok(new { ok = true, isRepo = false, branch = "", staged = Array.Empty<object>(), unstaged = Array.Empty<object>(), count = 0, files = Array.Empty<object>() });
@@ -1475,7 +1504,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         public async Task<IActionResult> GitDiff([FromQuery] string? project, [FromQuery] string? path, [FromQuery] bool staged)
         {
             if (!IsAuthenticated) return Unauthorized();
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (!Directory.Exists(root) || string.IsNullOrWhiteSpace(path)) return BadRequest();
 
             string original = "";
@@ -1530,7 +1564,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         public async Task<IActionResult> GitBranches([FromQuery] string? project)
         {
             if (!IsAuthenticated) return Unauthorized();
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (!Directory.Exists(root)) return NotFound();
 
             var (_, bOut, _) = await RunGitCommandAsync(root, "branch", "--list");
@@ -1787,6 +1826,84 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             });
         }
 
+        public static async Task<string> CreateProjectCheckpointInternalAsync(string projectPath)
+        {
+            string checkpointId = "cp_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N")[..6];
+            try
+            {
+                string cpDir = Path.Combine(projectPath, ".btoan_checkpoints", checkpointId);
+                Directory.CreateDirectory(cpDir);
+
+                var allFiles = Directory.GetFiles(projectPath, "*", SearchOption.AllDirectories)
+                    .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + ".git" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + ".btoan_checkpoints" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "node_modules" + Path.DirectorySeparatorChar));
+
+                foreach (var file in allFiles)
+                {
+                    string rel = Path.GetRelativePath(projectPath, file);
+                    string dest = Path.Combine(cpDir, rel);
+                    string? destDir = Path.GetDirectoryName(dest);
+                    if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+                    System.IO.File.Copy(file, dest, true);
+                }
+            }
+            catch { }
+            return checkpointId;
+        }
+
+        public static async Task<bool> RestoreProjectCheckpointInternalAsync(string projectPath, string checkpointId)
+        {
+            if (string.IsNullOrWhiteSpace(checkpointId)) return false;
+            string cpDir = Path.Combine(projectPath, ".btoan_checkpoints", checkpointId);
+            if (!Directory.Exists(cpDir)) return false;
+
+            try
+            {
+                var cpFiles = Directory.GetFiles(cpDir, "*", SearchOption.AllDirectories);
+                foreach (var file in cpFiles)
+                {
+                    string rel = Path.GetRelativePath(cpDir, file);
+                    string dest = Path.Combine(projectPath, rel);
+                    string? destDir = Path.GetDirectoryName(dest);
+                    if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+                    System.IO.File.Copy(file, dest, true);
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // POST /api/ide/checkpoint/create
+        [HttpPost("checkpoint/create")]
+        public async Task<IActionResult> CreateCheckpoint([FromBody] JsonObject model)
+        {
+            string proj = model?["project"]?.ToString() ?? "";
+            string cleanProj = SanitizeProjectName(proj);
+            string root = ResolveWorkspacePath(cleanProj);
+            if (!Directory.Exists(root)) return BadRequest(new { ok = false, error = "Project not found" });
+            string cpId = await CreateProjectCheckpointInternalAsync(root);
+            return Ok(new { ok = true, checkpointId = cpId });
+        }
+
+        // POST /api/ide/checkpoint/restore
+        [HttpPost("checkpoint/restore")]
+        public async Task<IActionResult> RestoreCheckpoint([FromBody] JsonObject model)
+        {
+            string proj = model?["project"]?.ToString() ?? "";
+            string cpId = model?["checkpointId"]?.ToString() ?? "";
+            string cleanProj = SanitizeProjectName(proj);
+            string root = ResolveWorkspacePath(cleanProj);
+            if (!Directory.Exists(root)) return BadRequest(new { ok = false, error = "Project not found" });
+            bool restored = await RestoreProjectCheckpointInternalAsync(root, cpId);
+            return Ok(new { ok = restored, message = restored ? "Đã khôi phục checkpoint thành công." : "Không tìm thấy checkpoint hoặc khôi phục thất bại." });
+        }
+
         // GET /api/ide/file?project=...&path=...
         // GET /api/ide/file-content?project=...&file=...
         [HttpGet("file")]
@@ -1800,6 +1917,10 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             }
 
             string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
+            }
             string root = ResolveWorkspacePath(cleanProj);
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
@@ -1857,6 +1978,10 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         public IActionResult GetRawFile([FromQuery] string? project, [FromQuery] string? file)
         {
             string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
+            }
             string root = ResolveWorkspacePath(cleanProj);
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
@@ -2000,22 +2125,17 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                                 Directory.CreateDirectory(parent);
                             }
 
-                            // SAFETY GUARD: Do NOT wipe existing file if op.Content is empty or whitespace
+                            // SAFETY GUARD: Do NOT wipe existing file if op.Content is null or empty
                             if (string.IsNullOrWhiteSpace(op.Content))
                             {
-                                if (System.IO.File.Exists(fullPath))
+                                if (System.IO.File.Exists(fullPath) && new FileInfo(fullPath).Length > 0)
                                 {
-                                    // File already exists with real content on disk - preserve existing content!
+                                    // File already exists with real content on disk (e.g. written by autonomous agent)
+                                    // Preserve existing content!
                                     successCount++;
                                     appliedFiles.Add(op.Path.Replace('\\', '/'));
                                     continue;
                                 }
-                            }
-                            if (System.IO.File.Exists(fullPath) && (op.Content == null || op.Content.Trim().Length == 0))
-                            {
-                                successCount++;
-                                appliedFiles.Add(op.Path.Replace('\\', '/'));
-                                continue;
                             }
 
                             await System.IO.File.WriteAllTextAsync(fullPath, op.Content ?? "", Encoding.UTF8);
@@ -2292,7 +2412,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return BadRequest(new { ok = false, error = "Path is required" });
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (!TryGetSafeFilePath(root, path, out string fullPath))
             {
                 return BadRequest(new { ok = false, error = "Invalid path" });
@@ -2489,7 +2614,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return BadRequest("Đường dẫn file là bắt buộc.");
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            if (string.IsNullOrWhiteSpace(cleanProj))
+            {
+                return Ok(new { ok = true, project = "", tree = (object?)null });
+            }
+            string root = ResolveWorkspacePath(cleanProj);
             if (!TryGetSafeFilePath(root, path, out string fullPath) || !System.IO.File.Exists(fullPath))
             {
                 return NotFound("File không tồn tại.");
@@ -2680,6 +2810,8 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                         id = m.Id,
                         role = m.Role,
                         content = m.Content,
+                        thoughtText = m.ThoughtText,
+                        checkpointId = m.CheckpointId,
                         planJson = m.PlanJson,
                         toolActionsJson = m.ToolActionsJson,
                         createdAt = m.CreatedAt
@@ -2813,15 +2945,26 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             }) : Task.CompletedTask;
 
             string selectedModel = "gemini-3.5-flash-lite";
-            if (string.Equals(model.Model, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(model.Model, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(model.Mode, "thinking", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(model.Model))
             {
-                selectedModel = "gemini-3.5-flash";
+                if (model.Model.Contains("3.8") || model.Model.Contains("pro"))
+                {
+                    selectedModel = "gemini-3.8-flash";
+                }
+                else if (model.Model.Contains("3.5-flash-lite") || model.Model.Contains("flash-lite"))
+                {
+                    selectedModel = "gemini-3.5-flash-lite";
+                }
+                else if (!model.Model.Contains("2.5"))
+                {
+                    selectedModel = model.Model;
+                }
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
 
             await SendSseEventAsync("status", new { stage = "init", message = $"Btoan Agent ({selectedModel}) đang phân tích yêu cầu...", project = cleanProj });
+
+            string checkpointId = await CreateProjectCheckpointInternalAsync(projectPath);
 
             // 1. Lưu tin nhắn người dùng vào SQLite bền vững
             try
@@ -2832,6 +2975,7 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                     ProjectName = cleanProj,
                     Role = "user",
                     Content = model.Prompt,
+                    CheckpointId = checkpointId,
                     CreatedAt = DateTime.UtcNow
                 };
                 _dbContext.AgentChatMessages.Add(userChatMsg);
@@ -2880,46 +3024,33 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
 Bạn đang làm việc trực tiếp trên thư mục dự án: '{cleanProj}'.
 
 CÁC CÔNG CỤ THỰC THI (FUNCTION CALLING) BẠN ĐƯỢC CẤP:
-- list_files(directory): Xem danh sách tệp/thư mục con trong dự án.
-- read_file(path): Đọc mã nguồn tệp trong dự án.
-- generate_image(prompt, output_path, aspect_ratio): Tạo hình ảnh AI chất lượng cao lưu thẳng vào thư mục dự án (ví dụ 'images/hero.jpg', 'images/product1.jpg'). BẮT BUỘC gọi tool này để tạo ảnh minh họa thật cho website/app thay vì dùng ảnh rỗng hay link giả 404!
+- list_dir(path): Liệt kê cấu trúc cây thư mục kèm dung lượng (bytes) và số dòng của từng tệp.
+- read_file(path, start_line, end_line): Đọc mã nguồn tệp trong dự án kèm số thứ tự từng dòng (1: ..., 2: ...) để định vị chính xác vùng code.
+- grep_search(query, include_pattern): Tìm kiếm chuỗi, tên hàm, class trên toàn bộ mã nguồn của dự án hiện tại.
 - write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC chứa toàn bộ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống (0 byte).
+- patch_file(path, target_block, replacement_block): Sửa chính xác một khối code trong tệp mà không cần ghi lại toàn bộ file.
 - edit_file(path, target, replacement): Sửa đoạn code trong tệp.
 - delete_file(path): Xóa tệp không cần thiết.
 - run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build', 'dotnet add package...') tại thư mục dự án.
+- generate_image(prompt, output_path, aspect_ratio): Tạo hình ảnh AI chất lượng cao lưu thẳng vào thư mục dự án (ví dụ 'images/hero.jpg').
 
-QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG (AUTONOMOUS 4-STEP LOOP):
-1. BƯỚC 1: KHẢO SÁT & HIỂU RÕ DỰ ÁN
-   - Nếu dự án đã có sẵn tệp, sử dụng read_file để hiểu ngữ cảnh trước khi sửa.
-
-2. BƯỚC 2: PHÂN LOẠI YÊU CẦU & XỬ LÝ HÌNH ẢNH MINH HỌA
-   - Với ứng dụng công cụ, tiện ích, tính toán, quản lý, game logic (ví dụ: web tính điểm cấp 3 / xét tuyển đại học, máy tính cầm tay, to-do list, quản lý chi tiêu, bảng biểu, dashboard):
-     + TUYỆT ĐỐI KHÔNG gọi 'generate_image'. Bắt tay ngay vào BƯỚC 3 để tạo các file mã nguồn hoàn chỉnh ('index.html', 'style.css', 'script.js').
-     + Thiết kế giao diện hiện đại với CSS Gradient/Cards/Tables, và viết logic JavaScript tính toán chính xác 100% (ví dụ: tính điểm trung bình học kỳ/cả năm, tính điểm xét tốt nghiệp THPT, tính điểm tổ hợp xét tuyển đại học A00, A01, B00, C00, D01... theo chuẩn quy chế Việt Nam).
-   - Với trang web giới thiệu, portfolio cá nhân, bán hàng/shop, blog:
-     + BẮT BUỘC phải tạo đầy đủ 3 tệp mã nguồn ('index.html', 'style.css', 'script.js') trước hoặc đồng thời!
-     + Chỉ gọi 'generate_image' tối đa 1 lần (ví dụ: 'images/avatar.jpg' hoặc 'images/banner.jpg'). TUYỆT ĐỐI KHÔNG DỪNG LẠI khi chỉ mới tạo ảnh mà chưa hoàn thiện các tệp mã nguồn 'index.html', 'style.css', 'script.js'!
-
-3. BƯỚC 3: PHÂN TÁCH TỆP CHUẨN 100% & BẮT BUỘC HOÀN THÀNH TẤT CẢ FILE TRONG PLAN:
-   - ĐỐI VỚI DỰ ÁN WEB (HTML / CSS / JS):
-     + BẮT BUỘC tạo tối thiểu 3 tệp riêng biệt:
-       * 'index.html': Chỉ chứa khung cấu trúc HTML ngữ nghĩa, liên kết <link rel=""stylesheet"" href=""style.css""> trong <head> và <script src=""script.js""></script> ở cuối <body>.
-       * 'style.css': Chứa toàn bộ định kiểu CSS hiện đại, màu sắc gradient, responsive Flexbox/Grid, hiệu ứng animation.
-       * 'script.js': Chứa logic JavaScript, DOM events, animations.
-     + Bạn có thể gọi 'write_file' tuần tự hoặc song song các tệp để tạo nhanh chóng và đầy đủ mã nguồn hoàn chỉnh 100%.
-     + BẮT BUỘC tạo đủ toàn bộ các tệp mã nguồn đã nêu trong Kế hoạch (Plan) trước khi kết thúc lượt chạy.
-   - ĐỐI VỚI DỰ ÁN BACKEND .NET / ASP.NET CORE:
-     + BẮT BUỘC chia đúng cấu trúc MVC: Models/, Data/, Controllers/, Views/, Program.cs.
-
-4. BƯỚC 4: TỰ ĐỘNG BIÊN DỊCH & TỰ SỬA LỖI (SELF-HEALING BUILD VERIFICATION):
-   - Đối với dự án .NET: BẮT BUỘC gọi run_command(""dotnet build""). Nếu có lỗi biên dịch, bạn phải đọc lỗi và tự sửa lại các tệp cho đến khi build thành công 0 Error(s).
-
-5. NGUYÊN TẮC THỰC THI HIỆU QUẢ:
-   - Tạo các tệp mã nguồn với code hoàn chỉnh 100%, không dùng placeholder sơ sài. Mỗi tệp được hệ thống xác nhận ngay lập tức qua SSE.
+QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG CHUẨN ANTIGRAVITY (AUTONOMOUS 4-STEP LOOP):
+1. PHA 1 (EXPLORE):
+   - Luôn khảo sát cấu trúc dự án (list_dir, grep_search) và gọi read_file đọc các tệp cấu hình chính (Program.cs, .csproj, package.json, index.html) trước khi chỉnh sửa.
+2. PHA 2 (PLAN):
+   - Xác định danh sách các file cần tạo/sửa ngắn gọn, thực tế.
+3. PHA 3 (IMPLEMENT):
+   - Viết mã nguồn hoàn chỉnh 100%, giao diện thẩm mỹ cao (CSS variables, Flexbox/Grid, responsive mobile, animation mượt mà, nghiệp vụ tính toán chuẩn xác), TUYỆT ĐỐI CẤM để placeholder '// TODO', '...' hay hàm rỗng.
+   - Với ứng dụng công cụ/tính toán (tính lương, tính điểm, to-do, máy tính, dashboard): TUYỆT ĐỐI KHÔNG gọi generate_image tạo ảnh thừa; tập trung 100% vào HTML/CSS/JS chất lượng cao.
+   - Chỉ gọi generate_image khi trang thực sự cần hình ảnh thực tế (shop, landing page, blog, tỏ tình).
+   - Với dự án Web (HTML/CSS/JS): BẮT BUỘC tách thành 3 tệp hoàn chỉnh: 'index.html', 'style.css', 'script.js'.
+4. PHA 4 (VERIFY & SELF-HEAL):
+   - Đối với dự án biên dịch (.NET /.csproj hoặc Node/Angular/package.json): BẮT BUỘC gọi run_command(""dotnet build"") hoặc run_command(""npm run build"") trước khi kết thúc.
+   - Nếu ExitCode != 0, bạn phải đọc chi tiết lỗi compiler, gọi read_file + patch_file sửa lỗi và chạy lại build cho tới khi đạt 0 Error(s).
 
 TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
-- Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (generate_image / write_file / edit_file / run_command) ngay từ lượt đầu tiên để trực tiếp tạo/sửa code thật trong dự án.
-- CẤM in ra kế hoạch dạng JSON thuần rồi dừng lại. Khi đã hoàn thành tất cả, dừng gọi tool và trả lời tóm tắt bằng tiếng Việt.";
+- Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (write_file / patch_file / run_command / generate_image) ngay từ lượt đầu tiên.
+- Khi đã hoàn thành tất cả các file và xác thực build 0 Error(s), dừng gọi tool và trả lời tóm tắt bằng tiếng Việt.";
 
             var toolsDefinition = new JsonArray
             {
@@ -2927,6 +3058,23 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 {
                     ["functionDeclarations"] = new JsonArray
                     {
+                        new JsonObject
+                        {
+                            ["name"] = "list_dir",
+                            ["description"] = "Liệt kê cấu trúc cây thư mục kèm dung lượng (bytes) và số dòng của từng tệp.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Thư mục tương đối cần xem (mặc định '.' là thư mục gốc dự án)."
+                                    }
+                                }
+                            }
+                        },
                         new JsonObject
                         {
                             ["name"] = "list_files",
@@ -2947,7 +3095,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         new JsonObject
                         {
                             ["name"] = "read_file",
-                            ["description"] = "Đọc toàn bộ nội dung của một tệp trong dự án.",
+                            ["description"] = "Đọc nội dung của một tệp trong dự án kèm số thứ tự từng dòng (1: ..., 2: ...) để định vị chính xác vùng code cần sửa.",
                             ["parameters"] = new JsonObject
                             {
                                 ["type"] = "OBJECT",
@@ -2956,10 +3104,158 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     ["path"] = new JsonObject
                                     {
                                         ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Program.cs', 'Controllers/HomeController.cs')."
+                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'Program.cs', 'index.html')."
+                                    },
+                                    ["start_line"] = new JsonObject
+                                    {
+                                        ["type"] = "INTEGER",
+                                        ["description"] = "Dòng bắt đầu đọc (tùy chọn, mặc định 1)."
+                                    },
+                                    ["end_line"] = new JsonObject
+                                    {
+                                        ["type"] = "INTEGER",
+                                        ["description"] = "Dòng kết thúc đọc (tùy chọn, mặc định đọc hết tệp)."
                                     }
                                 },
                                 ["required"] = new JsonArray { "path" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "grep_search",
+                            ["description"] = "Tìm kiếm chuỗi, tên hàm, class trên toàn bộ mã nguồn của dự án hiện tại.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["query"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Chuỗi văn bản hoặc từ khóa cần tìm kiếm."
+                                    },
+                                    ["include_pattern"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Mẫu tệp tìm kiếm (ví dụ: '*.cs', '*.html', '*.js', '*.*')."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "query" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "write_file",
+                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án với mã nguồn hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC chứa đầy đủ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'index.html', 'style.css', 'script.js')."
+                                    },
+                                    ["content"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Toàn bộ mã nguồn hoàn chỉnh và đầy đủ của tệp (không để trống)."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path", "content" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "patch_file",
+                            ["description"] = "Sửa chính xác một khối mã nguồn bên trong tệp bằng cách tìm đúng đoạn target_block và thay bằng replacement_block.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp cần sửa."
+                                    },
+                                    ["target_block"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Khối mã nguồn hiện tại trong tệp cần thay thế (bao gồm thụt đầu dòng)."
+                                    },
+                                    ["replacement_block"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Khối mã nguồn mới thay thế vào (không để trống)."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path", "target_block", "replacement_block" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "edit_file",
+                            ["description"] = "Chỉnh sửa một đoạn mã nguồn trong tệp bằng cách tìm chính xác đoạn target và thay thế bằng replacement.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp cần sửa."
+                                    },
+                                    ["target"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đoạn mã nguồn hiện tại trong tệp cần được thay thế."
+                                    },
+                                    ["replacement"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đoạn mã nguồn mới thay thế vào."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path", "target", "replacement" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "delete_file",
+                            ["description"] = "Xóa một tệp trong dự án.",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["path"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Đường dẫn tương đối của tệp cần xóa."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "path" }
+                            }
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "run_command",
+                            ["description"] = "Thực thi lệnh shell (PowerShell/Bash) ngay tại thư mục dự án (ví dụ: 'dotnet build', 'dotnet add package ...').",
+                            ["parameters"] = new JsonObject
+                            {
+                                ["type"] = "OBJECT",
+                                ["properties"] = new JsonObject
+                                {
+                                    ["command"] = new JsonObject
+                                    {
+                                        ["type"] = "STRING",
+                                        ["description"] = "Câu lệnh shell cần chạy."
+                                    }
+                                },
+                                ["required"] = new JsonArray { "command" }
                             }
                         },
                         new JsonObject
@@ -2988,93 +3284,6 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     }
                                 },
                                 ["required"] = new JsonArray { "prompt", "output_path" }
-                            }
-                        },
-                        new JsonObject
-                        {
-                            ["name"] = "write_file",
-                            ["description"] = "Tạo mới hoặc ghi đè toàn bộ nội dung của một tệp trong dự án với mã nguồn hoàn chỉnh 100%. Với dự án Web, hãy gọi hàm này nhiều lần để tạo riêng từng tệp: 'index.html', 'style.css' và 'script.js' (không dồn chung code vào 1 file). Tham số 'content' BẮT BUỘC phải chứa đầy đủ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống.",
-                            ["parameters"] = new JsonObject
-                            {
-                                ["type"] = "OBJECT",
-                                ["properties"] = new JsonObject
-                                {
-                                    ["path"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối của tệp trong dự án (ví dụ: 'index.html', 'style.css', 'script.js', 'Controllers/HomeController.cs', 'Views/Home/About.cshtml', 'Models/Product.cs')."
-                                    },
-                                    ["content"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Toàn bộ mã nguồn hoàn chỉnh và đầy đủ của tệp (không để trống, không viết comment giữ chỗ)."
-                                    }
-                                },
-                                ["required"] = new JsonArray { "path", "content" }
-                            }
-                        },
-                        new JsonObject
-                        {
-                            ["name"] = "edit_file",
-                            ["description"] = "Chỉnh sửa một đoạn mã nguồn trong tệp bằng cách tìm chính xác đoạn target và thay thế bằng replacement.",
-                            ["parameters"] = new JsonObject
-                            {
-                                ["type"] = "OBJECT",
-                                ["properties"] = new JsonObject
-                                {
-                                    ["path"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối của tệp cần sửa."
-                                    },
-                                    ["target"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Đoạn mã nguồn hiện tại trong tệp cần được thay thế (chuỗi chính xác bao gồm cả thụt dòng)."
-                                    },
-                                    ["replacement"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Đoạn mã nguồn mới thay thế vào (không để trống)."
-                                    }
-                                },
-                                ["required"] = new JsonArray { "path", "target", "replacement" }
-                            }
-                        },
-                        new JsonObject
-                        {
-                            ["name"] = "delete_file",
-                            ["description"] = "Xóa một tệp trong dự án.",
-                            ["parameters"] = new JsonObject
-                            {
-                                ["type"] = "OBJECT",
-                                ["properties"] = new JsonObject
-                                {
-                                    ["path"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Đường dẫn tương đối của tệp cần xóa."
-                                    }
-                                },
-                                ["required"] = new JsonArray { "path" }
-                            }
-                        },
-                        new JsonObject
-                        {
-                            ["name"] = "run_command",
-                            ["description"] = "Thực thi lệnh shell (PowerShell/Bash) ngay tại thư mục dự án (ví dụ: 'dotnet build', 'dotnet add package ... --version 10.0.0').",
-                            ["parameters"] = new JsonObject
-                            {
-                                ["type"] = "OBJECT",
-                                ["properties"] = new JsonObject
-                                {
-                                    ["command"] = new JsonObject
-                                    {
-                                        ["type"] = "STRING",
-                                        ["description"] = "Câu lệnh shell cần chạy."
-                                    }
-                                },
-                                ["required"] = new JsonArray { "command" }
                             }
                         }
                     }
@@ -3122,10 +3331,11 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             var executedCommands = new List<string>();
             var toolOperations = new List<object>();
             var planSteps = new List<string>();
+            var accumulatedThought = new StringBuilder();
             bool buildPassed = false;
             string finalExplanation = "";
 
-            int maxTurns = 15;
+            int maxTurns = 20;
             int currentTurn = 0;
 
             try
@@ -3169,6 +3379,10 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     if (!success || resData == null)
                     {
                         finalExplanation = $"Lỗi kết nối AI: {error}";
+                        if (isStream)
+                        {
+                            await SendSseEventAsync("error", new { ok = false, error = finalExplanation });
+                        }
                         break;
                     }
 
@@ -3209,12 +3423,19 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                 try { isThought = pObj["thought"]?.GetValue<bool>() == true; } catch { }
                             }
 
-                            if (pObj.ContainsKey("text") && !isThought)
+                            if (pObj.ContainsKey("text"))
                             {
                                 string? tVal = pObj["text"]?.ToString();
                                 if (!string.IsNullOrEmpty(tVal))
                                 {
-                                    sbCandidateText.Append(tVal);
+                                    if (isThought)
+                                    {
+                                        accumulatedThought.AppendLine(tVal);
+                                    }
+                                    else
+                                    {
+                                        sbCandidateText.Append(tVal);
+                                    }
                                 }
                             }
                         }
@@ -3237,10 +3458,22 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             // Execute the tool on the real workspace filesystem
                             string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
 
-                            await SendSseEventAsync("tool_done", new { tool = toolName, action = toolAction, target = toolTarget, message = $"Đã xong: {toolName} ({toolTarget})" });
+                            int lines = 0;
+                            if ((toolName == "write_file" || toolName == "edit_file" || toolName == "patch_file") &&
+                                TryGetSafeFilePath(projectPath, toolTarget, out string fLineCheck) && System.IO.File.Exists(fLineCheck))
+                            {
+                                try { lines = System.IO.File.ReadLines(fLineCheck).Count(); } catch { }
+                            }
+                            await SendSseEventAsync("tool_done", new { tool = toolName, action = toolAction, target = toolTarget, lines = lines, message = $"Đã xong: {toolName} ({toolTarget})" });
+
+                            if (toolName == "run_command")
+                            {
+                                bool cmdSuccess = toolResult.Contains("ExitCode: 0");
+                                await SendSseEventAsync("command_run", new { command = toolTarget, exitCode = cmdSuccess ? 0 : 1, output = toolResult });
+                            }
 
                             // Record plan step and tool operation
-                            if (toolName == "write_file" || toolName == "edit_file")
+                            if (toolName == "write_file" || toolName == "edit_file" || toolName == "patch_file")
                             {
                                 string fPath = ExtractStringArg(toolArgs, "path", "file_path", "filepath", "file", "filename");
                                 if (!string.IsNullOrWhiteSpace(fPath))
@@ -3257,14 +3490,19 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                                     toolOperations.Add(new
                                     {
-                                        action = toolName == "write_file" ? "create" : "edit",
+                                        action = toolName == "write_file" ? "create" : (toolName == "patch_file" ? "patch" : "edit"),
                                         path = fPath,
                                         content = contentOnDisk,
                                         summary = $"Cập nhật tệp {fPath}",
                                         alreadyApplied = true
                                     });
-                                    planSteps.Add($"Cập nhật tệp '{fPath}'");
+                                    planSteps.Add(toolName == "write_file" ? $"Tạo tệp '{fPath}'" : $"Sửa tệp '{fPath}'");
                                 }
+                            }
+                            else if (toolName == "grep_search")
+                            {
+                                string q = ExtractStringArg(toolArgs, "query", "search", "pattern");
+                                planSteps.Add($"Tìm kiếm mã nguồn '{q}'");
                             }
                             else if (toolName == "generate_image")
                             {
@@ -3377,6 +3615,27 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             }
                         }
 
+                        // Self-healing build verification for compiled projects (.csproj / package.json)
+                        bool isCompiledProject = Directory.GetFiles(projectPath, "*.csproj", SearchOption.AllDirectories).Any() ||
+                                                 System.IO.File.Exists(Path.Combine(projectPath, "package.json"));
+                        if (isCompiledProject && !buildPassed && currentTurn < maxTurns)
+                        {
+                            _logger.LogInformation("Compiled project detected and build not verified yet. Prompting agent to run build verification...");
+                            messages.Add(candidate.DeepClone());
+                            messages.Add(new JsonObject
+                            {
+                                ["role"] = "user",
+                                ["parts"] = new JsonArray
+                                {
+                                    new JsonObject
+                                    {
+                                        ["text"] = "Dự án này là dự án biên dịch (.csproj / package.json). BƯỚC 4 BẮT BUỘC: Bạn phải gọi tool 'run_command' với lệnh 'dotnet build' (hoặc 'npm run build') để kiểm tra tính toàn vẹn và đảm bảo 0 lỗi biên dịch trước khi chốt câu trả lời cuối cùng!"
+                                    }
+                                }
+                            });
+                            continue;
+                        }
+
                         // Gemini returned final explanation -> finished!
                         finalExplanation = cText;
                         break;
@@ -3431,8 +3690,10 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         ProjectName = cleanProj,
                         Role = "assistant",
                         Content = finalExplanation,
+                        ThoughtText = accumulatedThought.Length > 0 ? accumulatedThought.ToString() : (finalExplanation ?? ""),
                         PlanJson = JsonSerializer.Serialize(planSteps),
                         ToolActionsJson = JsonSerializer.Serialize(toolOperations),
+                        CheckpointId = checkpointId,
                         CreatedAt = DateTime.UtcNow
                     };
                     _dbContext.AgentChatMessages.Add(assistantChatMsg);
@@ -3455,6 +3716,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         operations = toolOperations,
                         buildPassed = buildPassed,
                         executedCommands = executedCommands,
+                        checkpointId = checkpointId,
                         alreadyApplied = true
                     });
                     return;
@@ -3472,6 +3734,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         operations = toolOperations,
                         buildPassed = buildPassed,
                         executedCommands = executedCommands,
+                        checkpointId = checkpointId,
                         alreadyApplied = true
                     });
                     return;
@@ -3536,6 +3799,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             {
                 switch (toolName)
                 {
+                    case "list_dir":
                     case "list_files":
                     {
                         string dir = ExtractStringArg(args, "directory", "dir", "path");
@@ -3546,13 +3810,65 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
                         if (!Directory.Exists(targetDir)) return $"Directory '{dir}' does not exist.";
-                        var entries = Directory.GetFileSystemEntries(targetDir)
+                        var entries = Directory.GetFileSystemEntries(targetDir, "*", SearchOption.AllDirectories)
+                            .Where(e => !e.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                        !e.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
+                                        !e.Contains(Path.DirectorySeparatorChar + ".git" + Path.DirectorySeparatorChar) &&
+                                        !e.Contains(Path.DirectorySeparatorChar + ".btoan_checkpoints" + Path.DirectorySeparatorChar) &&
+                                        !e.Contains(Path.DirectorySeparatorChar + "node_modules" + Path.DirectorySeparatorChar))
                             .Select(e => {
                                 string rel = Path.GetRelativePath(projectPath, e).Replace('\\', '/');
-                                return Directory.Exists(e) ? rel + "/" : rel;
+                                if (Directory.Exists(e)) return $"{rel}/";
+                                var fi = new FileInfo(e);
+                                int lineCount = 0;
+                                try { lineCount = System.IO.File.ReadLines(e).Count(); } catch { }
+                                return $"{rel} ({fi.Length} bytes, {lineCount} lines)";
                             })
-                            .Take(100);
+                            .Take(120);
                         return string.Join("\n", entries);
+                    }
+                    case "grep_search":
+                    {
+                        string query = ExtractStringArg(args, "query", "search", "pattern", "term");
+                        if (string.IsNullOrWhiteSpace(query)) return "ERROR: Tham số 'query' không được để trống khi gọi grep_search.";
+                        string includePattern = ExtractStringArg(args, "include_pattern", "pattern", "glob");
+                        if (string.IsNullOrWhiteSpace(includePattern)) includePattern = "*.*";
+
+                        var matches = new List<string>();
+                        var searchFiles = Directory.GetFiles(projectPath, includePattern, SearchOption.AllDirectories)
+                            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                        !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
+                                        !f.Contains(Path.DirectorySeparatorChar + ".git" + Path.DirectorySeparatorChar) &&
+                                        !f.Contains(Path.DirectorySeparatorChar + ".btoan_checkpoints" + Path.DirectorySeparatorChar) &&
+                                        !f.Contains(Path.DirectorySeparatorChar + "node_modules" + Path.DirectorySeparatorChar) &&
+                                        !f.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && 
+                                        !f.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && 
+                                        !f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) && 
+                                        !f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) && 
+                                        !f.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                            .Take(150);
+
+                        foreach (var f in searchFiles)
+                        {
+                            string rel = Path.GetRelativePath(projectPath, f).Replace('\\', '/');
+                            try
+                            {
+                                var lines = System.IO.File.ReadAllLines(f);
+                                for (int i = 0; i < lines.Length; i++)
+                                {
+                                    if (lines[i].Contains(query, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        matches.Add($"{rel}:{i + 1}: {lines[i].Trim()}");
+                                        if (matches.Count >= 50) break;
+                                    }
+                                }
+                            }
+                            catch { }
+                            if (matches.Count >= 50) break;
+                        }
+
+                        if (matches.Count == 0) return $"Không tìm thấy kết quả nào khớp với '{query}'.";
+                        return string.Join("\n", matches);
                     }
                     case "generate_image":
                     {
@@ -3648,7 +3964,24 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
                         }
                         if (!System.IO.File.Exists(fullPath)) return $"ERROR: Tệp '{path}' không tồn tại trong dự án.";
-                        return await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8);
+                        
+                        string[] lines = await System.IO.File.ReadAllLinesAsync(fullPath, Encoding.UTF8);
+                        int startLine = 1;
+                        int endLine = lines.Length;
+                        if (args?.ContainsKey("start_line") == true && int.TryParse(args["start_line"]?.ToString(), out int sl) && sl > 0)
+                        {
+                            startLine = Math.Min(sl, lines.Length);
+                        }
+                        if (args?.ContainsKey("end_line") == true && int.TryParse(args["end_line"]?.ToString(), out int el) && el >= startLine)
+                        {
+                            endLine = Math.Min(el, lines.Length);
+                        }
+                        var sb = new StringBuilder();
+                        for (int i = startLine; i <= endLine; i++)
+                        {
+                            sb.AppendLine($"{i}: {lines[i - 1]}");
+                        }
+                        return sb.ToString();
                     }
                     case "write_file":
                     {
@@ -3675,6 +4008,53 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
                         if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
                         return $"Successfully written file: {relPath} ({content.Length} ký tự / {Encoding.UTF8.GetByteCount(content)} bytes).";
+                    }
+                    case "patch_file":
+                    {
+                        string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
+                        string targetBlock = ExtractStringArg(args, "target_block", "target", "old_content", "search", "existing_code");
+                        string replacementBlock = ExtractStringArg(args, "replacement_block", "replacement", "new_content", "replace", "code", "new_code");
+
+                        if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống khi gọi patch_file.";
+                        if (string.IsNullOrEmpty(targetBlock)) return "ERROR: Tham số 'target_block' không được để trống.";
+
+                        string projName = Path.GetFileName(projectPath);
+                        path = NormalizeWorkspaceRelativePath(path, projName);
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path));
+                        if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
+                        }
+                        if (!System.IO.File.Exists(fullPath)) return $"ERROR: Tệp '{path}' không tồn tại. Dùng write_file nếu muốn tạo mới.";
+                        string existing = await System.IO.File.ReadAllTextAsync(fullPath, Encoding.UTF8);
+
+                        string targetNorm = targetBlock.Replace("\r\n", "\n");
+                        string existingNorm = existing.Replace("\r\n", "\n");
+
+                        if (!existingNorm.Contains(targetNorm))
+                        {
+                            string trimmed = targetNorm.Trim();
+                            if (existingNorm.Contains(trimmed))
+                            {
+                                targetNorm = trimmed;
+                            }
+                            else
+                            {
+                                return $"ERROR: Không tìm thấy target_block trong '{path}'. Hãy gọi read_file để xem chính xác mã nguồn hiện tại.";
+                            }
+                        }
+
+                        string replacementNorm = (replacementBlock ?? "").Replace("\r\n", "\n");
+                        string patched = existingNorm.Replace(targetNorm, replacementNorm);
+                        if (string.IsNullOrWhiteSpace(patched))
+                        {
+                            return $"ERROR: Thao tác patch_file làm tệp '{path}' trở thành rỗng (0 byte). Thao tác bị từ chối.";
+                        }
+
+                        await System.IO.File.WriteAllTextAsync(fullPath, patched, Encoding.UTF8);
+                        string relPath = Path.GetRelativePath(projectPath, fullPath).Replace('\\', '/');
+                        if (!modifiedFiles.Contains(relPath)) modifiedFiles.Add(relPath);
+                        return $"Successfully patched file: {relPath}";
                     }
                     case "edit_file":
                     {
@@ -3745,9 +4125,21 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     {
                         string command = ExtractStringArg(args, "command", "cmd", "script", "exec");
                         if (string.IsNullOrWhiteSpace(command)) return "ERROR: Tham số 'command' không được để trống.";
+                        
+                        string lowerCmd = command.ToLowerInvariant();
+                        if (lowerCmd.Contains("rm -rf /") || lowerCmd.Contains(":(){ :|:& };:") || lowerCmd.Contains("shutdown") || lowerCmd.Contains("reboot") || lowerCmd.Contains("mkfs") || lowerCmd.Contains("dd if="))
+                        {
+                            return "ERROR: Câu lệnh bị từ chối vì lý do an toàn hệ thống.";
+                        }
+
                         executedCommands.Add(command);
                         AutoFixMapStaticAssets(projectPath);
-                        var (ok, output) = await RunCliProcessAsync(projectPath, command, "", 60);
+                        int timeoutSec = 60;
+                        if (args?.ContainsKey("timeout_seconds") == true && int.TryParse(args["timeout_seconds"]?.ToString(), out int tSec) && tSec > 0)
+                        {
+                            timeoutSec = Math.Min(tSec, 180);
+                        }
+                        var (ok, output) = await RunCliProcessAsync(projectPath, command, "", timeoutSec);
                         if (command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase) && ok)
                         {
                             setBuildPassed(true);

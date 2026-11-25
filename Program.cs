@@ -233,6 +233,17 @@ using (var scope = app.Services.CreateScope())
                 dbContext.SaveChanges();
                 Console.WriteLine("[SEED] Created default admin account: admin");
             }
+
+            try
+            {
+                dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_chat_messages ADD COLUMN thought_text TEXT;");
+            }
+            catch { }
+            try
+            {
+                dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_chat_messages ADD COLUMN checkpoint_id TEXT;");
+            }
+            catch { }
         }
         catch (Exception initEx)
         {

@@ -35,7 +35,7 @@
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
     <!-- Btoan Studio IDE Dark Modern CSS -->
-    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261124_projectfix" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261126_antigravity_complete_v1" asp-append-version="true" />
 </head>
 <body class="agent-ide-body">
 
@@ -697,6 +697,7 @@
                     <div class="d-flex align-items-center gap-2">
                         <!-- Dynamic Terminal Session Tabs in Header -->
                         <div id="terminalHeaderTabsContainer" class="d-flex align-items-center gap-1 me-2 overflow-x-auto" style="max-width: 320px;"></div>
+                        <button id="btnTerminalAskAgentFix" onclick="askAgentToFixTerminalError()" class="btn btn-xs btn-outline-warning extra-small py-0.5 px-2 d-none" title="Nhờ Agent sửa lỗi Terminal"><i class="bi bi-stars text-warning me-1"></i>Nhờ Agent sửa lỗi</button>
                         <button onclick="createNewTerminalSession()" class="btn-icon text-secondary" title="New Terminal Session"><i class="bi bi-plus-lg"></i></button>
                         <button onclick="splitTerminalView()" class="btn-icon text-secondary" title="Split Terminal"><i class="bi bi-layout-split"></i></button>
                         <button onclick="closeCurrentTerminalSession()" class="btn-icon text-secondary" title="Kill Terminal Session"><i class="bi bi-trash"></i></button>
@@ -808,6 +809,7 @@
                     <div class="autocomplete-item" onclick="insertSlashCommand('/fix')"><span class="cmd-badge">/fix</span> Sửa lỗi trong code hiện tại</div>
                     <div class="autocomplete-item" onclick="insertSlashCommand('/explain')"><span class="cmd-badge">/explain</span> Giải thích chi tiết khối code</div>
                     <div class="autocomplete-item" onclick="insertSlashCommand('/refactor')"><span class="cmd-badge">/refactor</span> Tối ưu cấu trúc & hiệu năng</div>
+                    <div class="autocomplete-item" onclick="insertSlashCommand('/ui')"><span class="cmd-badge">/ui</span> Nâng cấp giao diện hiện đại, responsive</div>
                     <div class="autocomplete-item" onclick="insertSlashCommand('/test')"><span class="cmd-badge">/test</span> Viết unit test cho code</div>
                     <div class="autocomplete-item" onclick="insertSlashCommand('/build')"><span class="cmd-badge">/build</span> Build kiểm tra lỗi toàn bộ dự án</div>
                 </div>
@@ -1265,6 +1267,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261125_project_tabs_sync_v10" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261126_antigravity_complete_v1" asp-append-version="true"></script>
 </body>
 </html>

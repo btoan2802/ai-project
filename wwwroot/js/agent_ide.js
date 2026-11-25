@@ -330,23 +330,34 @@ function updateTerminalPrompt() {
 function onProjectChanged() {
     const select = document.getElementById("projectSelect");
     if (!select) return;
-    const chosen = select.value;
-    switchActiveProject(chosen);
-}
+    activeProjectId = select.value;
+    localStorage.setItem("antigravity_last_project", activeProjectId);
 
-async function switchActiveProject(projName) {
-    if (!projName) {
-        openTabsMap.clear();
-        activeFilePath = null;
-        renderTabBar();
+    if (activeProjectId) {
+        hideEmptyWorkspaceState();
+        const rootNameEl = document.getElementById("workspaceRootName");
+        if (rootNameEl) {
+            rootNameEl.innerText = select.options[select.selectedIndex]?.text || activeProjectId;
+        }
+        updateTerminalPrompt();
+        refreshFileTree();
+        loadGitStatus();
+        loadAgentChatHistory(activeProjectId);
+        if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+            terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
+        }
+    } else {
         showEmptyWorkspaceState();
         updateTerminalPrompt();
         const container = document.getElementById("workspaceTreeContainer");
         if (container) {
             container.innerHTML = `<div class="text-secondary extra-small p-3 text-center">Chưa có dự án nào.</div>`;
         }
-        return;
     }
+}
+
+async function switchActiveProject(projName) {
+    if (!projName) return;
 
     // 1. Save old project's tabs state before switching
     if (activeProjectId && activeProjectId !== projName) {
@@ -357,12 +368,6 @@ async function switchActiveProject(projName) {
     openTabsMap.clear();
     activeFilePath = null;
     renderTabBar();
-    if (monacoEditor) {
-        try {
-            const emptyModel = monaco.editor.createModel("", "plaintext");
-            monacoEditor.setModel(emptyModel);
-        } catch {}
-    }
 
     activeProjectId = projName;
     localStorage.setItem("antigravity_last_project", activeProjectId);
@@ -887,15 +892,7 @@ async function openFileInEditor(filePath, forceReload = false) {
     }
 
     // Verify file actually exists in current workspaceFilesList before firing network request
-    if (Array.isArray(workspaceFilesList)) {
-        if (workspaceFilesList.length === 0) {
-            console.debug(`[IDE] Skip opening file on empty workspace: ${cleanPath}`);
-            if (openTabsMap.has(cleanPath)) {
-                openTabsMap.delete(cleanPath);
-                renderTabBar();
-            }
-            return;
-        }
+    if (Array.isArray(workspaceFilesList) && workspaceFilesList.length > 0) {
         const fileExists = workspaceFilesList.some(f => !f.isDir && (
             (f.path && f.path.replace(/\\/g, '/').toLowerCase() === cleanPath.toLowerCase()) ||
             (f.name && f.name.toLowerCase() === cleanPath.toLowerCase()) ||
@@ -903,10 +900,6 @@ async function openFileInEditor(filePath, forceReload = false) {
         ));
         if (!fileExists) {
             console.debug(`[IDE] Skip opening non-existent file: ${cleanPath}`);
-            if (openTabsMap.has(cleanPath)) {
-                openTabsMap.delete(cleanPath);
-                renderTabBar();
-            }
             return;
         }
     }
@@ -950,13 +943,12 @@ async function openFileInEditor(filePath, forceReload = false) {
 
         } else {
             console.debug("[IDE] File content not available:", cleanPath, data.error || data.message);
-            if (openTabsMap.has(cleanPath)) {
-                openTabsMap.delete(cleanPath);
-                renderTabBar();
-            }
         }
     } catch (err) {
         console.warn("[IDE] Error opening file:", err);
+        if (typeof showToastNotification === 'function') {
+            showToastNotification("⚠️ Lỗi mở tệp: " + err.message);
+        }
     }
 }
 
@@ -1753,6 +1745,9 @@ async function initTerminalSignalR() {
         } else if (xtermInstance) {
             xtermInstance.write(chunk);
         }
+        if (typeof checkTerminalOutputForErrors === "function") {
+            checkTerminalOutputForErrors(chunk);
+        }
     });
 
     terminalHubConn.on("TerminalClear", (sId) => {
@@ -2542,12 +2537,22 @@ async function openLivePreview() {
     }
 
     const uid = localStorage.getItem("user_id") || "1";
-    const previewUrl = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/index.html?user_id=${encodeURIComponent(uid)}`;
+    let previewUrl;
+    let badgeText;
+
+    if (currentLiveAppPort && currentLiveAppPort > 0) {
+        previewUrl = `/ide-preview/${currentLiveAppPort}/?user_id=${encodeURIComponent(uid)}`;
+        badgeText = `http://127.0.0.1:${currentLiveAppPort}`;
+    } else {
+        previewUrl = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/index.html?user_id=${encodeURIComponent(uid)}`;
+        badgeText = `/api/ide/preview/${activeProjectId}/index.html`;
+    }
+
     const iframe = document.getElementById("previewIframe");
     const badge = document.getElementById("previewModalUrlBadge");
     const newTabBtn = document.getElementById("previewOpenTabBtn");
 
-    if (badge) badge.innerText = `/api/ide/preview/${activeProjectId}/index.html`;
+    if (badge) badge.innerText = badgeText;
     if (newTabBtn) newTabBtn.href = previewUrl;
 
     showModalSafely("previewModal");
@@ -2560,6 +2565,11 @@ async function openLivePreview() {
         // Nạp trực tiếp URL cùng domain để có đầy đủ quyền same-origin, chạy JavaScript và tải CSS hoàn hảo
         iframe.src = previewUrl;
     }
+}
+
+function openLiveAppPreview(port) {
+    if (port) currentLiveAppPort = port;
+    openLivePreview();
 }
 
 function refreshPreviewIframe() {
@@ -2627,20 +2637,45 @@ async function loadAgentChatHistory(projectId) {
 
             list.forEach(item => {
                 if (item.role === "user") {
+                    const userMsgWrapper = document.createElement("div");
+                    userMsgWrapper.className = "d-flex flex-column align-self-end align-items-end mb-2";
+                    userMsgWrapper.style.maxWidth = "85%";
+
                     const userMsg = document.createElement("div");
-                    userMsg.className = "p-2 rounded bg-dark border border-secondary text-light extra-small align-self-end";
-                    userMsg.style.maxWidth = "85%";
+                    userMsg.className = "p-2 rounded bg-dark border border-secondary text-light extra-small";
                     userMsg.innerText = item.content;
-                    container.appendChild(userMsg);
+                    userMsgWrapper.appendChild(userMsg);
+
+                    if (item.checkpointId) {
+                        const restoreBtn = document.createElement("button");
+                        restoreBtn.className = "btn btn-xs btn-outline-secondary extra-small py-0 px-1.5 mt-1 text-secondary";
+                        restoreBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> ↺ Khôi phục bản trước';
+                        restoreBtn.onclick = () => restoreProjectCheckpoint(item.checkpointId);
+                        userMsgWrapper.appendChild(restoreBtn);
+                    }
+                    container.appendChild(userMsgWrapper);
                 } else {
                     const agentMsg = document.createElement("div");
-                    agentMsg.className = "d-flex flex-column gap-2 extra-small text-light";
+                    agentMsg.className = "d-flex flex-column gap-2 extra-small text-light mb-2";
                     let parsedPlan = [];
                     let parsedOps = [];
                     try { if (item.planJson) parsedPlan = JSON.parse(item.planJson); } catch(e){}
                     try { if (item.toolActionsJson) parsedOps = JSON.parse(item.toolActionsJson); } catch(e){}
                     if (!parsedPlan.length && Array.isArray(item.plan)) parsedPlan = item.plan;
                     if (!parsedOps.length && Array.isArray(item.operations)) parsedOps = item.operations;
+
+                    if (item.thoughtText) {
+                        const thAccordion = document.createElement("details");
+                        thAccordion.className = "agent-thought-accordion";
+                        thAccordion.innerHTML = `
+                            <summary class="agent-thought-summary">
+                                <span class="agent-thought-arrow">›</span>
+                                <span class="agent-thought-title">Thought</span>
+                            </summary>
+                            <div class="agent-thought-body">${escapeHtml(item.thoughtText)}</div>
+                        `;
+                        agentMsg.appendChild(thAccordion);
+                    }
 
                     renderAgentResponse({
                         explanation: item.content,
@@ -2663,12 +2698,60 @@ async function loadAgentChatHistory(projectId) {
     }
 }
 
+window.lastTerminalErrorSnippet = "";
+function checkTerminalOutputForErrors(chunk) {
+    if (!chunk) return;
+    if (chunk.includes("error CS") || chunk.includes("Exception:") || chunk.includes("Unhandled exception") || chunk.includes("ERR!") || (chunk.includes("TS") && chunk.includes("error"))) {
+        window.lastTerminalErrorSnippet = chunk.trim();
+        const fixBtn = document.getElementById("btnTerminalAskAgentFix");
+        if (fixBtn) {
+            fixBtn.classList.remove("d-none");
+        }
+    }
+}
+
+function askAgentToFixTerminalError() {
+    const err = window.lastTerminalErrorSnippet || "";
+    openRightAgentPanel();
+    const input = document.getElementById("agentTaskInput");
+    if (input) {
+        input.value = `/fix Sửa lỗi trong Terminal:\n${err}`;
+        sendAgentTask();
+    }
+    const fixBtn = document.getElementById("btnTerminalAskAgentFix");
+    if (fixBtn) fixBtn.classList.add("d-none");
+}
+
+async function restoreProjectCheckpoint(checkpointId) {
+    if (!checkpointId || !activeProjectId) return;
+    if (!confirm("Bạn có chắc chắn muốn khôi phục dự án về trạng thái trước lượt chạy này không?")) return;
+    try {
+        const res = await fetch('/api/ide/checkpoint/restore', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ project: activeProjectId, checkpointId: checkpointId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showToastNotification("✅ Đã khôi phục checkpoint thành công!");
+            await refreshFileTree();
+            if (activeFilePath) {
+                await openFileInEditor(activeFilePath, true);
+            }
+        } else {
+            alert("⚠️ Khôi phục thất bại: " + (data.error || data.message));
+        }
+    } catch (err) {
+        alert("Lỗi kết nối: " + err.message);
+    }
+}
+
 function onPromptInput(e) {
     const val = e.target.value;
     const mentionPopup = document.getElementById("mentionPopup");
     const cmdPopup = document.getElementById("commandPopup");
 
-    if (val.endsWith("@")) {
+    if (val.endsWith("@") || (val.includes("@") && !val.includes(" "))) {
         showMentionPopup();
         if (cmdPopup) cmdPopup.style.display = "none";
     } else if (val.endsWith("/")) {
@@ -2690,19 +2773,29 @@ function onPromptKeyDown(e) {
 function showMentionPopup() {
     const popup = document.getElementById("mentionPopup");
     const list = document.getElementById("mentionFileList");
-    if (!popup || !list) return;
+    const input = document.getElementById("agentTaskInput");
+    if (!popup || !list || !input) return;
+
+    const val = input.value;
+    const atIndex = val.lastIndexOf("@");
+    const query = atIndex >= 0 ? val.substring(atIndex + 1).toLowerCase().trim() : "";
 
     list.innerHTML = "";
-    workspaceFilesList.slice(0, 10).forEach(f => {
-        const item = document.createElement("div");
-        item.className = "autocomplete-item";
-        item.innerHTML = `<i class="bi bi-file-earmark-code text-info"></i> <span>${f.name}</span>`;
-        item.onclick = () => {
-            insertFileMention(f.name);
-            popup.style.display = "none";
-        };
-        list.appendChild(item);
-    });
+    const filtered = (workspaceFilesList || []).filter(f => !f.isDir && (!query || f.name.toLowerCase().includes(query))).slice(0, 10);
+    if (filtered.length === 0) {
+        list.innerHTML = `<div class="p-2 text-secondary extra-small">Không tìm thấy tệp phù hợp</div>`;
+    } else {
+        filtered.forEach(f => {
+            const item = document.createElement("div");
+            item.className = "autocomplete-item";
+            item.innerHTML = `<i class="bi bi-file-earmark-code text-info"></i> <span>${escapeHtml(f.name)}</span>`;
+            item.onclick = () => {
+                insertFileMention(f.name);
+                popup.style.display = "none";
+            };
+            list.appendChild(item);
+        });
+    }
     popup.style.display = "block";
 }
 
@@ -2716,8 +2809,20 @@ function insertFileMention(fileName) {
 function insertSlashCommand(cmd) {
     const input = document.getElementById("agentTaskInput");
     if (!input) return;
-    input.value = cmd + " ";
-    document.getElementById("commandPopup").style.display = "none";
+    if (cmd === '/fix') {
+        const lastErr = window.lastTerminalErrorSnippet || "";
+        input.value = `/fix ${lastErr ? 'Sửa lỗi sau đây:\n' + lastErr : 'Kiểm tra và sửa lỗi trong mã nguồn hoặc lỗi terminal'}`;
+    } else if (cmd === '/explain') {
+        input.value = `/explain Giải thích chi tiết cấu trúc và logic của tệp ${activeFilePath || 'đang mở'}`;
+    } else if (cmd === '/refactor') {
+        input.value = `/refactor Tối ưu hóa mã nguồn sạch đẹp, chuẩn cấu trúc hơn cho tệp ${activeFilePath || 'dự án'}`;
+    } else if (cmd === '/ui') {
+        input.value = `/ui Nâng cấp giao diện hiện đại, responsive mobile, màu sắc gradient đẹp mắt và bổ sung hiệu ứng mượt mà`;
+    } else {
+        input.value = cmd + " ";
+    }
+    const cmdPopup = document.getElementById("commandPopup");
+    if (cmdPopup) cmdPopup.style.display = "none";
     input.focus();
 }
 
@@ -2739,41 +2844,83 @@ async function sendAgentTask() {
     container.style.display = "flex";
 
     // Append User Message
-    const userMsg = document.createElement("div");
-    userMsg.className = "p-2 rounded bg-dark border border-secondary text-light extra-small align-self-end";
-    userMsg.style.maxWidth = "85%";
-    userMsg.innerText = task;
-    container.appendChild(userMsg);
+    const userMsgWrapper = document.createElement("div");
+    userMsgWrapper.className = "d-flex flex-column align-self-end align-items-end mb-2";
+    userMsgWrapper.style.maxWidth = "85%";
 
-    // Append Agent Loading Indicator
+    const userMsg = document.createElement("div");
+    userMsg.className = "p-2 rounded bg-dark border border-secondary text-light extra-small";
+    userMsg.innerText = task;
+    userMsgWrapper.appendChild(userMsg);
+    container.appendChild(userMsgWrapper);
+
+    // Append Agent Loading Indicator (Antigravity Thought Accordion & Live Task Card)
+    const thoughtId = `thought_${Date.now()}`;
     const agentMsg = document.createElement("div");
     agentMsg.className = "d-flex flex-column gap-2 extra-small text-light";
     agentMsg.innerHTML = `
+        <details id="${thoughtId}" class="agent-thought-accordion" open>
+            <summary class="agent-thought-summary">
+                <span class="agent-thought-arrow">›</span>
+                <span class="agent-thought-title">Thought... <span class="thought-timer">1s</span></span>
+            </summary>
+            <div class="agent-thought-body">Đang phân tích yêu cầu, khảo sát cấu trúc dự án và lập kế hoạch thực thi...</div>
+        </details>
+        <div class="agent-live-task-card" style="display: none;">
+            <div class="d-flex align-items-center justify-content-between mb-1.5 pb-1 border-bottom border-secondary">
+                <span class="fw-semibold text-light extra-small"><i class="bi bi-list-task me-1 text-info"></i> Nhiệm vụ:</span>
+                <span class="agent-task-progress-badge badge bg-secondary extra-small">0/0 bước</span>
+            </div>
+            <div class="agent-task-steps-list d-flex flex-column gap-1"></div>
+        </div>
+        <div class="agent-action-pills-container"></div>
         <div class="task-running-pill">
             <div class="spinner-border spinner-border-sm text-info" style="width: 12px; height: 12px;"></div>
             <span>Đang phân tích yêu cầu...</span>
         </div>
-        <div class="agent-live-steps mt-2 d-flex flex-wrap gap-1"></div>
     `;
     container.appendChild(agentMsg);
     container.scrollTop = container.scrollHeight;
 
-    const model = document.getElementById("agentModelSelect")?.value || "gemini-3.5-flash";
+    const model = document.getElementById("agentModelSelect")?.value || "gemini-3.5-flash-lite";
     const mode = document.getElementById("agentModeSelect")?.value || "fast";
 
     // Animated Live Progress Ticker with Real-Time Event Binding
     let elapsedSec = 0;
+    let isThinkingDone = false;
     let currentStatusText = "Đang phân tích yêu cầu...";
     const pillSpan = agentMsg.querySelector(".task-running-pill span");
-    const liveStepsContainer = agentMsg.querySelector(".agent-live-steps");
+    const thoughtEl = agentMsg.querySelector(`#${thoughtId}`);
+    const thoughtTimer = thoughtEl?.querySelector(".thought-timer");
+    const thoughtTitle = thoughtEl?.querySelector(".agent-thought-title");
+    const thoughtBody = thoughtEl?.querySelector(".agent-thought-body");
+    const pillsContainer = agentMsg.querySelector(".agent-action-pills-container");
+    const liveTaskCard = agentMsg.querySelector(".agent-live-task-card");
+    const liveTaskList = agentMsg.querySelector(".agent-task-steps-list");
+    const liveTaskBadge = agentMsg.querySelector(".agent-task-progress-badge");
+
     const ticker = setInterval(() => {
         elapsedSec += 1;
+        if (!isThinkingDone && thoughtTimer) {
+            thoughtTimer.innerText = `${elapsedSec}s`;
+        }
         if (pillSpan) {
             pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
         }
     }, 1000);
 
     const controller = new AbortController();
+    window.currentAgentAbortController = controller;
+    const sendBtn = document.getElementById("btnSendAgentTask");
+    if (sendBtn) {
+        sendBtn.innerHTML = `<i class="bi bi-stop-fill text-danger fs-5"></i>`;
+        sendBtn.title = "Dừng Agent (Stop)";
+        sendBtn.onclick = function() {
+            if (window.currentAgentAbortController) {
+                window.currentAgentAbortController.abort();
+            }
+        };
+    }
     const timeoutId = setTimeout(() => controller.abort(), 240000);
 
     if (!activeProjectId) {
@@ -2856,24 +3003,107 @@ async function sendAgentTask() {
                     if (eventType === "status" || eventType === "turn_start") {
                         currentStatusText = eventData.message || `Lượt ${eventData.turn}: Đang xử lý...`;
                         if (pillSpan) pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
+                        if (thoughtBody && eventData.thought) {
+                            thoughtBody.innerText = eventData.thought;
+                        }
                     } else if (eventType === "tool_start") {
+                        if (!isThinkingDone) {
+                            isThinkingDone = true;
+                            if (thoughtEl) {
+                                thoughtEl.removeAttribute("open");
+                                if (thoughtTitle) thoughtTitle.innerHTML = `Thought for ${elapsedSec}s`;
+                            }
+                        }
                         currentStatusText = eventData.message || `Đang chạy ${eventData.tool}...`;
                         if (pillSpan) pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
+
+                        // Live Task Card Update
+                        if (liveTaskCard && liveTaskList) {
+                            liveTaskCard.style.display = "block";
+                            const tgt = eventData.target || eventData.tool;
+                            let existingItem = liveTaskList.querySelector(`[data-target="${CSS.escape(tgt)}"]`);
+                            if (!existingItem) {
+                                existingItem = document.createElement("div");
+                                existingItem.className = "agent-task-step-item running";
+                                existingItem.setAttribute("data-target", tgt);
+                                existingItem.innerHTML = `<span class="spinner-border spinner-border-sm text-info me-1.5" style="width:11px;height:11px;"></span> <span>${escapeHtml(eventData.message || `Đang chạy ${tgt}`)}</span>`;
+                                liveTaskList.appendChild(existingItem);
+                            } else if (!existingItem.classList.contains("done")) {
+                                existingItem.className = "agent-task-step-item running";
+                                existingItem.innerHTML = `<span class="spinner-border spinner-border-sm text-info me-1.5" style="width:11px;height:11px;"></span> <span>${escapeHtml(eventData.message || `Đang chạy ${tgt}`)}</span>`;
+                            }
+                            if (liveTaskBadge) {
+                                const doneCount = liveTaskList.querySelectorAll('.agent-task-step-item.done').length;
+                                liveTaskBadge.innerText = `${doneCount}/${liveTaskList.children.length} bước`;
+                            }
+                        }
                     } else if (eventType === "tool_done") {
+                        if (!isThinkingDone) {
+                            isThinkingDone = true;
+                            if (thoughtEl) {
+                                thoughtEl.removeAttribute("open");
+                                if (thoughtTitle) thoughtTitle.innerHTML = `Thought for ${elapsedSec}s`;
+                            }
+                        }
                         currentStatusText = eventData.message || `Đã xong ${eventData.tool}`;
                         if (pillSpan) pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
 
-                        // Append live badge into agent-live-steps
-                        if (liveStepsContainer && eventData.target) {
-                            const badge = document.createElement("span");
-                            badge.className = "badge bg-dark border border-secondary text-info extra-small py-1 px-2";
-                            const icon = eventData.action === 'image' ? 'bi-image' : 'bi-file-earmark-code';
-                            badge.innerHTML = `<i class="bi ${icon} text-success me-1"></i>${eventData.target}`;
-                            liveStepsContainer.appendChild(badge);
+                        // Live Task Card Update Step to Done
+                        if (liveTaskList) {
+                            const tgt = eventData.target || eventData.tool;
+                            let existingItem = liveTaskList.querySelector(`[data-target="${CSS.escape(tgt)}"]`);
+                            if (!existingItem) {
+                                existingItem = document.createElement("div");
+                                existingItem.setAttribute("data-target", tgt);
+                                liveTaskList.appendChild(existingItem);
+                            }
+                            existingItem.className = "agent-task-step-item done";
+                            existingItem.innerHTML = `<i class="bi bi-check-circle-fill text-success me-1.5"></i> <span>${escapeHtml(eventData.message || `Đã xong ${tgt}`)}</span>`;
+                            if (liveTaskBadge) {
+                                const doneCount = liveTaskList.querySelectorAll('.agent-task-step-item.done').length;
+                                liveTaskBadge.innerText = `${doneCount}/${liveTaskList.children.length} bước`;
+                                liveTaskBadge.className = "agent-task-progress-badge badge bg-success extra-small";
+                            }
+                        }
+
+                        // Append interactive Action Pill into pillsContainer
+                        if (pillsContainer && eventData.target) {
+                            const rawTarget = eventData.target;
+                            const fileName = rawTarget.split(/[\\/]/).pop();
+                            const action = eventData.action || 'create';
+                            const linesSuffix = (eventData.lines && eventData.lines > 0) ? ` (+${eventData.lines} dòng)` : '';
+                            const pill = document.createElement("button");
+                            pill.type = "button";
+
+                            if (action === 'read') {
+                                pill.className = "agent-action-pill read";
+                                pill.innerHTML = `<i class="bi bi-eye text-secondary me-1"></i> Đã đọc ${escapeHtml(fileName)}`;
+                                pill.onclick = () => openFileInEditor(rawTarget, true);
+                            } else if (action === 'create') {
+                                pill.className = "agent-action-pill create";
+                                pill.innerHTML = `<i class="bi bi-stars text-success me-1"></i> Đã tạo ${escapeHtml(fileName)}${linesSuffix}`;
+                                pill.onclick = () => openFileInEditor(rawTarget, true);
+                            } else if (action === 'edit' || action === 'patch') {
+                                pill.className = "agent-action-pill edit";
+                                pill.innerHTML = `<i class="bi bi-pencil-square text-warning me-1"></i> Đã sửa ${escapeHtml(fileName)}${linesSuffix}`;
+                                pill.onclick = () => openFileInEditor(rawTarget, true);
+                            } else if (action === 'image') {
+                                pill.className = "agent-action-pill image";
+                                pill.innerHTML = `<i class="bi bi-image text-info me-1"></i> Đã tạo ảnh ${escapeHtml(fileName)}`;
+                                pill.onclick = () => showImagePreviewModal(rawTarget);
+                            } else if (eventData.tool === 'run_command') {
+                                pill.className = "agent-action-pill command";
+                                pill.innerHTML = `<i class="bi bi-terminal text-info me-1"></i> ${escapeHtml(rawTarget)}`;
+                            } else {
+                                pill.className = "agent-action-pill read";
+                                pill.innerHTML = `<i class="bi bi-check2 text-success me-1"></i> ${escapeHtml(fileName)}${linesSuffix}`;
+                                pill.onclick = () => openFileInEditor(rawTarget, true);
+                            }
+                            pillsContainer.appendChild(pill);
                         }
 
                         // Real-time update: refresh tree and open created/edited file immediately
-                        if (eventData.action === 'create' || eventData.action === 'edit' || eventData.action === 'image') {
+                        if (eventData.action === 'create' || eventData.action === 'edit' || eventData.action === 'patch' || eventData.action === 'image') {
                             if (typeof refreshFileTree === 'function') {
                                 refreshFileTree().catch(console.warn);
                             }
@@ -2885,9 +3115,34 @@ async function sendAgentTask() {
                                 }
                             }
                         }
+                    } else if (eventType === "command_run") {
+                        if (pillsContainer) {
+                            const cmdPill = document.createElement("button");
+                            cmdPill.type = "button";
+                            cmdPill.className = "agent-action-pill command";
+                            cmdPill.innerHTML = `<i class="bi bi-terminal text-info me-1"></i> ${escapeHtml(eventData.command)} <span class="badge ${eventData.exitCode === 0 ? 'bg-success' : 'bg-danger'} ms-1">Exit Code: ${eventData.exitCode}</span>`;
+                            pillsContainer.appendChild(cmdPill);
+                        }
                     } else if (eventType === "done") {
+                        if (!isThinkingDone) {
+                            isThinkingDone = true;
+                            if (thoughtEl) {
+                                thoughtEl.removeAttribute("open");
+                                if (thoughtTitle) thoughtTitle.innerHTML = `Thought for ${elapsedSec}s`;
+                            }
+                        }
                         finalData = eventData;
                         renderAgentResponse(finalData, agentMsg);
+
+                        // Attach Checkpoint restore button to user message if checkpoint created
+                        if (finalData.checkpointId && userMsgWrapper) {
+                            const cpBtn = document.createElement("button");
+                            cpBtn.className = "btn btn-xs btn-outline-secondary extra-small py-0 px-1.5 mt-1 text-secondary";
+                            cpBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> ↺ Khôi phục bản trước';
+                            cpBtn.onclick = () => restoreProjectCheckpoint(finalData.checkpointId);
+                            userMsgWrapper.appendChild(cpBtn);
+                        }
+
                         if (typeof refreshFileTree === 'function') {
                             await refreshFileTree().catch(console.warn);
                         }
@@ -2934,21 +3189,32 @@ async function sendAgentTask() {
         }
     } catch (err) {
         clearTimeout(timeoutId);
-        const isAbort = err.name === 'AbortError';
-        let errHtml = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${isAbort ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
-        errHtml += `
-            <div class="mt-2 d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-sm btn-outline-warning" style="font-size: 11px;" onclick="continueAgentRemaining(${JSON.stringify(task)})">
-                    <i class="bi bi-play-circle me-1"></i> Tiếp tục tạo các file còn lại
-                </button>
-            </div>
-        `;
+        const isAbort = err.name === 'AbortError' || controller.signal.aborted;
+        let errHtml = isAbort
+            ? `<div class="text-warning extra-small p-2 bg-dark rounded border border-warning">🛑 Đã dừng phiên Agent theo yêu cầu. Các tệp tin đã tạo được giữ nguyên trên ổ đĩa.</div>`
+            : `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${err.message.includes('timeout') ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
+        if (!isAbort) {
+            errHtml += `
+                <div class="mt-2 d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-warning" style="font-size: 11px;" onclick="continueAgentRemaining(${JSON.stringify(task)})">
+                        <i class="bi bi-play-circle me-1"></i> Tiếp tục tạo các file còn lại
+                    </button>
+                </div>
+            `;
+        }
         agentMsg.innerHTML = errHtml;
         if (typeof refreshFileTree === 'function') {
             try { await refreshFileTree(); } catch(e) { console.warn(e); }
         }
     } finally {
         clearInterval(ticker);
+        window.currentAgentAbortController = null;
+        const sendBtn = document.getElementById("btnSendAgentTask");
+        if (sendBtn) {
+            sendBtn.innerHTML = `<i class="bi bi-arrow-up"></i>`;
+            sendBtn.title = "Send (Enter)";
+            sendBtn.onclick = sendAgentTask;
+        }
     }
 }
 
@@ -2989,18 +3255,23 @@ function renderAgentResponse(data, container) {
         container.appendChild(cliCard);
     }
 
-    // 1. Plan Card
+    // 1. Antigravity Live Task Card
     if (Array.isArray(data.plan) && data.plan.length > 0) {
         const planCard = document.createElement("div");
-        planCard.className = "agent-plan-card";
+        planCard.className = "agent-live-task-card mb-2";
         planCard.innerHTML = `
-            <div class="agent-plan-title"><i class="bi bi-list-check"></i> Plan:</div>
-            ${data.plan.map(p => `
-                <div class="agent-plan-item">
-                    <i class="bi bi-check2 text-success"></i>
-                    <span>${escapeHtml(p)}</span>
-                </div>
-            `).join('')}
+            <div class="d-flex align-items-center justify-content-between mb-2 pb-1.5 border-bottom border-secondary">
+                <span class="fw-semibold text-light extra-small"><i class="bi bi-list-task me-1 text-info"></i> Kế hoạch thực hiện:</span>
+                <span class="badge bg-success extra-small"><i class="bi bi-check2-all me-1"></i>${data.plan.length}/${data.plan.length} hoàn tất</span>
+            </div>
+            <div class="d-flex flex-column gap-1">
+                ${data.plan.map(p => `
+                    <div class="agent-task-step-item done">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        <span>${escapeHtml(p)}</span>
+                    </div>
+                `).join('')}
+            </div>
         `;
         container.appendChild(planCard);
     }
@@ -3109,12 +3380,9 @@ function renderAgentResponse(data, container) {
         const isAlreadyApplied = Boolean(data.alreadyApplied || (Array.isArray(data.modifiedFiles) && data.modifiedFiles.length > 0) || (opsList.length > 0 && opsList.every(o => o.alreadyApplied)));
 
         const actionFooterHtml = isAlreadyApplied ? `
-            <div class="alert alert-success extra-small py-1.5 px-2 mb-0 d-flex align-items-center justify-content-between gap-2">
-                <span><i class="bi bi-check2-circle me-1.5 text-success"></i> Đã tự động cập nhật vào dự án (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)</span>
-                <div class="d-flex align-items-center gap-1">
-                    <button class="btn btn-sm btn-info text-dark fw-bold extra-small py-0.5 px-2" onclick="openLivePreview()"><i class="bi bi-globe me-1"></i> Preview</button>
-                    <button class="btn btn-sm btn-outline-light extra-small py-0.5 px-2" onclick="refreshFileTree()"><i class="bi bi-arrow-clockwise"></i> Đồng bộ</button>
-                </div>
+            <div class="alert alert-success extra-small py-1.5 px-2 mb-0 d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-check2-circle me-1.5 text-success"></i> Đã tự động áp dụng vào dự án (${opsList.length} mã nguồn, ${imgsList.length} ảnh AI)</span>
+                <button class="btn btn-sm btn-outline-light extra-small py-0.5 px-2" onclick="refreshFileTree()"><i class="bi bi-arrow-clockwise"></i> Đồng bộ</button>
             </div>
         ` : `
             <button id="btnBatchAcceptAll" class="btn-batch-accept w-100" onclick="applyAllAgentOperations()">
@@ -3234,10 +3502,8 @@ async function applyAllAgentOperations() {
     }
 
     // Safety: ensure any operation without content fetches its disk content before apply
-    const validOps = [];
     for (const op of ops) {
-        if (!op || !op.path) continue;
-        if ((!op.content || op.content.length === 0)) {
+        if ((!op.content || op.content.length === 0) && op.path) {
             try {
                 const uid = localStorage.getItem("user_id") || "1";
                 const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(proj)}&file=${encodeURIComponent(op.path)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
@@ -3249,16 +3515,12 @@ async function applyAllAgentOperations() {
                 }
             } catch (e) {}
         }
-        // Never send empty or whitespace content to apply-batch to avoid wiping disk files
-        if (op.content && op.content.trim().length > 0) {
-            validOps.push(op);
-        }
     }
 
     const btn = document.getElementById("btnBatchAcceptAll");
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<div class="spinner-border spinner-border-sm me-1"></div> Đang đồng bộ & áp dụng ${validOps.length + imgs.length} tệp...`;
+        btn.innerHTML = `<div class="spinner-border spinner-border-sm me-1"></div> Đang sinh ảnh AI & tạo ${ops.length + imgs.length} tệp...`;
     }
 
     try {
@@ -3267,7 +3529,7 @@ async function applyAllAgentOperations() {
             headers: getApiHeaders(),
             body: JSON.stringify({
                 project: proj,
-                operations: validOps,
+                operations: ops,
                 images: imgs
             })
         });
@@ -3277,17 +3539,17 @@ async function applyAllAgentOperations() {
             hideEmptyWorkspaceState();
             await refreshFileTree();
 
-            // Tự động mở file index.html hoặc file đầu tiên với forceReload: true
-            const indexFile = validOps.find(o => o.path.endsWith("index.html") || o.path === "index.html");
+            // Tự động mở file index.html hoặc file đầu tiên
+            const indexFile = ops.find(o => o.path.endsWith("index.html") || o.path === "index.html");
             if (indexFile) {
-                await openFileInEditor(indexFile.path, true);
-            } else if (validOps[0]?.path) {
-                await openFileInEditor(validOps[0].path, true);
+                openFileInEditor(indexFile.path);
+            } else if (ops[0]?.path) {
+                openFileInEditor(ops[0].path);
             }
 
             // In thông báo vào Terminal Output
             if (xtermInstance) {
-                xtermInstance.writeln(`\r\n\x1b[32m[Antigravity Agent] Đã áp dụng thành công ${data.appliedCount || (validOps.length + imgs.length)} tệp và hình ảnh vào dự án "${proj}"!\x1b[0m`);
+                xtermInstance.writeln(`\r\n\x1b[32m[Antigravity Agent] Đã áp dụng thành công ${data.appliedCount || (ops.length + imgs.length)} tệp và hình ảnh vào dự án "${proj}"!\x1b[0m`);
                 xtermInstance.write(`\r\n${terminalPrompt}`);
             }
 
@@ -4943,6 +5205,40 @@ window.addEventListener('DOMContentLoaded', () => {
     initDraggableSplitters();
     initGlobalShortcuts();
     initXtermTerminal();
+
+    // Setup ResizeObservers to keep editor and terminal layout perfectly matched to container sizes
+    if (window.ResizeObserver) {
+        const monacoEl = document.getElementById("monacoContainer");
+        if (monacoEl) {
+            new ResizeObserver(() => {
+                if (monacoEditor && typeof monacoEditor.layout === 'function') {
+                    monacoEditor.layout();
+                }
+            }).observe(monacoEl);
+        }
+        const diffEl = document.getElementById("monacoDiffContainer");
+        if (diffEl) {
+            new ResizeObserver(() => {
+                if (monacoDiffEditor && typeof monacoDiffEditor.layout === 'function') {
+                    monacoDiffEditor.layout();
+                }
+            }).observe(diffEl);
+        }
+        const termPanes = document.getElementById("terminalPanesWrapper") || document.getElementById("bottomTabTerminalBody");
+        if (termPanes) {
+            new ResizeObserver(() => {
+                if (Array.isArray(terminalSessions) && terminalSessions.length > 0) {
+                    terminalSessions.forEach(s => {
+                        if (s.fitAddon && typeof s.fitAddon.fit === 'function') {
+                            try { s.fitAddon.fit(); } catch {}
+                        }
+                    });
+                } else if (window.fitAddon && typeof window.fitAddon.fit === 'function') {
+                    try { window.fitAddon.fit(); } catch {}
+                }
+            }).observe(termPanes);
+        }
+    }
 
     // Ctrl + Enter shortcut for SQLite Query input
     const sqlInput = document.getElementById("sqliteSqlInput");
