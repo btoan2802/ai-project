@@ -11,6 +11,13 @@
     <Content Remove="App_Data\**" />
     <EmbeddedResource Remove="App_Data\**" />
     <None Remove="App_Data\**" />
+
+    <Compile Remove="WorkspaceTemplates\**" />
+    <Content Remove="WorkspaceTemplates\**" />
+    <EmbeddedResource Remove="WorkspaceTemplates\**" />
+    <None Include="WorkspaceTemplates\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,68 @@
+@model shop_senior_mvc.Models.ViewModels.CheckoutViewModel
+@{
+    ViewData["Title"] = "Thanh Toán";
+    var items = ViewBag.CartItems as List<shop_senior_mvc.Models.CartItem> ?? new List<shop_senior_mvc.Models.CartItem>();
+    decimal total = ViewBag.CartTotal is decimal d ? d : 0;
+}
+
+<h2 class="fw-bold text-white mb-4"><i class="bi bi-credit-card me-2"></i>Thông Tin Giao Hàng & Đặt Hàng</h2>
+
+<div class="row g-5">
+    <div class="col-lg-7">
+        <div class="card p-4 shadow-sm">
+            <form asp-action="Checkout" method="post">
+                <div class="mb-3">
+                    <label asp-for="CustomerName" class="form-label text-secondary fw-semibold"></label>
+                    <input asp-for="CustomerName" class="form-control bg-dark border-secondary text-white rounded-3" placeholder="Nguyễn Văn A" />
+                    <span asp-validation-for="CustomerName" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Phone" class="form-label text-secondary fw-semibold"></label>
+                    <input asp-for="Phone" class="form-control bg-dark border-secondary text-white rounded-3" placeholder="0912345678" />
+                    <span asp-validation-for="Phone" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Address" class="form-label text-secondary fw-semibold"></label>
+                    <input asp-for="Address" class="form-control bg-dark border-secondary text-white rounded-3" placeholder="123 Đường ABC, Quận 1, TP. HCM" />
+                    <span asp-validation-for="Address" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="Note" class="form-label text-secondary fw-semibold"></label>
+                    <textarea asp-for="Note" class="form-control bg-dark border-secondary text-white rounded-3" rows="3" placeholder="Ghi chú giao hàng (giờ nhận hàng, v.v.)"></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill py-2.5 fw-bold shadow">
+                    <i class="bi bi-check2-circle me-1"></i> Xác Nhận Đặt Hàng (@total.ToString("N0") đ)
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card p-4 shadow-sm">
+            <h5 class="fw-bold text-white mb-3">Đơn Hàng Của Bạn (@items.Count món)</h5>
+            <div class="d-flex flex-column gap-3 mb-4">
+                @foreach (var item in items)
+                {
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center gap-2">
+                            <img src="@item.ImageUrl" class="rounded-2" style="width: 44px; height: 44px; object-fit: cover;" alt="@item.ProductName" />
+                            <div>
+                                <div class="text-white small fw-semibold">@item.ProductName</div>
+                                <div class="text-secondary extra-small">x @item.Quantity</div>
+                            </div>
+                        </div>
+                        <span class="text-info fw-semibold small">@item.Total.ToString("N0") đ</span>
+                    </div>
+                }
+            </div>
+            <div class="border-top border-secondary pt-3 d-flex justify-content-between">
+                <span class="fw-bold fs-5 text-white">Tổng cộng:</span>
+                <span class="fw-bold fs-5 text-primary">@total.ToString("N0") đ</span>
+            </div>
+        </div>
+    </div>
+</div>
