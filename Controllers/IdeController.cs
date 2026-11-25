@@ -3183,7 +3183,9 @@ QUY TRÌNH & TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT BẮT BUỘC:
      2) Tạo các Entity hoàn chỉnh trong Models/ (Product.cs, Category.cs, Order.cs, OrderItem.cs, User.cs...) có đầy đủ khóa chính, khóa ngoại, navigation properties và Data Annotations ([Required], [StringLength], [Range], [Display]).
      3) Tạo Data/AppDbContext.cs kế thừa DbContext với đầy đủ các DbSet<...> và cấu hình quan hệ bảng trong OnModelCreating.
      4) Tạo Data/SeedData.cs kiểm tra nếu bảng trống thì tự động nạp dữ liệu mẫu tiếng Việt phong phú, thực tế (tối thiểu 6-8 sản phẩm thuộc nhiều danh mục).
-     5) Cấu hình ConnectionStrings trong appsettings.json: ""ConnectionStrings"": {{ ""DefaultConnection"": ""Data Source=app.db"" }}; trong Program.cs đăng ký AddDbContext<AppDbContext>(opts => opts.UseSqlite(...)), AddSession() (kèm app.UseSession()), và gọi context.Database.EnsureCreated() + SeedData.Initialize(serviceProvider) ngay khi khởi động ứng dụng.
+      5) CẤU HÌNH SQLITE ĐỒNG BỘ: BẮT BUỘC cập nhật đồng bộ ""DefaultConnection"": ""Data Source=app.db"" ở CẢ appsettings.json, appsettings.Development.json và chuỗi fallback trong Program.cs (builder.Configuration.GetConnectionString(""DefaultConnection"") ?? ""Data Source=app.db""). TUYỆT ĐỐI KHÔNG để sót chuỗi ""Server=..."" của SQL Server hay LocalDB.
+      6) Trong Program.cs đăng ký AddDbContext<AppDbContext>(opts => opts.UseSqlite(...)), AddSession() (kèm app.UseSession()), và gọi context.Database.EnsureCreated() + SeedData.Initialize(serviceProvider) ngay khi khởi động ứng dụng.
+      7) TÀI NGUYÊN WWWROOT BẮT BUỘC: Mọi dự án ASP.NET Core MVC bắt buộc phải tạo đầy đủ thư mục và tệp wwwroot/css/site.css, wwwroot/js/site.js và wwwroot/images/ khớp với _Layout.cshtml để trang web hiển thị chuẩn đẹp, không bị lỗi 404 khi tải css/js/ảnh.
 
 3. CHUẨN HÓA VIEWMODELS, HELPERS & TẠO ẢNH THẬT TRONG DỰ ÁN:
    - Tách riêng thư mục Models/ViewModels/ (CartItemViewModel.cs, CheckoutViewModel.cs, HomeViewModel.cs...) để không truyền dữ liệu rời rạc qua ViewBag tràn lan.

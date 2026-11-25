@@ -73,7 +73,9 @@ TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT:
      + Models/ (Product.cs, Category.cs, Order.cs, OrderItem.cs) có Data Annotations đầy đủ.
      + Models/ViewModels/ (CartItemViewModel.cs, CheckoutViewModel.cs) và Helpers/SessionExtensions.cs.
      + Data/AppDbContext.cs kế thừa DbContext với DbSet<> và Data/SeedData.cs nạp sẵn 6-8 item mẫu tiếng Việt thực tế.
-     + Cấu hình appsettings.json (Data Source=app.db) và Program.cs (AddDbContext, AddSession, EnsureCreated + SeedData.Initialize).
+     + CẤU HÌNH SQLITE ĐỒNG BỘ: BẮT BUỘC cập nhật đồng bộ ""DefaultConnection"": ""Data Source=app.db"" ở CẢ appsettings.json, appsettings.Development.json và chuỗi fallback trong Program.cs (builder.Configuration.GetConnectionString(""DefaultConnection"") ?? ""Data Source=app.db""). TUYỆT ĐỐI KHÔNG để sót chuỗi ""Server=..."" của SQL Server hay LocalDB.
+     + Cấu hình Program.cs (AddDbContext với UseSqlite, AddSession, EnsureCreated + SeedData.Initialize).
+   - TÀI NGUYÊN WWWROOT BẮT BUỘC: Mọi dự án ASP.NET Core MVC bắt buộc phải tạo đầy đủ thư mục wwwroot/css/site.css, wwwroot/js/site.js và wwwroot/images/ khớp với _Layout.cshtml (tuyệt đối không để trang web thiếu CSS/JS/ảnh).
    - Views/ tách tương ứng: Views/Products/, Views/Cart/, Views/Orders/, Views/Shared/ (kèm _ValidationScriptsPartial.cshtml).
 2. ĐỐI VỚI DỰ ÁN ANGULAR / FULLSTACK:
    - Tách rõ thư mục src/app/models/, src/app/services/, src/app/components/, src/app/pages/ thay vì viết dồn vào app.component.ts.
