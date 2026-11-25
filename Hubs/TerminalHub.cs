@@ -315,6 +315,7 @@ namespace BtoanAiNet.Hubs
             }
 
             // 6. Execute process with real-time streaming
+            await Clients.Caller.SendAsync("TerminalOutput", $"\x1b[90m⏳ [Executing: {trimmedCmd} ...]\x1b[0m\r\n", sId);
             await RunProcessStreamingAsync(session, trimmedCmd);
         }
 
@@ -350,6 +351,10 @@ namespace BtoanAiNet.Hubs
             psi.Environment["CI"] = "false";
             psi.Environment["FORCE_COLOR"] = "1";
             psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+            psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+            psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+            psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
+            psi.Environment["DOTNET_NOLOGO"] = "1";
             if (!OperatingSystem.IsWindows())
             {
                 psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
@@ -380,21 +385,21 @@ namespace BtoanAiNet.Hubs
             string sId = session.SessionId;
             int exitCode = -1;
 
-            process.OutputDataReceived += async (s, e) =>
+            process.OutputDataReceived += (s, e) =>
             {
                 if (e.Data != null)
                 {
                     ScanForDevServerUrl(caller, e.Data, session);
-                    await caller.SendAsync("TerminalOutput", e.Data + "\r\n", sId);
+                    _ = caller.SendAsync("TerminalOutput", e.Data + "\r\n", sId);
                 }
             };
 
-            process.ErrorDataReceived += async (s, e) =>
+            process.ErrorDataReceived += (s, e) =>
             {
                 if (e.Data != null)
                 {
                     ScanForDevServerUrl(caller, e.Data, session);
-                    await caller.SendAsync("TerminalOutput", "\x1b[33m" + e.Data + "\x1b[0m\r\n", sId);
+                    _ = caller.SendAsync("TerminalOutput", "\x1b[33m" + e.Data + "\x1b[0m\r\n", sId);
                 }
             };
 

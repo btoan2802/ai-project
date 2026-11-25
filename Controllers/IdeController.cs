@@ -145,21 +145,13 @@ namespace BtoanAiNet.Controllers
                 if (string.IsNullOrWhiteSpace(workspaceRoot)) return;
                 if (!Directory.Exists(workspaceRoot)) Directory.CreateDirectory(workspaceRoot);
                 string propsPath = Path.Combine(workspaceRoot, "Directory.Build.props");
-                if (!System.IO.File.Exists(propsPath) || !System.IO.File.ReadAllText(propsPath).Contains("PackageReference Update"))
-                {
-                    string content = @"<Project>
+                string content = @"<Project>
   <PropertyGroup>
     <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Update=""Microsoft.EntityFrameworkCore.Sqlite"" Version=""10.0.0"" />
-    <PackageReference Update=""Microsoft.EntityFrameworkCore.SqlServer"" Version=""10.0.0"" />
-    <PackageReference Update=""Microsoft.AspNetCore.OpenApi"" Version=""10.0.0"" />
-  </ItemGroup>
 </Project>
 ";
-                    System.IO.File.WriteAllText(propsPath, content, Encoding.UTF8);
-                }
+                System.IO.File.WriteAllText(propsPath, content, Encoding.UTF8);
             }
             catch { }
         }
@@ -2764,6 +2756,22 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                     psi.Arguments = $"-c \"{rawCmd.Replace("\"", "\\\"")}\"";
                 }
 
+                psi.Environment["CI"] = "false";
+                psi.Environment["FORCE_COLOR"] = "0";
+                psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+                psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+                psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
+                psi.Environment["DOTNET_NOLOGO"] = "1";
+                if (!isWindows)
+                {
+                    psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
+                    string curPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+                    if (!curPath.Contains("/usr/share/dotnet"))
+                    {
+                        psi.Environment["PATH"] = $"/usr/share/dotnet:{curPath}";
+                    }
+                }
+
                 using var proc = Process.Start(psi);
                 if (proc == null)
                 {
@@ -2860,22 +2868,43 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                     psi.Arguments = $"-c \"{rawCmd.Replace("\"", "\\\"")}\"";
                 }
 
+                psi.Environment["CI"] = "false";
+                psi.Environment["FORCE_COLOR"] = "0";
+                psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+                psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+                psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
+                psi.Environment["DOTNET_NOLOGO"] = "1";
+                if (!isWindows)
+                {
+                    psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
+                    string curPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+                    if (!curPath.Contains("/usr/share/dotnet"))
+                    {
+                        psi.Environment["PATH"] = $"/usr/share/dotnet:{curPath}";
+                    }
+                }
+
                 using var proc = Process.Start(psi);
                 if (proc == null)
                 {
                     return StatusCode(500, new { exitCode = 1, output = "", error = "Không thể khởi chạy tiến trình." });
                 }
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-                string stdout = await proc.StandardOutput.ReadToEndAsync(cts.Token);
-                string stderr = await proc.StandardError.ReadToEndAsync(cts.Token);
+                var stdoutSb = new StringBuilder();
+                var stderrSb = new StringBuilder();
+                proc.OutputDataReceived += (s, e) => { if (e.Data != null) stdoutSb.AppendLine(e.Data); };
+                proc.ErrorDataReceived += (s, e) => { if (e.Data != null) stderrSb.AppendLine(e.Data); };
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
                 await proc.WaitForExitAsync(cts.Token);
 
                 return Ok(new
                 {
                     exitCode = proc.ExitCode,
-                    output = stdout,
-                    error = stderr
+                    output = stdoutSb.ToString(),
+                    error = stderrSb.ToString()
                 });
             }
             catch (OperationCanceledException)

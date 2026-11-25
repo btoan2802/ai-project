@@ -254,6 +254,32 @@ using (var scope = app.Services.CreateScope())
                     proc?.WaitForExit(15000);
                     Console.WriteLine("[SEED] Scaffolded default MVC template for shop-senior-mvc.");
                 }
+
+                // Auto-heal duplicate CartViewModel & ensure net10.0 TargetFramework
+                string checkoutVm = Path.Combine(shopSeniorPath, "Models", "ViewModels", "CheckoutViewModel.cs");
+                if (File.Exists(checkoutVm))
+                {
+                    string text = File.ReadAllText(checkoutVm);
+                    if (text.Contains("class CartViewModel"))
+                    {
+                        text = System.Text.RegularExpressions.Regex.Replace(text, @"public\s+class\s+CartViewModel\s*\{[^}]*\}", "");
+                        File.WriteAllText(checkoutVm, text, System.Text.Encoding.UTF8);
+                        Console.WriteLine("[SEED] Auto-healed duplicate CartViewModel in CheckoutViewModel.cs");
+                    }
+                }
+
+                string csproj = Path.Combine(shopSeniorPath, "shop-senior-mvc.csproj");
+                if (File.Exists(csproj))
+                {
+                    string xml = File.ReadAllText(csproj);
+                    if (xml.Contains("net9.0") || xml.Contains("net8.0"))
+                    {
+                        xml = xml.Replace("<TargetFramework>net9.0</TargetFramework>", "<TargetFramework>net10.0</TargetFramework>")
+                                 .Replace("<TargetFramework>net8.0</TargetFramework>", "<TargetFramework>net10.0</TargetFramework>");
+                        File.WriteAllText(csproj, xml, System.Text.Encoding.UTF8);
+                        Console.WriteLine("[SEED] Auto-updated shop-senior-mvc.csproj to net10.0.");
+                    }
+                }
             }
             catch (Exception ex)
             {
