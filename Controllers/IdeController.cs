@@ -502,8 +502,8 @@ namespace BtoanAiNet.Controllers
 
                 if (template == "dotnet-mvc" || template == "mvc")
                 {
-                    // 1. ASP.NET Core Web App (Model-View-Controller) via official CLI
-                    var res = await RunCliProcessAsync(userRoot, "dotnet", $"new mvc -n \"{cleanName}\" -o \"{projectPath}\" --no-https", 90);
+                    // 1. ASP.NET Core Web App (Model-View-Controller) via official CLI (Instant scaffold with --no-restore)
+                    var res = await RunCliProcessAsync(userRoot, "dotnet", $"new mvc -n \"{cleanName}\" -o \"{projectPath}\" --no-restore --no-https", 25);
                     if (!res.ok)
                     {
                         _logger.LogWarning("dotnet new mvc output: {Output}", res.output);
@@ -518,8 +518,8 @@ namespace BtoanAiNet.Controllers
                 }
                 else if (template == "dotnet-webapi" || template == "webapi")
                 {
-                    // 2. ASP.NET Core Web API via official CLI
-                    var res = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"{cleanName}\" -o \"{projectPath}\" --use-controllers --no-https", 90);
+                    // 2. ASP.NET Core Web API via official CLI (Instant scaffold with --no-restore)
+                    var res = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"{cleanName}\" -o \"{projectPath}\" --use-controllers --no-restore --no-https", 25);
                     if (!res.ok)
                     {
                         _logger.LogWarning("dotnet new webapi output: {Output}", res.output);
@@ -530,12 +530,12 @@ namespace BtoanAiNet.Controllers
                 }
                 else if (template == "angular")
                 {
-                    // 3. Angular App via official Angular CLI (try ng, then fallback to npx)
-                    var res = await RunCliProcessAsync(userRoot, "ng", $"new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    // 3. Angular App via official Angular CLI (instant scaffold with --skip-install)
+                    var res = await RunCliProcessAsync(userRoot, "ng", $"new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
                     if (!res.ok)
                     {
                         _logger.LogWarning("ng new failed, falling back to npx: {Output}", res.output);
-                        res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                        res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
                     }
                     if (!res.ok)
                     {
@@ -554,17 +554,17 @@ namespace BtoanAiNet.Controllers
                     Directory.CreateDirectory(bePath);
                     Directory.CreateDirectory(fePath);
 
-                    var resBe = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"Backend\" -o \"{bePath}\" --use-controllers --no-https", 90);
+                    var resBe = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"Backend\" -o \"{bePath}\" --use-controllers --no-restore --no-https", 25);
                     if (!resBe.ok)
                     {
                         CleanupEmptyDir(projectPath);
                         return StatusCode(400, new { ok = false, error = $"Khởi tạo backend Web API thất bại: {resBe.output}" });
                     }
 
-                    var resFe = await RunCliProcessAsync(userRoot, "ng", $"new \"frontend\" --directory \"{fePath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                    var resFe = await RunCliProcessAsync(userRoot, "ng", $"new \"frontend\" --directory \"{fePath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
                     if (!resFe.ok)
                     {
-                        resFe = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --style=css --ssr=false --defaults", 120);
+                        resFe = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
                     }
                     if (!resFe.ok)
                     {
@@ -687,8 +687,8 @@ document.addEventListener(""DOMContentLoaded"", () => {
             }
             else
             {
-                psi.FileName = "/bin/bash";
-                psi.Arguments = $"-c \"{executable} {arguments}\"";
+                psi.FileName = executable;
+                psi.Arguments = arguments;
                 psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
                 string curPath = psi.Environment.ContainsKey("PATH") ? (psi.Environment["PATH"] ?? "") : (Environment.GetEnvironmentVariable("PATH") ?? "");
                 if (!curPath.Contains("/usr/share/dotnet"))

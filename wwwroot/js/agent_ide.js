@@ -3792,7 +3792,13 @@ async function submitCreateProject() {
             signal: abortCtrl.signal
         });
         clearTimeout(timeoutId);
-        const data = await res.json();
+        const text = await res.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch {
+            throw new Error(`Máy chủ phản hồi mã ${res.status}: ${text.substring(0, 150)}`);
+        }
         if (data.ok) {
             hideModalSafely("createProjectModal");
             const nameInput = document.getElementById("newProjectName");
