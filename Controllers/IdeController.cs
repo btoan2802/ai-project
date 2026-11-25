@@ -3171,7 +3171,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                     // Check if there are functionCalls in any part (support parallel tool calls)
                     var functionCalls = new List<(string Name, JsonObject? Args)>();
-                    string? candidateText = null;
+                    var sbCandidateText = new System.Text.StringBuilder();
 
                     foreach (var p in parts)
                     {
@@ -3186,12 +3186,25 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     functionCalls.Add((fName, fArgs));
                                 }
                             }
-                            if (pObj.ContainsKey("text") && string.IsNullOrWhiteSpace(candidateText))
+                            
+                            bool isThought = false;
+                            if (pObj.ContainsKey("thought"))
                             {
-                                candidateText = pObj["text"]?.ToString();
+                                try { isThought = pObj["thought"]?.GetValue<bool>() == true; } catch { }
+                            }
+
+                            if (pObj.ContainsKey("text") && !isThought)
+                            {
+                                string? tVal = pObj["text"]?.ToString();
+                                if (!string.IsNullOrEmpty(tVal))
+                                {
+                                    sbCandidateText.Append(tVal);
+                                }
                             }
                         }
                     }
+
+                    string? candidateText = sbCandidateText.Length > 0 ? sbCandidateText.ToString() : null;
 
                     if (functionCalls.Count > 0)
                     {
