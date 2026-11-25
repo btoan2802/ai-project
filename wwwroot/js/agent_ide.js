@@ -5330,19 +5330,70 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Setup paste listener on agentTaskInput to support pasting screenshots directly (Ctrl+V)
+    // Setup robust paste & drop listener for pasting screenshots (Ctrl+V) and uploading images
+    function extractImageFileFromClipboard(e) {
+        if (!e.clipboardData) return null;
+        if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+            for (let i = 0; i < e.clipboardData.files.length; i++) {
+                const f = e.clipboardData.files[i];
+                if (f && f.type && f.type.startsWith("image/")) return f;
+            }
+        }
+        if (e.clipboardData.items && e.clipboardData.items.length > 0) {
+            for (let i = 0; i < e.clipboardData.items.length; i++) {
+                const it = e.clipboardData.items[i];
+                if (it && it.type && it.type.startsWith("image/")) {
+                    const f = it.getAsFile();
+                    if (f) return f;
+                }
+            }
+        }
+        return null;
+    }
+
     const taskInput = document.getElementById("agentTaskInput");
     if (taskInput) {
         taskInput.addEventListener("paste", (e) => {
-            if (e.clipboardData && e.clipboardData.items) {
-                for (let i = 0; i < e.clipboardData.items.length; i++) {
-                    const item = e.clipboardData.items[i];
-                    if (item.type.indexOf("image") !== -1) {
+            const imgFile = extractImageFileFromClipboard(e);
+            if (imgFile) {
+                e.preventDefault();
+                window.attachAgentImageFile(imgFile);
+            }
+        });
+    }
+
+    // Global paste handler: When user takes a screenshot (Snipping Tool, PrtScn) and presses Ctrl+V anywhere
+    document.addEventListener("paste", (e) => {
+        // Don't intercept if user is typing in Monaco editor or an active text input other than agentTaskInput
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+        const isEditingOtherInput = (activeTag === "input" && document.activeElement.id !== "agentTaskInput") ||
+                                    (monacoEditor && monacoEditor.hasTextFocus && monacoEditor.hasTextFocus());
+        if (isEditingOtherInput) return;
+
+        const imgFile = extractImageFileFromClipboard(e);
+        if (imgFile) {
+            e.preventDefault();
+            openRightAgentPanel();
+            window.attachAgentImageFile(imgFile);
+        }
+    });
+
+    // Drag & Drop image onto Agent Panel
+    const agentRightPanel = document.getElementById("agentRightPanel");
+    if (agentRightPanel) {
+        agentRightPanel.addEventListener("dragover", (e) => {
+            if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+            }
+        });
+        agentRightPanel.addEventListener("drop", (e) => {
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                for (let i = 0; i < e.dataTransfer.files.length; i++) {
+                    const f = e.dataTransfer.files[i];
+                    if (f && f.type && f.type.startsWith("image/")) {
                         e.preventDefault();
-                        const file = item.getAsFile();
-                        if (file) {
-                            window.attachAgentImageFile(file);
-                        }
+                        window.attachAgentImageFile(f);
                         return;
                     }
                 }

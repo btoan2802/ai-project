@@ -194,6 +194,13 @@ namespace BtoanAiNet.Controllers
             {
                 if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
 
+                // Never run web separation on compiled (.NET / .csproj) or Angular projects
+                if (Directory.GetFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly).Any() ||
+                    System.IO.File.Exists(Path.Combine(projectPath, "angular.json")))
+                {
+                    return;
+                }
+
                 string indexPath = Path.Combine(projectPath, "index.html");
                 if (!System.IO.File.Exists(indexPath)) return;
 
@@ -3036,13 +3043,24 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG CHUẨN ANTIGRAVITY (AUTONOMOUS 4-S
 2. PHA 2 (PLAN):
    - Xác định danh sách các file cần tạo/sửa ngắn gọn, thực tế.
 3. PHA 3 (IMPLEMENT - MÃ NGUỒN LÀ TRÊN HẾT):
-   - ƯU TIÊN SỐ 1: Bắt tay ngay vào việc gọi 'write_file' để tạo các tệp mã nguồn hoàn chỉnh (index.html, style.css, script.js hoặc Controllers, Models, Views) NGAY TỪ LƯỢT ĐẦU TIÊN (Turn 1).
+   - ƯU TIÊN SỐ 1: Bắt tay ngay vào việc gọi 'write_file' để tạo các tệp mã nguồn hoàn chỉnh NGAY TỪ LƯỢT ĐẦU TIÊN (Turn 1).
+   - ĐỊNH HƯỚNG CẤU TRÚC THEO LOẠI DỰ ÁN:
+     + VỚI DỰ ÁN ASP.NET CORE MVC (có *.csproj và Views/ hoặc Program.cs dùng AddControllersWithViews):
+       BẮT BUỘC tạo/sửa tệp đúng chuẩn MVC: 'Controllers/HomeController.cs' (hoặc ShopController.cs), 'Models/...', 'Views/Home/...cshtml', 'Views/Shared/_Layout.cshtml', 'wwwroot/css/site.css', 'wwwroot/js/site.js'. TUYỆT ĐỐI KHÔNG tạo tệp index.html ở thư mục gốc vì dự án chạy bằng Razor Pages/Views.
+     + VỚI DỰ ÁN ASP.NET CORE WEB API (có *.csproj dùng AddControllers):
+       Tạo 'Controllers/...Controller.cs', 'Models/...', 'Program.cs' trả về API JSON chuẩn REST.
+     + VỚI DỰ ÁN ANGULAR (có angular.json hoặc src/app):
+       Tạo và cập nhật components, services, templates trong 'src/app/...'.
+     + VỚI DỰ ÁN WEB TĨNH (không có .csproj, không có angular.json):
+       BẮT BUỘC tách thành 3 tệp hoàn chỉnh: 'index.html', 'style.css', 'script.js'.
+   - CÚ PHÁP C# CHUẨN XÁC 100%:
+     + Khởi tạo Collection/List: Dùng 'new List<T>() {{ ... }};' hoặc 'new() {{ ... }};' (MỞ NGOẶC NHỌN '{{' THÌ BẮT BUỘC ĐÓNG BẰNG '}};' - TUYỆT ĐỐI KHÔNG ĐƯỢC ĐÓNG BẰNG '];').
+     + Nếu dùng C# 12 collection expressions: '[ ... ];' (mở ngoặc vuông thì đóng ngoặc vuông). TUYỆT ĐỐI KHÔNG nhầm lẫn đóng ngoặc.
    - GIỚI HẠN HÌNH ẢNH (TỐI ĐA 1-2 ẢNH): Chỉ gọi generate_image tối đa 1 hoặc 2 lần (ví dụ: 1 banner chính 'images/hero.jpg' và 1 sản phẩm). TUYỆT ĐỐI KHÔNG sinh nhiều lượt chỉ để tạo ảnh mà chưa viết mã nguồn!
-   - Với ứng dụng công cụ/tính toán (tính lương, tính điểm, to-do, máy tính, dashboard): TUYỆT ĐỐI KHÔNG gọi generate_image tạo ảnh thừa; tập trung 100% vào HTML/CSS/JS chất lượng cao.
-   - Với dự án Web (HTML/CSS/JS): BẮT BUỘC tách thành 3 tệp hoàn chỉnh: 'index.html', 'style.css', 'script.js'.
+   - Với ứng dụng công cụ/tính toán (tính lương, tính điểm, to-do, máy tính, dashboard): TUYỆT ĐỐI KHÔNG gọi generate_image tạo ảnh thừa; tập trung 100% vào mã nguồn chất lượng cao.
    - Viết mã nguồn hoàn chỉnh 100%, giao diện thẩm mỹ cao (CSS variables, Flexbox/Grid, responsive mobile, animation mượt mà, nghiệp vụ tính toán chuẩn xác), TUYỆT ĐỐI CẤM để placeholder '// TODO', '...' hay hàm rỗng.
 4. PHA 4 (VERIFY & SELF-HEAL):
-   - Đối với dự án biên dịch (.NET /.csproj hoặc Node/Angular/package.json): BẮT BUỘC gọi run_command(""dotnet build"") hoặc run_command(""npm run build"") trước khi kết thúc.
+   - Hệ thống tự động biên dịch và kiểm tra bằng 'dotnet build' / 'npm run build'.
    - Nếu ExitCode != 0, bạn phải đọc chi tiết lỗi compiler, gọi read_file + patch_file sửa lỗi và chạy lại build cho tới khi đạt 0 Error(s).
 
 NĂNG LỰC THỊ GIÁC (MULTIMODAL VISION):
@@ -3617,26 +3635,76 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             continue;
                         }
 
-                        // Self-healing: If user requested separate files (e.g. index.html, style.css, script.js) and some files are still missing
-                        bool asksForSeparateWebFiles = model.Prompt.Contains("style.css", StringComparison.OrdinalIgnoreCase) ||
-                                                       model.Prompt.Contains("script.js", StringComparison.OrdinalIgnoreCase) ||
-                                                       model.Prompt.Contains("tách thành 3 tệp", StringComparison.OrdinalIgnoreCase) ||
-                                                       model.Prompt.Contains("tách riêng", StringComparison.OrdinalIgnoreCase);
+                        // Check project type: compiled (.NET / .csproj) or Angular vs static web
+                        bool hasCsproj = Directory.GetFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly).Any();
+                        bool isAngular = System.IO.File.Exists(Path.Combine(projectPath, "angular.json")) ||
+                                         Directory.Exists(Path.Combine(projectPath, "src", "app"));
+                        bool isDotNetOrAngular = hasCsproj || isAngular ||
+                                                 Directory.Exists(Path.Combine(projectPath, "Controllers")) ||
+                                                 Directory.Exists(Path.Combine(projectPath, "Views"));
 
-                        if (asksForSeparateWebFiles && currentTurn < maxTurns)
+                        // Self-healing: If user requested separate static web files (ONLY FOR NON-COMPILED WEB PROJECTS)
+                        if (!isDotNetOrAngular)
                         {
-                            bool hasHtml = modifiedFiles.Any(f => f.EndsWith("index.html", StringComparison.OrdinalIgnoreCase));
-                            bool hasCss = modifiedFiles.Any(f => f.EndsWith("style.css", StringComparison.OrdinalIgnoreCase));
-                            bool hasJs = modifiedFiles.Any(f => f.EndsWith("script.js", StringComparison.OrdinalIgnoreCase));
+                            bool asksForSeparateWebFiles = model.Prompt.Contains("style.css", StringComparison.OrdinalIgnoreCase) ||
+                                                           model.Prompt.Contains("script.js", StringComparison.OrdinalIgnoreCase) ||
+                                                           model.Prompt.Contains("tách thành 3 tệp", StringComparison.OrdinalIgnoreCase) ||
+                                                           model.Prompt.Contains("tách riêng", StringComparison.OrdinalIgnoreCase);
 
-                            var missing = new List<string>();
-                            if (!hasHtml) missing.Add("index.html");
-                            if (!hasCss) missing.Add("style.css");
-                            if (!hasJs) missing.Add("script.js");
-
-                            if (missing.Count > 0)
+                            if (asksForSeparateWebFiles && currentTurn < maxTurns)
                             {
-                                _logger.LogInformation("Agent missed requested files: {Missing}. Forcing tool execution...", string.Join(", ", missing));
+                                bool hasHtml = modifiedFiles.Any(f => f.EndsWith("index.html", StringComparison.OrdinalIgnoreCase));
+                                bool hasCss = modifiedFiles.Any(f => f.EndsWith("style.css", StringComparison.OrdinalIgnoreCase));
+                                bool hasJs = modifiedFiles.Any(f => f.EndsWith("script.js", StringComparison.OrdinalIgnoreCase));
+
+                                var missing = new List<string>();
+                                if (!hasHtml) missing.Add("index.html");
+                                if (!hasCss) missing.Add("style.css");
+                                if (!hasJs) missing.Add("script.js");
+
+                                if (missing.Count > 0)
+                                {
+                                    _logger.LogInformation("Agent missed requested files: {Missing}. Forcing tool execution...", string.Join(", ", missing));
+                                    messages.Add(candidate.DeepClone());
+                                    messages.Add(new JsonObject
+                                    {
+                                        ["role"] = "user",
+                                        ["parts"] = new JsonArray
+                                        {
+                                            new JsonObject
+                                            {
+                                                ["text"] = $"Người dùng yêu cầu BẮT BUỘC tách thành các tệp riêng biệt. Bạn vẫn chưa tạo: {string.Join(", ", missing)}. Hãy gọi 'write_file' ngay bây giờ để tạo các tệp còn thiếu với mã nguồn đầy đủ 100%!"
+                                            }
+                                        }
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // Automated Compiler Verification & Self-Healing for .NET Projects (*.csproj)
+                        if (hasCsproj && !buildPassed && currentTurn < maxTurns)
+                        {
+                            _logger.LogInformation("Verifying dotnet build automatically for project {Project}...", cleanProj);
+                            await SendSseEventAsync("status", new { stage = "verify", message = "Đang tự động biên dịch kiểm tra mã nguồn (dotnet build)..." });
+                            AutoFixMapStaticAssets(projectPath);
+
+                            var (bOk, bOut) = await RunCliProcessAsync(projectPath, "dotnet", "build --no-restore", 30);
+                            if (!bOk && (bOut.Contains("assets file") || bOut.Contains("project.assets.json") || bOut.Contains("restore")))
+                            {
+                                (bOk, bOut) = await RunCliProcessAsync(projectPath, "dotnet", "build", 45);
+                            }
+
+                            if (bOk)
+                            {
+                                buildPassed = true;
+                                _logger.LogInformation("Automated dotnet build PASSED with 0 errors for {Project}!", cleanProj);
+                                await SendSseEventAsync("status", new { stage = "verify_done", message = "✅ Biên dịch thành công 100% (0 Error, 0 Warning)!" });
+                            }
+                            else
+                            {
+                                _logger.LogWarning("Automated dotnet build FAILED with errors:\n{Output}", bOut);
+                                await SendSseEventAsync("status", new { stage = "self_heal", message = "Phát hiện lỗi compiler! Btoan Agent đang tự động sửa lỗi cú pháp..." });
                                 messages.Add(candidate.DeepClone());
                                 messages.Add(new JsonObject
                                 {
@@ -3645,33 +3713,12 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     {
                                         new JsonObject
                                         {
-                                            ["text"] = $"Người dùng yêu cầu BẮT BUỘC tách thành các tệp riêng biệt. Bạn vẫn chưa tạo: {string.Join(", ", missing)}. Hãy gọi 'write_file' ngay bây giờ để tạo các tệp còn thiếu với mã nguồn đầy đủ 100%!"
+                                            ["text"] = $"[LỖI BIÊN DỊCH COMPILER 'dotnet build' THẤT BẠI]:\n{bOut}\n\nYÊU CẦU TỰ ĐỘNG SỬA LỖI (SELF-HEAL):\n1. Đọc file bị lỗi bằng 'read_file' ở đúng số dòng báo lỗi (ví dụ: CS1003, CS1513, CS0246).\n2. Gọi 'patch_file' hoặc 'write_file' để sửa triệt để các lỗi cú pháp (chú ý: ngoặc nhọn, dấu chấm phẩy, kiểu dữ liệu).\n3. Bạn bắt buộc phải gọi tool sửa xong tất cả các lỗi compiler trên trước khi kết thúc!"
                                         }
                                     }
                                 });
                                 continue;
                             }
-                        }
-
-                        // Self-healing build verification for compiled projects (.csproj / package.json)
-                        bool isCompiledProject = Directory.GetFiles(projectPath, "*.csproj", SearchOption.AllDirectories).Any() ||
-                                                 System.IO.File.Exists(Path.Combine(projectPath, "package.json"));
-                        if (isCompiledProject && !buildPassed && currentTurn < maxTurns)
-                        {
-                            _logger.LogInformation("Compiled project detected and build not verified yet. Prompting agent to run build verification...");
-                            messages.Add(candidate.DeepClone());
-                            messages.Add(new JsonObject
-                            {
-                                ["role"] = "user",
-                                ["parts"] = new JsonArray
-                                {
-                                    new JsonObject
-                                    {
-                                        ["text"] = "Dự án này là dự án biên dịch (.csproj / package.json). BƯỚC 4 BẮT BUỘC: Bạn phải gọi tool 'run_command' với lệnh 'dotnet build' (hoặc 'npm run build') để kiểm tra tính toàn vẹn và đảm bảo 0 lỗi biên dịch trước khi chốt câu trả lời cuối cùng!"
-                                    }
-                                }
-                            });
-                            continue;
                         }
 
                         // Gemini returned final explanation -> finished!
