@@ -358,6 +358,17 @@ function onProjectChanged() {
 
 async function switchActiveProject(projName) {
     if (!projName) return;
+
+    // 1. Save old project's tabs state before switching
+    if (activeProjectId && activeProjectId !== projName) {
+        saveOpenTabsState();
+    }
+
+    // 2. Clear current editor tabs and models so files from old project do not persist
+    openTabsMap.clear();
+    activeFilePath = null;
+    renderTabBar();
+
     activeProjectId = projName;
     localStorage.setItem("antigravity_last_project", activeProjectId);
     const select = document.getElementById("projectSelect");
@@ -748,14 +759,23 @@ async function restoreOpenTabsState() {
         if (raw) {
             const tabPaths = JSON.parse(raw);
             if (Array.isArray(tabPaths) && tabPaths.length > 0) {
-                for (const p of tabPaths) {
+                // Filter out any paths that belong to another project or have invalid project prefix
+                const validPaths = tabPaths.map(p => {
+                    let clean = p.replace(/\\/g, '/').replace(/^\/+/, '');
+                    if (clean.startsWith(activeProjectId + '/')) {
+                        clean = clean.substring(activeProjectId.length + 1);
+                    }
+                    return clean;
+                }).filter(p => !p.includes('/') || !p.startsWith('project-'));
+
+                for (const p of validPaths) {
                     await openFileInEditor(p, true);
                 }
-                const targetActive = (savedActive && openTabsMap.has(savedActive)) ? savedActive : tabPaths[0];
+                const targetActive = (savedActive && openTabsMap.has(savedActive)) ? savedActive : validPaths[0];
                 if (targetActive && openTabsMap.has(targetActive)) {
                     await openFileInEditor(targetActive, false);
                 }
-                return true;
+                return validPaths.length > 0;
             }
         }
     } catch (e) {

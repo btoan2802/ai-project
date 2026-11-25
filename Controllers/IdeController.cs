@@ -2807,11 +2807,11 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 }
             }) : Task.CompletedTask;
 
-            string selectedModel = "gemini-flash-latest";
+            string selectedModel = "gemini-3.5-flash";
             if (string.Equals(model.Model, "btoan-ai-pro-2.5", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(model.Model, "gemini-2.5-pro", StringComparison.OrdinalIgnoreCase))
             {
-                selectedModel = "gemini-pro-latest";
+                selectedModel = "gemini-3.5-flash";
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
 

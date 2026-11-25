@@ -834,14 +834,14 @@
                             </button>
                             <div class="position-relative">
                                 <div id="agentModelPill" class="agent-model-pill" onclick="toggleModelDropdown(event)" title="Choose Model">
-                                    <span id="currentModelLabel">⚡ Btoan 2.5 Flash</span>
+                                    <span id="currentModelLabel">⚡ Btoan 3.5 Flash</span>
                                     <i class="bi bi-chevron-down text-secondary" style="font-size: 10px;"></i>
                                 </div>
                                 <div id="agentModelDropdown" class="agent-model-dropdown" style="display: none;">
-                                    <div class="agent-model-dropdown-item active" data-model="gemini-2.5-flash" onclick="selectAgentModel('gemini-2.5-flash', '⚡ Btoan 2.5 Flash')">⚡ Btoan 2.5 Flash</div>
-                                    <div class="agent-model-dropdown-item" data-model="gemini-2.5-pro" onclick="selectAgentModel('gemini-2.5-pro', '🧠 Btoan 2.5 Pro')">🧠 Btoan 2.5 Pro</div>
+                                    <div class="agent-model-dropdown-item active" data-model="gemini-3.5-flash" onclick="selectAgentModel('gemini-3.5-flash', '⚡ Btoan 3.5 Flash')">⚡ Btoan 3.5 Flash</div>
+                                    <div class="agent-model-dropdown-item" data-model="gemini-3.5-flash-lite" onclick="selectAgentModel('gemini-3.5-flash-lite', '🚀 Btoan 3.5 Flash-Lite')">🚀 Btoan 3.5 Flash-Lite</div>
                                 </div>
-                                <input type="hidden" id="agentModelSelect" value="gemini-2.5-flash">
+                                <input type="hidden" id="agentModelSelect" value="gemini-3.5-flash">
                                 <input type="hidden" id="agentModeSelect" value="fast">
                             </div>
                         </div>
@@ -1265,6 +1265,6 @@
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
     <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261125_batch_safeguard_v6" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261125_project_tabs_gemini35_v7" asp-append-version="true"></script>
 </body>
 </html>
