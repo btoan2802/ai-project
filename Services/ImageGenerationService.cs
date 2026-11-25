@@ -267,16 +267,12 @@ Rules:
             var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
 
             // =========================================================================
-            // ƯU TIÊN 1: Google Gemini Native Image Generation
+            // =========================================================================
+            // ƯU TIÊN 1: Google Gemini Native Image Generation (Fast 3s timeout)
             // =========================================================================
             var geminiImageModels = new[]
             {
-                "gemini-2.5-flash-image",
-                "gemini-3.1-flash-image",
-                "gemini-3.1-flash-image-preview",
-                "gemini-3.1-flash-lite-image",
-                "gemini-2.0-flash-exp-image-generation",
-                "gemini-3-pro-image"
+                "gemini-2.5-flash-image"
             };
 
             foreach (var geminiModel in geminiImageModels)
@@ -306,8 +302,9 @@ Rules:
                         };
 
                         var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
-                        var response = await _httpClient.PostAsync(url, content);
-                        string rawResponse = await response.Content.ReadAsStringAsync();
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                        var response = await _httpClient.PostAsync(url, content, cts.Token);
+                        string rawResponse = await response.Content.ReadAsStringAsync(cts.Token);
 
                         if (!response.IsSuccessStatusCode)
                         {
@@ -374,12 +371,11 @@ Rules:
             }
 
             // =========================================================================
-            // ƯU TIÊN 2: Google Imagen (:predict endpoint)
+            // ƯU TIÊN 2: Google Imagen (:predict endpoint with 3s timeout)
             // =========================================================================
             var imagenModels = new[]
             {
-                "imagen-3.0-generate-002",
-                "imagen-4.0-generate-001"
+                "imagen-3.0-generate-002"
             };
 
             foreach (var imagenModel in imagenModels)
@@ -403,8 +399,9 @@ Rules:
                         };
 
                         var content = new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
-                        var response = await _httpClient.PostAsync(url, content);
-                        string rawResponse = await response.Content.ReadAsStringAsync();
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                        var response = await _httpClient.PostAsync(url, content, cts.Token);
+                        string rawResponse = await response.Content.ReadAsStringAsync(cts.Token);
 
                         if (!response.IsSuccessStatusCode)
                         {
@@ -448,49 +445,26 @@ Rules:
             }
 
             // =========================================================================
-            // FALLBACK CUỐI CÙNG: Pollinations.ai FLUX (High-Definition, No Watermark)
+            // FALLBACK CUỐI CÙNG: Pollinations.ai (Fast attempt, no blocking sleep)
             // =========================================================================
-            Console.WriteLine("[IMAGE FALLBACK] Google Gemini Image and Imagen models failed. Falling back to Pollinations FLUX (model=flux, width=" + imgWidth + ", height=" + imgHeight + ", nologo=true)...");
+            Console.WriteLine("[IMAGE FALLBACK] Trying Pollinations FLUX/Turbo (no sleep)...");
             try
             {
                 string encodedPrompt = Uri.EscapeDataString(prompt);
-                string fluxUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?model=flux&width={imgWidth}&height={imgHeight}&nologo=true";
+                string fluxUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?model=turbo&width={imgWidth}&height={imgHeight}&nologo=true";
 
+                using var ctsPoll = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 using var req = new HttpRequestMessage(HttpMethod.Get, fluxUrl);
                 req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-                var res = await _httpClient.SendAsync(req);
-                if ((int)res.StatusCode == 402)
-                {
-                    int waitSec = 22;
-                    if (res.Headers.TryGetValues("Retry-After", out var vals))
-                    {
-                        var firstVal = vals.FirstOrDefault();
-                        if (int.TryParse(firstVal, out int parsed)) waitSec = Math.Min(parsed + 1, 45);
-                    }
-                    Console.WriteLine($"[POLLINATIONS FLUX 402] Rate limit cooldown (1 image per 45s). Waiting {waitSec}s before auto-retry...");
-                    await Task.Delay(waitSec * 1000);
-                    using var retryReq = new HttpRequestMessage(HttpMethod.Get, fluxUrl);
-                    retryReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                    res = await _httpClient.SendAsync(retryReq);
-                }
-
+                var res = await _httpClient.SendAsync(req, ctsPoll.Token);
                 if (!res.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"[POLLINATIONS FLUX FAILED] HTTP {(int)res.StatusCode}. Retrying with turbo model...");
-                    string turboUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?model=turbo&width={imgWidth}&height={imgHeight}&nologo=true";
-                    using var turboReq = new HttpRequestMessage(HttpMethod.Get, turboUrl);
-                    turboReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                    res = await _httpClient.SendAsync(turboReq);
-                }
-
-                if (!res.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"[POLLINATIONS TURBO FAILED] HTTP {(int)res.StatusCode}. Retrying with default model...");
                     string defaultUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}&nologo=true";
+                    using var ctsDef = new CancellationTokenSource(TimeSpan.FromSeconds(4));
                     using var defReq = new HttpRequestMessage(HttpMethod.Get, defaultUrl);
                     defReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                    res = await _httpClient.SendAsync(defReq);
+                    res = await _httpClient.SendAsync(defReq, ctsDef.Token);
                 }
 
                 if (res.IsSuccessStatusCode)
@@ -499,7 +473,7 @@ Rules:
                     if (imgBytes != null && imgBytes.Length > 1000)
                     {
                         string publicUrl = await SaveImageLocallyAsync(imgBytes, "image/jpeg");
-                        Console.WriteLine($"[IMAGE SUCCESS: Pollinations FLUX/Fallback] High-definition watermark-free image saved to: {publicUrl} ({imgBytes.Length} bytes)");
+                        Console.WriteLine($"[IMAGE SUCCESS: Pollinations] Saved to: {publicUrl} ({imgBytes.Length} bytes)");
 
                         if (cid > 0) _lastImagePrompts[cid] = CleanPromptForAI(prompt);
 
@@ -509,13 +483,9 @@ Rules:
                             ["mimeType"] = "image/jpeg",
                             ["imageBase64"] = Convert.ToBase64String(imgBytes),
                             ["imageUrl"] = publicUrl,
-                            ["model"] = "pollinations-flux"
+                            ["model"] = "pollinations"
                         };
                     }
-                }
-                else
-                {
-                    Console.WriteLine($"[POLLINATIONS ALL MODELS FAILED] HTTP {(int)res.StatusCode}");
                 }
             }
             catch (Exception ex)

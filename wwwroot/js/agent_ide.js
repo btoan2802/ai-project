@@ -2719,32 +2719,27 @@ async function sendAgentTask() {
     agentMsg.innerHTML = `
         <div class="task-running-pill">
             <div class="spinner-border spinner-border-sm text-info" style="width: 12px; height: 12px;"></div>
-            <span>Đang phân tích cấu trúc dự án & tìm kiếm tệp...</span>
+            <span>Đang phân tích yêu cầu...</span>
         </div>
+        <div class="agent-live-steps mt-2 d-flex flex-wrap gap-1"></div>
     `;
     container.appendChild(agentMsg);
     container.scrollTop = container.scrollHeight;
 
-    const model = document.getElementById("agentModelSelect")?.value || "gemini-2.5-flash";
+    const model = document.getElementById("agentModelSelect")?.value || "gemini-3.5-flash";
     const mode = document.getElementById("agentModeSelect")?.value || "fast";
 
-    // Animated Live Progress Ticker
+    // Animated Live Progress Ticker with Real-Time Event Binding
     let elapsedSec = 0;
-    const progressStages = [
-        "Đang phân tích cấu trúc dự án & tìm kiếm tệp...",
-        "Đang tự động viết mã nguồn & tạo Views/Controllers...",
-        "Đang biên dịch kiểm tra mã nguồn (dotnet build)...",
-        "Đang rà soát và hoàn tất giải pháp..."
-    ];
-    let stageIdx = 0;
+    let currentStatusText = "Đang phân tích yêu cầu...";
     const pillSpan = agentMsg.querySelector(".task-running-pill span");
+    const liveStepsContainer = agentMsg.querySelector(".agent-live-steps");
     const ticker = setInterval(() => {
-        elapsedSec += 2;
-        stageIdx = (stageIdx + 1) % progressStages.length;
+        elapsedSec += 1;
         if (pillSpan) {
-            pillSpan.innerText = `${progressStages[stageIdx]} (${elapsedSec}s)`;
+            pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
         }
-    }, 2000);
+    }, 1000);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 240000);
@@ -2827,17 +2822,24 @@ async function sendAgentTask() {
 
                     // Process stream event
                     if (eventType === "status" || eventType === "turn_start") {
-                        if (pillSpan) {
-                            pillSpan.innerText = eventData.message || `Lượt ${eventData.turn}: Đang xử lý...`;
-                        }
+                        currentStatusText = eventData.message || `Lượt ${eventData.turn}: Đang xử lý...`;
+                        if (pillSpan) pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
                     } else if (eventType === "tool_start") {
-                        if (pillSpan) {
-                            pillSpan.innerText = eventData.message || `Đang chạy ${eventData.tool}...`;
-                        }
+                        currentStatusText = eventData.message || `Đang chạy ${eventData.tool}...`;
+                        if (pillSpan) pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
                     } else if (eventType === "tool_done") {
-                        if (pillSpan) {
-                            pillSpan.innerText = eventData.message || `Đã xong ${eventData.tool}`;
+                        currentStatusText = eventData.message || `Đã xong ${eventData.tool}`;
+                        if (pillSpan) pillSpan.innerText = `${currentStatusText} (${elapsedSec}s)`;
+
+                        // Append live badge into agent-live-steps
+                        if (liveStepsContainer && eventData.target) {
+                            const badge = document.createElement("span");
+                            badge.className = "badge bg-dark border border-secondary text-info extra-small py-1 px-2";
+                            const icon = eventData.action === 'image' ? 'bi-image' : 'bi-file-earmark-code';
+                            badge.innerHTML = `<i class="bi ${icon} text-success me-1"></i>${eventData.target}`;
+                            liveStepsContainer.appendChild(badge);
                         }
+
                         // Real-time update: refresh tree and open created/edited file immediately
                         if (eventData.action === 'create' || eventData.action === 'edit' || eventData.action === 'image') {
                             if (typeof refreshFileTree === 'function') {

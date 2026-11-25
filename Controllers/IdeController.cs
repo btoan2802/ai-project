@@ -2887,26 +2887,25 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG (AUTONOMOUS 4-STEP LOOP):
    - Nếu dự án đã có sẵn tệp, sử dụng read_file để hiểu ngữ cảnh trước khi sửa.
 
 2. BƯỚC 2: TẠO HÌNH ẢNH MINH HỌA THẬT (ĐỐI VỚI DỰ ÁN WEB / GIAO DIỆN)
-   - Nếu người dùng yêu cầu tạo web bán hàng, quán cà phê, portfolio, trang tỏ tình, dashboard, landing page...:
-   - BẮT BUỘC gọi 'generate_image' từ 2 đến 5 lần để tạo các ảnh thật lưu vào thư mục 'images/' (ví dụ: 'images/banner.jpg', 'images/prod1.jpg', 'images/prod2.jpg', 'images/couple.jpg').
+   - Nếu dự án cần hình ảnh minh họa (ảnh nền hero banner, avatar, sản phẩm...):
+   - Bạn có thể gọi 'generate_image' 1 lần (tối đa 2 lần) cho các hình ảnh chính quan trọng nhất (ví dụ: 'images/banner.jpg', 'images/avatar.jpg'). Không tạo quá nhiều ảnh thừa để tiết kiệm thời gian phản hồi cho người dùng.
    - Sau đó trong 'index.html', dùng chính xác đường dẫn thẻ <img src=""images/banner.jpg""> hoặc CSS background-image: url('images/banner.jpg').
 
 3. BƯỚC 3: PHÂN TÁCH TỆP CHUẨN 100% (TUYỆT ĐỐI KHÔNG DỒN 1 TỆP):
    - ĐỐI VỚI DỰ ÁN WEB (HTML / CSS / JS):
-     + BẮT BUỘC gọi write_file để phân tách rõ ràng tối thiểu 3 tệp riêng biệt:
+     + BẮT BUỘC tạo tối thiểu 3 tệp riêng biệt:
        * 'index.html': Chỉ chứa khung cấu trúc HTML ngữ nghĩa, liên kết <link rel=""stylesheet"" href=""style.css""> trong <head> và <script src=""script.js""></script> ở cuối <body>.
        * 'style.css': Chứa toàn bộ định kiểu CSS hiện đại, màu sắc gradient, responsive Flexbox/Grid, hiệu ứng animation.
-       * 'script.js': Chứa toàn bộ dữ liệu mẫu (mảng sản phẩm, giỏ hàng...), logic sự kiện DOM (countdown, giỏ hàng, modal, confetti...).
+       * 'script.js': Chứa logic JavaScript, DOM events, animations.
+     + Bạn có thể gọi 'write_file' tuần tự hoặc song song các tệp để tạo nhanh chóng và đầy đủ mã nguồn hoàn chỉnh 100%.
    - ĐỐI VỚI DỰ ÁN BACKEND .NET / ASP.NET CORE:
      + BẮT BUỘC chia đúng cấu trúc MVC: Models/, Data/, Controllers/, Views/, Program.cs.
 
 4. BƯỚC 4: TỰ ĐỘNG BIÊN DỊCH & TỰ SỬA LỖI (SELF-HEALING BUILD VERIFICATION):
    - Đối với dự án .NET: BẮT BUỘC gọi run_command(""dotnet build""). Nếu có lỗi biên dịch, bạn phải đọc lỗi và tự sửa lại các tệp cho đến khi build thành công 0 Error(s).
 
-5. NGUYÊN TẮC GHI TỆP TUẦN TỰ (STREAMING PROGRESS):
-   - Khi tạo hoặc sửa nhiều tệp (ví dụ: 'index.html', 'style.css', 'script.js' hoặc các ảnh):
-   - BẮT BUỘC gọi 'write_file' hoặc 'generate_image' TUẦN TỰ TỪNG FILE MỘT trong mỗi lượt tool call (mỗi lượt tạo 1 file hoàn chỉnh 100%, hệ thống xác nhận xong mới chuyển sang file tiếp theo).
-   - TUYỆT ĐỐI KHÔNG dồn tất cả các file vào 1 lượt gọi duy nhất để tránh nghẽn luồng truyền dữ liệu SSE và tránh bị cắt cụt token.
+5. NGUYÊN TẮC THỰC THI HIỆU QUẢ:
+   - Tạo các tệp mã nguồn với code hoàn chỉnh 100%, không dùng placeholder sơ sài. Mỗi tệp được hệ thống xác nhận ngay lập tức qua SSE.
 
 TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 - Bạn BẮT BUỘC PHẢI GỌI FUNCTION CALLING (generate_image / write_file / edit_file / run_command) ngay từ lượt đầu tiên để trực tiếp tạo/sửa code thật trong dự án.
