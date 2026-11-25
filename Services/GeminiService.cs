@@ -66,11 +66,13 @@ namespace BtoanAiNet.Services
                 }
             }
 
-            // 3. Dual Fallback Keys Pool for High Availability on Production Render
+            // 3. Multi-Key Fallback Pool for High Availability on Production Render
             try
             {
+                string k0 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SWttd1NoYzUzeGh2OC1tN19ubFQ1b2ZnQkxfTDlmbkFHQUhTYXRRR1RHdnc="));
                 string k1 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42S2JwdXdqNUlkRGhLa25vTzEydlBMRlkwUW82UzNqSWVkRnlVQ1FHR2RBQXc="));
                 string k2 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
+                if (!string.IsNullOrWhiteSpace(k0) && !keys.Contains(k0)) keys.Insert(0, k0);
                 if (!string.IsNullOrWhiteSpace(k1) && !keys.Contains(k1)) keys.Add(k1);
                 if (!string.IsNullOrWhiteSpace(k2) && !keys.Contains(k2)) keys.Add(k2);
             }
@@ -124,29 +126,23 @@ namespace BtoanAiNet.Services
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
 
-            // High Availability Fallback Chain:
-            // Priority 1: gemini-2.5-flash (Standard workhorse, fast & Senior reasoning)
-            // Priority 2: gemini-2.5-flash-lite (Ultra-fast, high quota limits)
-            // Priority 3: gemini-2.0-flash (Stable fallback)
+            // Cấu hình chuẩn theo yêu cầu: gọi thẳng gemini-2.5-flash, dự phòng sang gemini-2.5-flash-lite
+            // Xóa sạch gemini-2.0-flash và gemini-3.8-flash
             if (cleanModel.Contains("pro") || isThinkingMode)
             {
                 candidateModels.Add("gemini-2.5-pro");
                 candidateModels.Add("gemini-2.5-flash");
                 candidateModels.Add("gemini-2.5-flash-lite");
-                candidateModels.Add("gemini-2.0-flash");
             }
             else if (cleanModel.Contains("lite"))
             {
                 candidateModels.Add("gemini-2.5-flash-lite");
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-2.0-flash");
             }
             else
             {
-                // Both Btoan 3.5 Flash and Btoan 2.5 Flash route directly to gemini-2.5-flash
                 candidateModels.Add("gemini-2.5-flash");
                 candidateModels.Add("gemini-2.5-flash-lite");
-                candidateModels.Add("gemini-2.0-flash");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -171,7 +167,7 @@ namespace BtoanAiNet.Services
             {
                 return (false, null, null, "Lỗi cấu hình: Chưa nạp Gemini API Key trên server. Vui lòng kiểm tra 'Gemini:ApiKey' trong appsettings hoặc biến môi trường.");
             }
-            var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
+            var keys = allKeys.Distinct().ToArray();
 
             // Google Generative Language API rejects requests having BOTH systemInstruction and system_instruction (oneof conflict HTTP 400).
             // Normalize strictly to systemInstruction only:
@@ -236,41 +232,29 @@ namespace BtoanAiNet.Services
                         if (!response.IsSuccessStatusCode)
                         {
                             int statusCode = (int)response.StatusCode;
-                            bool isLimitZero = rawResponse.Contains("limit: 0", StringComparison.OrdinalIgnoreCase)
-                                            || rawResponse.Contains("quota limit: 0", StringComparison.OrdinalIgnoreCase)
-                                            || rawResponse.Contains("limit of 0", StringComparison.OrdinalIgnoreCase)
-                                            || rawResponse.Contains("resource has been exhausted", StringComparison.OrdinalIgnoreCase);
+                            string snippet = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) : rawResponse;
+                            lastError = $"[{currentModel}] HTTP {statusCode}: {snippet}";
 
                             if (statusCode == 429 || statusCode == 503)
                             {
-                                if (isLimitZero)
+                                Console.WriteLine($"[GeminiService] Model {currentModel} hit {statusCode} with key ...{key.Substring(Math.Max(0, key.Length - 6))}. Automatically rotating to next key...");
+                                if (onStatusUpdate != null)
                                 {
-                                    Console.WriteLine($"[GeminiService] Model {currentModel} limit: 0 or quota exhausted. Skipping immediately to next fallback model.");
-                                    if (onStatusUpdate != null)
-                                    {
-                                        try { await onStatusUpdate($"Model {currentModel} đạt giới hạn (limit: 0), chuyển ngay sang model dự phòng..."); } catch { }
-                                    }
-                                    lastError = $"[{currentModel}] HTTP 429 (limit: 0): {rawResponse}";
-                                    break; // Skip rest of keys for this model, move to next model in candidateModels
+                                    try { await onStatusUpdate($"⏳ Hạn mức bận ({statusCode}), tự động luân chuyển sang khóa API tiếp theo..."); } catch { }
                                 }
-                                else
-                                {
-                                    // Rate limit (RPM) exceeded: wait 3 seconds before rotating key/model
-                                    Console.WriteLine($"[GeminiService] Model {currentModel} hit 429 RPM limit. Waiting 3s before retry/rotation...");
-                                    if (onStatusUpdate != null)
-                                    {
-                                        try { await onStatusUpdate("⏳ Hạn mức RPM đang bận (429), đợi 3 giây và tự động luân chuyển khóa/model..."); } catch { }
-                                    }
-                                    await Task.Delay(3000);
-                                }
+                                continue;
+                            }
+                            else if (statusCode == 404)
+                            {
+                                Console.WriteLine($"[GeminiService] Model {currentModel} returned 404. Skipping to next candidate model...");
+                                break;
                             }
                             else if (statusCode == 500 || statusCode == 502)
                             {
-                                await Task.Delay(1500);
+                                await Task.Delay(1000);
+                                continue;
                             }
 
-                            string snippet = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) : rawResponse;
-                            lastError = $"[{currentModel}] HTTP {(int)response.StatusCode}: {snippet}";
                             continue;
                         }
 
@@ -315,24 +299,21 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            if (isThinkingMode || cleanModel.Contains("pro"))
+            if (cleanModel.Contains("pro") || isThinkingMode)
             {
                 candidateModels.Add("gemini-2.5-pro");
                 candidateModels.Add("gemini-2.5-flash");
                 candidateModels.Add("gemini-2.5-flash-lite");
-                candidateModels.Add("gemini-2.0-flash");
             }
             else if (cleanModel.Contains("lite"))
             {
                 candidateModels.Add("gemini-2.5-flash-lite");
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-2.0-flash");
             }
             else
             {
                 candidateModels.Add("gemini-2.5-flash");
                 candidateModels.Add("gemini-2.5-flash-lite");
-                candidateModels.Add("gemini-2.0-flash");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -359,7 +340,7 @@ namespace BtoanAiNet.Services
                 yield return "❌ Lỗi cấu hình: Chưa nạp Gemini API Key trên server. Vui lòng kiểm tra 'Gemini:ApiKey' trong appsettings hoặc biến môi trường.";
                 yield break;
             }
-            var keys = allKeys.Count <= 1 ? allKeys.ToArray() : allKeys.OrderBy(_ => Guid.NewGuid()).ToArray();
+            var keys = allKeys.Distinct().ToArray();
 
             if (payload.ContainsKey("system_instruction"))
             {
@@ -426,31 +407,22 @@ namespace BtoanAiNet.Services
                         int statusCode = (int)response.StatusCode;
                         string rawErr = "";
                         try { rawErr = await response.Content.ReadAsStringAsync(cancellationToken); } catch { }
-
-                        bool isLimitZero = rawErr.Contains("limit: 0", StringComparison.OrdinalIgnoreCase)
-                                        || rawErr.Contains("quota limit: 0", StringComparison.OrdinalIgnoreCase)
-                                        || rawErr.Contains("limit of 0", StringComparison.OrdinalIgnoreCase)
-                                        || rawErr.Contains("resource has been exhausted", StringComparison.OrdinalIgnoreCase);
+                        string errSnippet = rawErr.Length > 200 ? rawErr.Substring(0, 200) : rawErr;
+                        lastStreamError = $"[{currentModel}] HTTP {statusCode}: {errSnippet}";
 
                         if (statusCode == 429 || statusCode == 503)
                         {
-                            if (isLimitZero)
-                            {
-                                Console.WriteLine($"[GeminiService.Stream] Model {currentModel} limit: 0 or quota exhausted. Skipping immediately to next fallback model.");
-                                response.Dispose();
-                                lastStreamError = $"[{currentModel}] HTTP 429 (limit: 0): {rawErr}";
-                                break; // skip to next candidate model
-                            }
-                            else
-                            {
-                                Console.WriteLine($"[GeminiService.Stream] Model {currentModel} hit 429 RPM limit. Waiting 3s before retry/rotation...");
-                                await Task.Delay(3000, cancellationToken);
-                            }
+                            Console.WriteLine($"[GeminiService.Stream] Model {currentModel} hit {statusCode} with key ...{key.Substring(Math.Max(0, key.Length - 6))}. Automatically rotating to next key...");
+                            response.Dispose();
+                            continue; // Tự động xoay vòng sang khóa API tiếp theo
+                        }
+                        else if (statusCode == 404)
+                        {
+                            Console.WriteLine($"[GeminiService.Stream] Model {currentModel} returned 404. Skipping to next model...");
+                            response.Dispose();
+                            break;
                         }
 
-                        string errSnippet = rawErr.Length > 200 ? rawErr.Substring(0, 200) : rawErr;
-                        lastStreamError = $"[{currentModel}] HTTP {(int)response.StatusCode}: {errSnippet}";
-                        Console.WriteLine($"[GeminiService.Stream] HTTP {(int)response.StatusCode} on {currentModel}: {errSnippet}");
                         response.Dispose();
                         continue;
                     }

@@ -25,6 +25,9 @@ ENV NPM_CONFIG_CACHE=/tmp/.npm
 
 COPY --from=build /app/publish .
 
+# Persistent storage volume for user workspaces and SQLite databases
+VOLUME ["/app/App_Data"]
+
 # Expose ports (Render, Koyeb, HF default to 8080 or PORT env)
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production

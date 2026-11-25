@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  btoan-ai:
+    build: .
+    container_name: btoan-ai
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./App_Data:/app/App_Data
+      - btoan_app_data:/app/App_Data
+
+volumes:
+  btoan_app_data:
+    driver: local

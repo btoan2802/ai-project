@@ -234,6 +234,32 @@ using (var scope = app.Services.CreateScope())
                 Console.WriteLine("[SEED] Created default admin account: admin");
             }
 
+            // Ensure shop-senior-mvc workspace template is seeded in user_1 if missing or empty
+            try
+            {
+                string shopSeniorPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", "shop-senior-mvc");
+                if (!Directory.Exists(shopSeniorPath) || !File.Exists(Path.Combine(shopSeniorPath, "Program.cs")))
+                {
+                    Directory.CreateDirectory(shopSeniorPath);
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "dotnet",
+                        Arguments = $"new mvc -n \"shop-senior-mvc\" -o \"{shopSeniorPath}\" --force --no-https --no-restore",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var proc = System.Diagnostics.Process.Start(psi);
+                    proc?.WaitForExit(15000);
+                    Console.WriteLine("[SEED] Scaffolded default MVC template for shop-senior-mvc.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SEED] shop-senior-mvc seed note: {ex.Message}");
+            }
+
             try
             {
                 dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_chat_messages ADD COLUMN thought_text TEXT;");
