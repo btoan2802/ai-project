@@ -3931,19 +3931,61 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                         if (!generated)
                         {
-                            // Real Photography fallback (Pravatar for portraits/avatars, Picsum for banners/landscapes)
+                            // Real Photography fallback (Unsplash HD / Picsum)
                             try
                             {
-                                string pLower = (prompt + " " + outputPath).ToLowerInvariant();
-                                bool isPerson = pLower.Contains("avatar") || pLower.Contains("portrait") || pLower.Contains("nhân viên") ||
-                                                pLower.Contains("chân dung") || pLower.Contains("đại diện") || pLower.Contains("person") ||
-                                                pLower.Contains("user") || pLower.Contains("man") || pLower.Contains("woman") || pLower.Contains("face");
+                                string outLower = (outputPath ?? "").ToLowerInvariant();
+                                string pLower = (prompt ?? "").ToLowerInvariant();
 
-                                int w = aspectRatio == "1:1" ? 600 : aspectRatio == "4:3" ? 800 : 800;
-                                int h = aspectRatio == "1:1" ? 600 : aspectRatio == "4:3" ? 600 : 500;
-                                string photoUrl = isPerson
-                                    ? $"https://i.pravatar.cc/600?u={Guid.NewGuid():N}"
-                                    : $"https://picsum.photos/{w}/{h}?random={Random.Shared.Next(1, 99999)}";
+                                bool isBanner = outLower.Contains("banner") || outLower.Contains("hero") || outLower.Contains("cover") ||
+                                                outLower.Contains("header") || outLower.Contains("bg") || outLower.Contains("background") ||
+                                                aspectRatio == "16:9" || pLower.Contains("banner") || pLower.Contains("hero banner");
+
+                                bool isAvatar = !isBanner && (outLower.Contains("avatar") || outLower.Contains("emp") || outLower.Contains("user") ||
+                                                outLower.Contains("profile") || outLower.Contains("chân dung") || pLower.Contains("avatar") ||
+                                                pLower.Contains("thẻ nhân viên") || pLower.Contains("ảnh đại diện"));
+
+                                string photoUrl;
+                                if (isBanner)
+                                {
+                                    var bannerPool = new[]
+                                    {
+                                        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&h=500&q=80",
+                                        "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&h=500&q=80",
+                                        "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&h=500&q=80",
+                                        "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&h=500&q=80",
+                                        "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1200&h=500&q=80"
+                                    };
+                                    int bIdx = Math.Abs((prompt + outputPath).GetHashCode()) % bannerPool.Length;
+                                    photoUrl = bannerPool[bIdx];
+                                }
+                                else if (isAvatar)
+                                {
+                                    bool isFemale = outLower.Contains("female") || outLower.Contains("woman") || outLower.Contains("girl") ||
+                                                    outLower.Contains("2") || pLower.Contains("nữ") || pLower.Contains("bình") || pLower.Contains("hoa") || pLower.Contains("lan");
+
+                                    var femaleAvatars = new[]
+                                    {
+                                        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&h=600&q=80",
+                                        "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=600&h=600&q=80",
+                                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&h=600&q=80"
+                                    };
+                                    var maleAvatars = new[]
+                                    {
+                                        "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&h=600&q=80",
+                                        "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=600&h=600&q=80",
+                                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&h=600&q=80"
+                                    };
+                                    var list = isFemale ? femaleAvatars : maleAvatars;
+                                    int aIdx = Math.Abs((prompt + outputPath).GetHashCode()) % list.Length;
+                                    photoUrl = list[aIdx];
+                                }
+                                else
+                                {
+                                    int w = aspectRatio == "1:1" ? 600 : aspectRatio == "4:3" ? 800 : 800;
+                                    int h = aspectRatio == "1:1" ? 600 : aspectRatio == "4:3" ? 600 : 500;
+                                    photoUrl = $"https://picsum.photos/{w}/{h}?random={Random.Shared.Next(1, 99999)}";
+                                }
 
                                 using var httpCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                                 using var hReq = new HttpRequestMessage(HttpMethod.Get, photoUrl);
@@ -3966,12 +4008,12 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         {
                             if (ext == ".svg")
                             {
-                                string svg = GenerateSvgPlaceholder(prompt, outputPath);
+                                string svg = GenerateSvgPlaceholder(prompt ?? "", outputPath ?? "");
                                 await System.IO.File.WriteAllTextAsync(fullPath, svg, Encoding.UTF8);
                             }
                             else
                             {
-                                GenerateArtisticBinaryImage(fullPath, prompt, outputPath, aspectRatio);
+                                GenerateArtisticBinaryImage(fullPath, prompt ?? "", outputPath ?? "", aspectRatio);
                             }
                         }
 

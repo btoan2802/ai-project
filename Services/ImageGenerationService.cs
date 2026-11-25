@@ -495,22 +495,58 @@ Rules:
             }
 
             // =========================================================================
-            // FALLBACK 3: Real High-Definition Photography Fallback (Pravatar / Picsum)
+            // FALLBACK 3: Real High-Definition Photography Fallback (Unsplash HD / Picsum)
             // =========================================================================
             try
             {
                 string pLower = (rawPrompt + " " + prompt).ToLowerInvariant();
-                bool isPersonOrAvatar = pLower.Contains("avatar") || pLower.Contains("portrait") || pLower.Contains("nhân viên") ||
-                                       pLower.Contains("chân dung") || pLower.Contains("đại diện") || pLower.Contains("person") ||
-                                       pLower.Contains("user") || pLower.Contains("man") || pLower.Contains("woman") || pLower.Contains("face");
+                bool isBanner = pLower.Contains("banner") || pLower.Contains("hero") || pLower.Contains("cover") ||
+                                pLower.Contains("header") || pLower.Contains("bg") || pLower.Contains("background") ||
+                                aspectRatio == "16:9";
 
-                int targetSize = Math.Min(imgWidth, imgHeight);
-                if (targetSize < 400) targetSize = 400;
-                if (targetSize > 1000) targetSize = 1000;
+                bool isAvatar = !isBanner && (pLower.Contains("avatar") || pLower.Contains("portrait") || pLower.Contains("nhân viên") ||
+                                pLower.Contains("chân dung") || pLower.Contains("đại diện") || pLower.Contains("person") ||
+                                pLower.Contains("user") || pLower.Contains("profile"));
 
-                string realPhotoUrl = isPersonOrAvatar
-                    ? $"https://i.pravatar.cc/{targetSize}?u={Guid.NewGuid():N}"
-                    : $"https://picsum.photos/{imgWidth}/{imgHeight}?random={Random.Shared.Next(1, 99999)}";
+                string realPhotoUrl;
+                if (isBanner)
+                {
+                    var bannerPool = new[]
+                    {
+                        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&h=500&q=80",
+                        "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&h=500&q=80",
+                        "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&h=500&q=80",
+                        "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&h=500&q=80",
+                        "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1200&h=500&q=80"
+                    };
+                    int bIdx = Math.Abs(prompt.GetHashCode()) % bannerPool.Length;
+                    realPhotoUrl = bannerPool[bIdx];
+                }
+                else if (isAvatar)
+                {
+                    bool isFemale = pLower.Contains("female") || pLower.Contains("woman") || pLower.Contains("girl") ||
+                                    pLower.Contains("nữ") || pLower.Contains("bình") || pLower.Contains("hoa") || pLower.Contains("lan");
+
+                    var femaleAvatars = new[]
+                    {
+                        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&h=600&q=80",
+                        "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=600&h=600&q=80",
+                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&h=600&q=80"
+                    };
+                    var maleAvatars = new[]
+                    {
+                        "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&h=600&q=80",
+                        "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=600&h=600&q=80",
+                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&h=600&q=80"
+                    };
+                    var list = isFemale ? femaleAvatars : maleAvatars;
+                    int aIdx = Math.Abs(prompt.GetHashCode()) % list.Length;
+                    realPhotoUrl = list[aIdx];
+                }
+                else
+                {
+                    realPhotoUrl = $"https://picsum.photos/{imgWidth}/{imgHeight}?random={Random.Shared.Next(1, 99999)}";
+                }
 
                 using var ctsPhoto = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                 using var photoReq = new HttpRequestMessage(HttpMethod.Get, realPhotoUrl);
@@ -533,7 +569,7 @@ Rules:
                             ["mimeType"] = "image/jpeg",
                             ["imageBase64"] = Convert.ToBase64String(imgBytes),
                             ["imageUrl"] = publicUrl,
-                            ["model"] = isPersonOrAvatar ? "pravatar-portrait" : "picsum-photo"
+                            ["model"] = isBanner ? "unsplash-banner" : (isAvatar ? "unsplash-portrait" : "picsum-photo")
                         };
                     }
                 }
