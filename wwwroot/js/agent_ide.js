@@ -259,7 +259,8 @@ async function loadUserProjects() {
                 toggleRootProjectCollapse(activeProjectId);
             };
         }
-        applyRootProjectCollapseState(activeProjectId);
+        collapsedRootProjects.delete(activeProjectId);
+    applyRootProjectCollapseState(activeProjectId);
 
         // Update Terminal Prompt
         updateTerminalPrompt();
@@ -396,6 +397,7 @@ async function switchActiveProject(projName) {
     if (rootNameEl) {
         rootNameEl.innerText = projName;
     }
+    collapsedRootProjects.delete(projName);
     applyRootProjectCollapseState(projName);
     updateTerminalPrompt();
     await refreshFileTree();
@@ -463,6 +465,7 @@ function renderFileTree(files, container) {
     const frag = document.createDocumentFragment();
     renderTreeLevel(root, frag, 0);
     container.appendChild(frag);
+    collapsedRootProjects.delete(activeProjectId);
     applyRootProjectCollapseState(activeProjectId);
     container.oncontextmenu = (e) => {
         if (e.target === container || e.target.id === "workspaceTreeContainer") {
