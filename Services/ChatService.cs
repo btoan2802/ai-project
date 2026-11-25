@@ -130,8 +130,8 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string model = requestModel.Model ?? "gemini-2.5-flash";
-            if (model.Contains("pro") || isThinking) model = "gemini-2.5-pro";
-            else if (model.Contains("lite")) model = "gemini-2.5-flash-lite";
+            if (model.Contains("pro") || isThinking) model = "gemini-2.5-flash";
+            else if (model.Contains("lite")) model = "gemini-3.5-flash-lite";
             else model = "gemini-2.5-flash";
 
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
@@ -883,8 +883,8 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string model = requestModel.Model ?? "gemini-2.5-flash";
-            if (model.Contains("pro") || isThinking) model = "gemini-2.5-pro";
-            else if (model.Contains("lite")) model = "gemini-2.5-flash-lite";
+            if (model.Contains("pro") || isThinking) model = "gemini-2.5-flash";
+            else if (model.Contains("lite")) model = "gemini-3.5-flash-lite";
             else model = "gemini-2.5-flash";
 
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)

@@ -70,11 +70,7 @@ namespace BtoanAiNet.Services
             try
             {
                 string k0 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SWttd1NoYzUzeGh2OC1tN19ubFQ1b2ZnQkxfTDlmbkFHQUhTYXRRR1RHdnc="));
-                string k1 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42S2JwdXdqNUlkRGhLa25vTzEydlBMRlkwUW82UzNqSWVkRnlVQ1FHR2RBQXc="));
-                string k2 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
                 if (!string.IsNullOrWhiteSpace(k0) && !keys.Contains(k0)) keys.Insert(0, k0);
-                if (!string.IsNullOrWhiteSpace(k1) && !keys.Contains(k1)) keys.Add(k1);
-                if (!string.IsNullOrWhiteSpace(k2) && !keys.Contains(k2)) keys.Add(k2);
             }
             catch { }
 
@@ -126,23 +122,28 @@ namespace BtoanAiNet.Services
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
 
-            // Cấu hình chuẩn theo yêu cầu: gọi thẳng gemini-2.5-flash, dự phòng sang gemini-2.5-flash-lite
-            // Xóa sạch gemini-2.0-flash và gemini-3.8-flash
+            // High Availability Fallback Chain:
+            // Priority 1: gemini-2.5-flash (Standard workhorse, fast & Senior reasoning)
+            // Priority 2: gemini-flash-latest (Latest stable flash release)
+            // Priority 3: gemini-3.5-flash-lite (Ultra-fast, high quota limits, official replacement for 2.5-flash-lite)
+            // Priority 4: gemini-flash-lite-latest (Latest lite release)
             if (cleanModel.Contains("pro") || isThinkingMode)
             {
-                candidateModels.Add("gemini-2.5-pro");
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             else if (cleanModel.Contains("lite"))
             {
-                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
                 candidateModels.Add("gemini-2.5-flash");
             }
             else
             {
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -246,8 +247,8 @@ namespace BtoanAiNet.Services
                             }
                             else if (statusCode == 404)
                             {
-                                Console.WriteLine($"[GeminiService] Model {currentModel} returned 404. Skipping to next candidate model...");
-                                break;
+                                Console.WriteLine($"[GeminiService] Model {currentModel} returned 404 with key ...{key.Substring(Math.Max(0, key.Length - 6))}. Trying next key or fallback...");
+                                continue;
                             }
                             else if (statusCode == 500 || statusCode == 502)
                             {
@@ -301,19 +302,21 @@ namespace BtoanAiNet.Services
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
             if (cleanModel.Contains("pro") || isThinkingMode)
             {
-                candidateModels.Add("gemini-2.5-pro");
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             else if (cleanModel.Contains("lite"))
             {
-                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
                 candidateModels.Add("gemini-2.5-flash");
             }
             else
             {
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-2.5-flash-lite");
+                candidateModels.Add("gemini-flash-latest");
+                candidateModels.Add("gemini-3.5-flash-lite");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -418,9 +421,9 @@ namespace BtoanAiNet.Services
                         }
                         else if (statusCode == 404)
                         {
-                            Console.WriteLine($"[GeminiService.Stream] Model {currentModel} returned 404. Skipping to next model...");
+                            Console.WriteLine($"[GeminiService.Stream] Model {currentModel} returned 404 with key ...{key.Substring(Math.Max(0, key.Length - 6))}. Trying next key or fallback...");
                             response.Dispose();
-                            break;
+                            continue;
                         }
 
                         response.Dispose();

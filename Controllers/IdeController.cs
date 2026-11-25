@@ -3050,11 +3050,11 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 string mLower = model.Model.Trim().ToLowerInvariant();
                 if (mLower.Contains("pro"))
                 {
-                    selectedModel = "gemini-2.5-pro";
+                    selectedModel = "gemini-2.5-flash";
                 }
                 else if (mLower.Contains("lite"))
                 {
-                    selectedModel = "gemini-2.5-flash-lite";
+                    selectedModel = "gemini-3.5-flash-lite";
                 }
                 else
                 {
