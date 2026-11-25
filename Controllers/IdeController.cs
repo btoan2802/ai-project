@@ -428,6 +428,27 @@ namespace BtoanAiNet.Controllers
                 }
             }
 
+            // Always ensure at least default project exists so workspace is ready immediately
+            if (projectsList.Count == 0)
+            {
+                string defaultProj = "project-1";
+                string defaultPath = Path.Combine(userRoot, defaultProj);
+                if (!Directory.Exists(defaultPath))
+                {
+                    try { Directory.CreateDirectory(defaultPath); } catch { }
+                }
+                projectsList.Add(new
+                {
+                    id = defaultProj,
+                    name = defaultProj,
+                    path = defaultProj,
+                    fileCount = 0,
+                    createdAt = DateTime.UtcNow,
+                    lastModified = DateTime.UtcNow,
+                    hasIndexHtml = false
+                });
+            }
+
             return Ok(new
             {
                 ok = true,
@@ -1107,10 +1128,22 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            string root = ResolveWorkspacePath(cleanProj);
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
-                return Ok(new { ok = true, project = project ?? "", files = Array.Empty<object>() });
+                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
+                if (Directory.Exists(user1Path)) root = user1Path;
+            }
+
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                try { Directory.CreateDirectory(root); } catch { }
+            }
+
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                return Ok(new { ok = true, project = cleanProj, files = Array.Empty<object>() });
             }
 
             try
@@ -1763,7 +1796,7 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             string targetPath = !string.IsNullOrWhiteSpace(path) ? path : (!string.IsNullOrWhiteSpace(file) ? file : "");
             if (string.IsNullOrWhiteSpace(targetPath))
             {
-                return BadRequest(new { ok = false, error = "Path or file is required" });
+                return BadRequest(new { ok = false, error = "Path or file is required", message = "Path or file is required" });
             }
 
             string cleanProj = SanitizeProjectName(project);
@@ -1774,9 +1807,28 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 if (Directory.Exists(user1Path)) root = user1Path;
             }
 
-            if (!TryGetSafeFilePath(root, targetPath, out string fullPath) || !System.IO.File.Exists(fullPath))
+            string safeRelPath = NormalizeWorkspaceRelativePath(targetPath, cleanProj);
+
+            if (!TryGetSafeFilePath(root, safeRelPath, out string fullPath) || !System.IO.File.Exists(fullPath))
             {
-                return NotFound(new { ok = false, error = "Không tìm thấy tệp tin hoặc đường dẫn không hợp lệ." });
+                // Fallback 1: check if original targetPath exists in root
+                if (!string.IsNullOrWhiteSpace(root) && System.IO.File.Exists(Path.Combine(root, targetPath)))
+                {
+                    fullPath = Path.Combine(root, targetPath);
+                }
+                else
+                {
+                    // Fallback 2: check in userRoot
+                    string userRoot = GetUserRootPath();
+                    if (!string.IsNullOrWhiteSpace(userRoot) && System.IO.File.Exists(Path.Combine(userRoot, targetPath)))
+                    {
+                        fullPath = Path.Combine(userRoot, targetPath);
+                    }
+                    else
+                    {
+                        return NotFound(new { ok = false, error = "Không tìm thấy tệp tin hoặc đường dẫn không hợp lệ.", message = "Không tìm thấy tệp tin hoặc đường dẫn không hợp lệ." });
+                    }
+                }
             }
 
             try
@@ -2689,9 +2741,7 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             }
             if (!Directory.Exists(projectPath))
             {
-                Response.StatusCode = 400;
-                await Response.WriteAsJsonAsync(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
-                return;
+                try { Directory.CreateDirectory(projectPath); } catch { }
             }
 
             bool isStream = model.Stream || Request.Headers.Accept.ToString().Contains("text/event-stream", StringComparison.OrdinalIgnoreCase);

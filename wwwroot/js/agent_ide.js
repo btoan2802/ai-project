@@ -412,11 +412,9 @@ async function refreshFileTree() {
             // Auto-restore open tabs from localStorage or auto-open primary file
             const restored = await restoreOpenTabsState();
             if (!restored && !activeFilePath) {
-                const primaryFile = data.files.find(f => !f.isDir && (f.name === "index.html" || f.path.endsWith("index.html") || f.name === "Program.cs"));
+                const primaryFile = data.files.find(f => !f.isDir && (f.name === "index.html" || f.path.endsWith("index.html") || f.name === "Program.cs" || f.name === "main.py"));
                 if (primaryFile) {
                     await openFileInEditor(primaryFile.path, true);
-                } else if (data.files.length > 0 && !data.files[0].isDir) {
-                    await openFileInEditor(data.files[0].path, true);
                 }
             }
         } else {
@@ -865,10 +863,16 @@ async function openFileInEditor(filePath, forceReload = false) {
             try { monacoEditor.layout(); } catch {}
 
         } else {
-            alert("❌ " + (data.message || "Failed to load file content"));
+            console.warn("[IDE] Could not load file:", filePath, data.error || data.message);
+            if (typeof showToastNotification === 'function') {
+                showToastNotification("⚠️ Không thể tải nội dung tệp: " + (data.message || data.error || filePath));
+            }
         }
     } catch (err) {
-        alert("❌ Error opening file: " + err.message);
+        console.warn("[IDE] Error opening file:", err);
+        if (typeof showToastNotification === 'function') {
+            showToastNotification("⚠️ Lỗi mở tệp: " + err.message);
+        }
     }
 }
 
@@ -2683,6 +2687,15 @@ async function sendAgentTask() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 240000);
 
+    if (!activeProjectId) {
+        activeProjectId = "project-1";
+        const select = document.getElementById("projectSelect");
+        if (select) select.value = "project-1";
+        const rootNameEl = document.getElementById("workspaceRootName");
+        if (rootNameEl) rootNameEl.innerText = "project-1";
+        hideEmptyWorkspaceState();
+    }
+
     try {
         const res = await fetch('/api/ide/agent-run', {
             method: 'POST',
@@ -2692,7 +2705,7 @@ async function sendAgentTask() {
             },
             signal: controller.signal,
             body: JSON.stringify({
-                project: activeProjectId,
+                project: activeProjectId || "project-1",
                 activeFile: activeFilePath,
                 prompt: task,
                 mode: mode,
@@ -2769,7 +2782,11 @@ async function sendAgentTask() {
                                 refreshFileTree().catch(console.warn);
                             }
                             if (eventData.target && typeof openFileInEditor === 'function') {
-                                openFileInEditor(eventData.target, true).catch(console.warn);
+                                const lowerTarget = (eventData.target || "").toLowerCase();
+                                const isCodeFile = !(/\.(jpg|jpeg|png|gif|webp|svg|ico|db|sqlite|bin|exe|dll)$/i.test(lowerTarget));
+                                if (isCodeFile) {
+                                    openFileInEditor(eventData.target, true).catch(console.warn);
+                                }
                             }
                         }
                     } else if (eventType === "done") {
