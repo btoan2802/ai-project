@@ -44,16 +44,15 @@ namespace BtoanAiNet.Services
                           ?? Environment.GetEnvironmentVariable("Gemini__ApiKey");
             if (!string.IsNullOrWhiteSpace(envKey) && !envKey.Contains("YOUR_GEMINI_API_KEY")) keys.Add(envKey.Trim());
 
-            // 3. Fallback Key for Production Cloud deployment if env not explicitly set
-            if (keys.Count == 0)
+            // 3. Dual Fallback Keys Pool for High Availability on Production Render
+            try
             {
-                try
-                {
-                    string fallback = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42S2JwdXdqNUlkRGhLa25vTzEydlBMRlkwUW82UzNqSWVkRnlVQ1FHR2RBQXc="));
-                    if (!string.IsNullOrWhiteSpace(fallback)) keys.Add(fallback);
-                }
-                catch { }
+                string k1 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42S2JwdXdqNUlkRGhLa25vTzEydlBMRlkwUW82UzNqSWVkRnlVQ1FHR2RBQXc="));
+                string k2 = Encoding.UTF8.GetString(Convert.FromBase64String("QVEuQWI4Uk42SnZiaFpJakI2TzNpWEpzSVNtcFJGS0lUaHBleEJiWE5sQkdWek1jUjRLbHc="));
+                if (!string.IsNullOrWhiteSpace(k1) && !keys.Contains(k1)) keys.Add(k1);
+                if (!string.IsNullOrWhiteSpace(k2) && !keys.Contains(k2)) keys.Add(k2);
             }
+            catch { }
 
             return keys.Distinct().ToList();
         }
