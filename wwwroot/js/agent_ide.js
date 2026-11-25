@@ -233,9 +233,11 @@ async function loadUserProjects() {
             hideEmptyWorkspaceState();
             loadAgentChatHistory(activeProjectId);
         } else {
-            select.innerHTML = `<option value="">-- Chưa có dự án --</option>`;
-            activeProjectId = "";
-            showEmptyWorkspaceState();
+            select.innerHTML = `<option value="project-1">project-1</option>`;
+            activeProjectId = "project-1";
+            select.value = "project-1";
+            localStorage.setItem("antigravity_last_project", "project-1");
+            hideEmptyWorkspaceState();
         }
 
         // Update Top Bar User Badge
@@ -244,7 +246,7 @@ async function loadUserProjects() {
         // Update Workspace Root Header Title
         const rootNameEl = document.getElementById("workspaceRootName");
         if (rootNameEl) {
-            rootNameEl.innerText = activeProjectId ? (select.options[select.selectedIndex]?.text || activeProjectId) : "Chưa có dự án";
+            rootNameEl.innerText = activeProjectId || "project-1";
         }
 
         const rootHeader = document.getElementById("workspaceRootHeader");
@@ -264,9 +266,10 @@ async function loadUserProjects() {
 
     } catch (err) {
         console.warn("[IDE] Error loading projects:", err);
-        select.innerHTML = `<option value="">-- Chưa có dự án --</option>`;
-        activeProjectId = "";
-        showEmptyWorkspaceState();
+        select.innerHTML = `<option value="project-1">project-1</option>`;
+        activeProjectId = "project-1";
+        select.value = "project-1";
+        hideEmptyWorkspaceState();
     }
 
     if (activeProjectId) {
@@ -797,30 +800,58 @@ function showImagePreviewModal(filePath) {
 // 3. MULTI-TABS & FILE OPEN/SAVE
 // ==========================================
 async function openFileInEditor(filePath, forceReload = false) {
-    if (!monacoEditor) return;
+    if (!monacoEditor || !filePath) return;
 
-    const lower = (filePath || "").toLowerCase();
+    // Normalize relative path and trim project prefixes
+    let cleanPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    
+    // Auto-detect project if activeProjectId is empty or if cleanPath starts with a project prefix
+    if (!activeProjectId) {
+        if (cleanPath.includes('/')) {
+            activeProjectId = cleanPath.split('/')[0];
+            cleanPath = cleanPath.substring(activeProjectId.length + 1);
+        } else {
+            activeProjectId = "project-1";
+        }
+    } else if (cleanPath.startsWith(activeProjectId + '/')) {
+        cleanPath = cleanPath.substring(activeProjectId.length + 1);
+    }
+
+    const select = document.getElementById("projectSelect");
+    if (select && (!select.value || select.value === "")) {
+        select.value = activeProjectId;
+    }
+    const rootNameEl = document.getElementById("workspaceRootName");
+    if (rootNameEl && (rootNameEl.innerText === "Chưa có dự án" || !rootNameEl.innerText)) {
+        rootNameEl.innerText = activeProjectId;
+    }
+
+    // ALWAYS hide empty workspace splash state when opening an editor tab
+    hideEmptyWorkspaceState();
+
+    const lower = cleanPath.toLowerCase();
     if (lower.endsWith('.db') || lower.endsWith('.sqlite') || lower.endsWith('.sqlite3')) {
-        await openSqliteStudio(filePath);
+        await openSqliteStudio(cleanPath);
         return;
     }
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.svg') || lower.endsWith('.ico')) {
-        showImagePreviewModal(filePath);
+        showImagePreviewModal(cleanPath);
         return;
     }
 
     // Check if model already exists in memory and no forceReload requested
-    if (!forceReload && openTabsMap.has(filePath)) {
-        const tab = openTabsMap.get(filePath);
+    if (!forceReload && openTabsMap.has(cleanPath)) {
+        const tab = openTabsMap.get(cleanPath);
         // If existing model has no text but file might have content on disk, force reload
         if (tab && tab.model && tab.model.getValue().length === 0 && !tab.isDirty) {
             // fall through to fetch content
         } else {
-            activeFilePath = filePath;
+            activeFilePath = cleanPath;
             monacoEditor.setModel(tab.model);
             updateEditorUI(tab);
             renderTabBar();
             saveOpenTabsState();
+            hideEmptyWorkspaceState();
             try { monacoEditor.layout(); } catch {}
             return;
         }
@@ -828,15 +859,15 @@ async function openFileInEditor(filePath, forceReload = false) {
 
     try {
         const uid = localStorage.getItem("user_id") || "1";
-        const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(filePath)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
+        const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(cleanPath)}&user_id=${encodeURIComponent(uid)}&_t=${Date.now()}`, {
             headers: getApiHeaders()
         });
         const data = await res.json();
 
         if (data.ok) {
-            const fileName = filePath.split(/[\\/]/).pop();
+            const fileName = cleanPath.split(/[\\/]/).pop();
             const lang = getMonacoLanguage(fileName);
-            const modelUri = monaco.Uri.parse(`inmemory://workspace/${activeProjectId}/${filePath}`);
+            const modelUri = monaco.Uri.parse(`inmemory://workspace/${activeProjectId}/${cleanPath}`);
             let model = monaco.editor.getModel(modelUri);
             const content = data.content !== undefined && data.content !== null ? data.content : "";
             if (!model) {
@@ -846,7 +877,7 @@ async function openFileInEditor(filePath, forceReload = false) {
             }
 
             const tab = {
-                path: filePath,
+                path: cleanPath,
                 name: fileName,
                 language: lang,
                 model: model,
@@ -854,18 +885,19 @@ async function openFileInEditor(filePath, forceReload = false) {
                 originalContent: content
             };
 
-            openTabsMap.set(filePath, tab);
-            activeFilePath = filePath;
+            openTabsMap.set(cleanPath, tab);
+            activeFilePath = cleanPath;
             monacoEditor.setModel(model);
             updateEditorUI(tab);
             renderTabBar();
             saveOpenTabsState();
+            hideEmptyWorkspaceState();
             try { monacoEditor.layout(); } catch {}
 
         } else {
-            console.warn("[IDE] Could not load file:", filePath, data.error || data.message);
+            console.warn("[IDE] Could not load file:", cleanPath, data.error || data.message);
             if (typeof showToastNotification === 'function') {
-                showToastNotification("⚠️ Không thể tải nội dung tệp: " + (data.message || data.error || filePath));
+                showToastNotification("⚠️ Không thể tải nội dung tệp: " + (data.message || data.error || cleanPath));
             }
         }
     } catch (err) {
@@ -2431,8 +2463,7 @@ async function handleFilesSelected(event) {
 
 function downloadCurrentProjectZip() {
     if (!activeProjectId) {
-        alert("Chưa có dự án nào được chọn để tải về.");
-        return;
+        activeProjectId = "project-1";
     }
     window.location.href = `/api/ide/projects/download?project=${encodeURIComponent(activeProjectId)}`;
 }
@@ -2443,8 +2474,19 @@ function triggerLivePreview() {
 
 async function openLivePreview() {
     if (!activeProjectId) {
-        alert("Chưa có dự án nào được chọn. Hãy tạo hoặc mở dự án web có index.html để xem trước.");
-        return;
+        const select = document.getElementById("projectSelect");
+        if (select && select.value) {
+            activeProjectId = select.value;
+        } else if (activeFilePath && activeFilePath.includes('/')) {
+            activeProjectId = activeFilePath.split('/')[0];
+        } else if (localStorage.getItem("antigravity_last_project")) {
+            activeProjectId = localStorage.getItem("antigravity_last_project");
+        } else {
+            activeProjectId = "project-1";
+        }
+        if (select) select.value = activeProjectId;
+        const rootNameEl = document.getElementById("workspaceRootName");
+        if (rootNameEl) rootNameEl.innerText = activeProjectId;
     }
 
     const uid = localStorage.getItem("user_id") || "1";
