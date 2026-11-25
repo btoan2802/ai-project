@@ -299,20 +299,64 @@ namespace BtoanAiNet.Controllers
             return string.IsNullOrWhiteSpace(clean) ? "project-1" : clean;
         }
 
+        public static string NormalizeWorkspaceRelativePath(string relativePath, string? projectName = null)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath)) return string.Empty;
+            string clean = relativePath.Trim().Replace('\\', '/');
+
+            while (clean.StartsWith("./") || clean.StartsWith("/"))
+            {
+                clean = clean.StartsWith("./") ? clean.Substring(2) : clean.Substring(1);
+            }
+
+            if (!string.IsNullOrWhiteSpace(projectName))
+            {
+                string cleanProj = SanitizeProjectName(projectName);
+                if (clean.StartsWith(cleanProj + "/", StringComparison.OrdinalIgnoreCase))
+                {
+                    clean = clean.Substring(cleanProj.Length + 1);
+                }
+            }
+
+            return clean.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+        }
+
         private string ResolveWorkspacePath(string? projectId)
         {
-            if (!IsAuthenticated) return string.Empty;
-            string userRoot = GetUserRootPath();
+            int uid = CurrentUserId > 0 ? CurrentUserId : 1;
+            string userRoot = GetUserRootPath(uid);
             if (string.IsNullOrWhiteSpace(userRoot)) return string.Empty;
 
             if (string.IsNullOrWhiteSpace(projectId))
             {
-                // Return user root
                 return userRoot;
             }
 
             string cleanProj = SanitizeProjectName(projectId);
             string projectPath = Path.Combine(userRoot, cleanProj);
+
+            if (!Directory.Exists(projectPath))
+            {
+                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
+                if (Directory.Exists(user1Path))
+                {
+                    return user1Path;
+                }
+
+                string workspacesRoot = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces");
+                if (Directory.Exists(workspacesRoot))
+                {
+                    try
+                    {
+                        var matchingDir = Directory.GetDirectories(workspacesRoot, cleanProj, SearchOption.AllDirectories).FirstOrDefault();
+                        if (matchingDir != null) return matchingDir;
+                    }
+                    catch { }
+                }
+
+                Directory.CreateDirectory(projectPath);
+            }
+
             return projectPath;
         }
 
@@ -321,7 +365,8 @@ namespace BtoanAiNet.Controllers
             fullPath = string.Empty;
             if (string.IsNullOrWhiteSpace(workspacePath) || string.IsNullOrWhiteSpace(relativePath)) return false;
 
-            string normalized = relativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+            string projectName = Path.GetFileName(workspacePath);
+            string normalized = NormalizeWorkspaceRelativePath(relativePath, projectName);
             string combined = Path.GetFullPath(Path.Combine(workspacePath, normalized));
             string rootFullPath = Path.GetFullPath(workspacePath);
 
@@ -1715,18 +1760,20 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         [HttpGet("file-content")]
         public async Task<IActionResult> GetFile([FromQuery] string? path, [FromQuery] string? file, [FromQuery] string? project)
         {
-            if (!IsAuthenticated)
-            {
-                return StatusCode(401, new { ok = false, error = "Vui lòng đăng nhập để xem tệp tin.", needLogin = true });
-            }
-
             string targetPath = !string.IsNullOrWhiteSpace(path) ? path : (!string.IsNullOrWhiteSpace(file) ? file : "");
             if (string.IsNullOrWhiteSpace(targetPath))
             {
                 return BadRequest(new { ok = false, error = "Path or file is required" });
             }
 
-            string root = ResolveWorkspacePath(project);
+            string cleanProj = SanitizeProjectName(project);
+            string root = ResolveWorkspacePath(cleanProj);
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
+                if (Directory.Exists(user1Path)) root = user1Path;
+            }
+
             if (!TryGetSafeFilePath(root, targetPath, out string fullPath) || !System.IO.File.Exists(fullPath))
             {
                 return NotFound(new { ok = false, error = "Không tìm thấy tệp tin hoặc đường dẫn không hợp lệ." });
@@ -1751,6 +1798,36 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 _logger.LogError(ex, "Error reading file {Path}", targetPath);
                 return StatusCode(500, new { ok = false, error = ex.Message });
             }
+        }
+
+        // GET /api/ide/raw?project=...&file=...
+        [HttpGet("raw")]
+        public IActionResult GetRawFile([FromQuery] string? project, [FromQuery] string? file)
+        {
+            string cleanProj = SanitizeProjectName(project);
+            string root = ResolveWorkspacePath(cleanProj);
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
+                if (Directory.Exists(user1Path)) root = user1Path;
+            }
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                return NotFound("Project not found");
+            }
+
+            string targetFile = NormalizeWorkspaceRelativePath(file ?? "", cleanProj);
+            if (!TryGetSafeFilePath(root, targetFile, out string fullPath) || !System.IO.File.Exists(fullPath))
+            {
+                return NotFound("File not found");
+            }
+
+            if (!_contentTypeProvider.TryGetContentType(fullPath, out string? contentType))
+            {
+                contentType = "application/octet-stream";
+            }
+
+            return PhysicalFile(fullPath, contentType, enableRangeProcessing: true);
         }
 
         // POST /api/ide/file/save
@@ -3375,11 +3452,13 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         string prompt = ExtractStringArg(args, "prompt", "description", "image_prompt");
                         string outputPath = ExtractStringArg(args, "output_path", "outputPath", "path", "filename");
                         string aspectRatio = ExtractStringArg(args, "aspect_ratio", "aspectRatio", "ratio");
+                        string projName = Path.GetFileName(projectPath);
+                        outputPath = NormalizeWorkspaceRelativePath(outputPath, projName);
                         if (string.IsNullOrWhiteSpace(outputPath))
                         {
                             outputPath = "images/image_" + Guid.NewGuid().ToString("N")[..8] + ".jpg";
                         }
-                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, outputPath.TrimStart('/', '\\')));
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, outputPath));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
                             return "ERROR: Đường dẫn lưu ảnh phải nằm trong thư mục dự án.";
@@ -3454,7 +3533,9 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     {
                         string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
                         if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống khi gọi read_file.";
-                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        string projName = Path.GetFileName(projectPath);
+                        path = NormalizeWorkspaceRelativePath(path, projName);
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
                             return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
@@ -3474,7 +3555,9 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             return $"ERROR: Tham số 'content' cho tệp '{path}' đang bị trống (0 byte). Bạn BẮT BUỘC phải truyền toàn bộ mã nguồn hoàn chỉnh vào tham số 'content' khi gọi write_file. Tuyệt đối không tạo file rỗng.";
                         }
 
-                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        string projName = Path.GetFileName(projectPath);
+                        path = NormalizeWorkspaceRelativePath(path, projName);
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
                             return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
@@ -3495,7 +3578,9 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống khi gọi edit_file.";
                         if (string.IsNullOrEmpty(target)) return "ERROR: Tham số 'target' không được để trống khi gọi edit_file. Nếu muốn ghi đè toàn bộ tệp, hãy sử dụng write_file.";
 
-                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        string projName = Path.GetFileName(projectPath);
+                        path = NormalizeWorkspaceRelativePath(path, projName);
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
                             return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";
@@ -3533,7 +3618,9 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     {
                         string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
                         if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống.";
-                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path.TrimStart('/', '\\')));
+                        string projName = Path.GetFileName(projectPath);
+                        path = NormalizeWorkspaceRelativePath(path, projName);
+                        string fullPath = Path.GetFullPath(Path.Combine(projectPath, path));
                         if (!fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
                         {
                             return "ERROR: Không được phép truy cập ra ngoài thư mục dự án.";

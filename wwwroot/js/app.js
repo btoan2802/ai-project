@@ -68,6 +68,41 @@ function renderMarkdownWithMath(text) {
 
 function typesetMathInElement(elem) {
     if (!elem) return;
+
+// ====== GLOBAL SIDEBAR TITLE SYNC ======
+window.syncSidebarChatTitle = function(arg1, arg2) {
+    try {
+        let newTitle = arg1;
+        let cId = arg2;
+        if (typeof arg1 === 'number' || (typeof arg1 === 'string' && /^\d+$/.test(arg1) && typeof arg2 === 'string' && !/^\d+$/.test(arg2))) {
+            cId = arg1;
+            newTitle = arg2;
+        }
+        if (!newTitle || newTitle === "Chat mới" || (typeof newTitle === 'string' && newTitle.startsWith("{"))) return;
+        const cleanTitle = String(newTitle).replace(/[\r\n]+/g, ' ').trim();
+        if (!cleanTitle) return;
+
+        document.title = `${cleanTitle} - Btoan AI`;
+
+        const targetId = cId || conversation_id;
+        let found = false;
+        if (targetId) {
+            document.querySelectorAll(`.chat-history-item[data-id="${targetId}"] .chat-title, .history-item[data-id="${targetId}"] .history-title`).forEach(el => {
+                el.innerText = cleanTitle;
+                found = true;
+            });
+        }
+        if (!found) {
+            const activeTitleEl = document.querySelector('.chat-history-item.active .chat-title') ||
+                                  document.querySelector('.chat-history-item:first-child .chat-title');
+            if (activeTitleEl) {
+                activeTitleEl.innerText = cleanTitle;
+            }
+        }
+    } catch (e) {
+        console.warn("syncSidebarChatTitle error:", e);
+    }
+};
     if (elem !== document && elem !== document.body && !elem.isConnected) {
         requestAnimationFrame(() => {
             if (elem.isConnected && window.MathJax) {
@@ -1095,28 +1130,6 @@ async function callGemini(userText, images, files) {
         throw new Error("server trả dữ liệu không phải JSON");
     }
 
-function syncSidebarChatTitle(newTitle, cId) {
-    if (!newTitle || newTitle === "Chat mới" || newTitle.startsWith("{")) return;
-    const cleanTitle = newTitle.replace(/[\r\n]+/g, ' ').trim();
-    document.title = `${cleanTitle} - Btoan AI`;
-
-    const targetId = cId || conversation_id;
-    let found = false;
-    if (targetId) {
-        document.querySelectorAll(`.chat-history-item[data-id="${targetId}"] .chat-title, .history-item[data-id="${targetId}"] .history-title`).forEach(el => {
-            el.innerText = cleanTitle;
-            found = true;
-        });
-    }
-    if (!found) {
-        const activeTitleEl = document.querySelector('.chat-history-item.active .chat-title') ||
-                              document.querySelector('.chat-history-item:first-child .chat-title');
-        if (activeTitleEl) {
-            activeTitleEl.innerText = cleanTitle;
-        }
-    }
-}
-
     // 🔥 FIX ĐÚNG CHỖ (sau parse)
     if (data?.conversation_id && !conversation_id) {
         conversation_id = data.conversation_id
@@ -1838,7 +1851,10 @@ async function send() {
 
     } catch (e) {
         typing.remove();
-        addBotBubble("lỗi: " + e.message);
+        console.error("sendMessage error:", e);
+        if (!reply || reply.trim().length === 0) {
+            addBotBubble("lỗi: " + e.message);
+        }
         isSending = false;
     }
 }

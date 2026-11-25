@@ -608,6 +608,50 @@ END
         else if (dbContext.Database.IsSqlite())
         {
             dbContext.Database.EnsureCreated();
+            var sqliteCols = new (string col, string type)[]
+            {
+                ("full_name", "TEXT NULL"),
+                ("password", "TEXT NULL"),
+                ("created_at", "TEXT NULL"),
+                ("dob", "TEXT NULL"),
+                ("email", "TEXT NULL"),
+                ("google_id", "TEXT NULL"),
+                ("avatar", "TEXT NULL"),
+                ("bio", "TEXT NULL"),
+                ("default_model", "TEXT NULL DEFAULT 'Btoan 2.5 Flash'"),
+                ("custom_instructions", "TEXT NULL"),
+                ("temperature", "REAL NULL DEFAULT 0.7"),
+                ("long_term_memory", "INTEGER NULL DEFAULT 1"),
+                ("rag_enabled", "INTEGER NULL DEFAULT 1"),
+                ("theme", "TEXT NULL DEFAULT 'dark'"),
+                ("chat_font_size", "TEXT NULL DEFAULT '15px'"),
+                ("tts_speed", "REAL NULL DEFAULT 1.0")
+            };
+            foreach (var (col, colType) in sqliteCols)
+            {
+                try
+                {
+                    string alterSql = string.Format("ALTER TABLE users ADD COLUMN {0} {1};", col, colType);
+                    dbContext.Database.ExecuteSqlRaw(alterSql);
+                }
+                catch { }
+            }
+
+            try
+            {
+                dbContext.Database.ExecuteSqlRaw(@"
+CREATE TABLE IF NOT EXISTS agent_chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    project_name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    plan_json TEXT NULL,
+    tool_actions_json TEXT NULL,
+    created_at TEXT NOT NULL
+);");
+            }
+            catch { }
         }
         else
         {

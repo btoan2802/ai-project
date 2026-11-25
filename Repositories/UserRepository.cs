@@ -62,6 +62,7 @@ namespace BtoanAiNet.Repositories
                     {
                         try { string s = string.Format("ALTER TABLE `users` ADD COLUMN `{0}` {1};", col, colType); _context.Database.ExecuteSqlRaw(s); } catch { }
                         try { string s = string.Format("ALTER TABLE [dbo].[users] ADD [{0}] {1};", col, colType.Replace("VARCHAR(50)", "NVARCHAR(50)").Replace("TEXT", "NVARCHAR(MAX)").Replace("DOUBLE", "FLOAT")); _context.Database.ExecuteSqlRaw(s); } catch { }
+                        try { string s = string.Format("ALTER TABLE users ADD COLUMN {0} {1};", col, colType.Replace("VARCHAR(50)", "TEXT").Replace("DOUBLE", "REAL").Replace("INT", "INTEGER")); _context.Database.ExecuteSqlRaw(s); } catch { }
                     }
                     await _context.SaveChangesAsync();
                     return user;
@@ -117,6 +118,7 @@ namespace BtoanAiNet.Repositories
                     {
                         try { string s = string.Format("ALTER TABLE `users` ADD COLUMN `{0}` {1};", col, colType); _context.Database.ExecuteSqlRaw(s); } catch { }
                         try { string s = string.Format("ALTER TABLE [dbo].[users] ADD [{0}] {1};", col, colType.Replace("VARCHAR(50)", "NVARCHAR(50)").Replace("TEXT", "NVARCHAR(MAX)").Replace("DOUBLE", "FLOAT")); _context.Database.ExecuteSqlRaw(s); } catch { }
+                        try { string s = string.Format("ALTER TABLE users ADD COLUMN {0} {1};", col, colType.Replace("VARCHAR(50)", "TEXT").Replace("DOUBLE", "REAL").Replace("INT", "INTEGER")); _context.Database.ExecuteSqlRaw(s); } catch { }
                     }
                     await _context.SaveChangesAsync();
                 }

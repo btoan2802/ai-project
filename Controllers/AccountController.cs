@@ -121,8 +121,9 @@ namespace BtoanAiNet.Controllers
             }
             catch (Exception ex)
             {
-                var detail = ex.InnerException != null ? $"{ex.Message} ({ex.InnerException.Message})" : ex.Message;
-                return Json(new { status = "error", msg = $"Database error: {detail}" });
+                var cur = ex;
+                while (cur.InnerException != null) cur = cur.InnerException;
+                return Json(new { status = "error", msg = $"Database error: {cur.Message}" });
             }
         }
 

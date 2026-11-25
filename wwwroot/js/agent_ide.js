@@ -766,7 +766,7 @@ async function restoreOpenTabsState() {
 function showImagePreviewModal(filePath) {
     const uid = localStorage.getItem("user_id") || "1";
     const cleanPath = filePath.replace(/\\/g, '/').replace(/^\//, '');
-    const src = `/api/ide/preview/${encodeURIComponent(activeProjectId)}/${cleanPath}?user_id=${encodeURIComponent(uid)}&t=${Date.now()}`;
+    const src = `/api/ide/raw?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(cleanPath)}&user_id=${encodeURIComponent(uid)}&t=${Date.now()}`;
     const modalId = "ideImagePreviewModal";
     let modal = document.getElementById(modalId);
     if (!modal) {
@@ -814,17 +814,23 @@ async function openFileInEditor(filePath, forceReload = false) {
     // Check if model already exists in memory and no forceReload requested
     if (!forceReload && openTabsMap.has(filePath)) {
         const tab = openTabsMap.get(filePath);
-        activeFilePath = filePath;
-        monacoEditor.setModel(tab.model);
-        updateEditorUI(tab);
-        renderTabBar();
-        saveOpenTabsState();
-        try { monacoEditor.layout(); } catch {}
-        return;
+        // If existing model has no text but file might have content on disk, force reload
+        if (tab && tab.model && tab.model.getValue().length === 0 && !tab.isDirty) {
+            // fall through to fetch content
+        } else {
+            activeFilePath = filePath;
+            monacoEditor.setModel(tab.model);
+            updateEditorUI(tab);
+            renderTabBar();
+            saveOpenTabsState();
+            try { monacoEditor.layout(); } catch {}
+            return;
+        }
     }
 
     try {
-        const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(filePath)}`, {
+        const uid = localStorage.getItem("user_id") || "1";
+        const res = await fetch(`/api/ide/file-content?project=${encodeURIComponent(activeProjectId)}&file=${encodeURIComponent(filePath)}&user_id=${encodeURIComponent(uid)}`, {
             headers: getApiHeaders()
         });
         const data = await res.json();
@@ -2776,7 +2782,8 @@ async function sendAgentTask() {
                             await reloadOpenFileTabs(finalData.modifiedFiles).catch(console.warn);
                         }
                         if (Array.isArray(finalData.modifiedFiles) && finalData.modifiedFiles.length > 0) {
-                            const targetOpen = (!activeFilePath || !openTabsMap.has(activeFilePath)) ? finalData.modifiedFiles[0] : activeFilePath;
+                            const codeFiles = finalData.modifiedFiles.filter(f => !(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i.test(f)));
+                            const targetOpen = (!activeFilePath || !openTabsMap.has(activeFilePath)) ? (codeFiles[0] || finalData.modifiedFiles[0]) : activeFilePath;
                             if (targetOpen && typeof openFileInEditor === 'function') {
                                 await openFileInEditor(targetOpen, true).catch(console.warn);
                             }
