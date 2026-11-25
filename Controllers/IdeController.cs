@@ -3931,6 +3931,39 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                         if (!generated)
                         {
+                            // Real Photography fallback (Pravatar for portraits/avatars, Picsum for banners/landscapes)
+                            try
+                            {
+                                string pLower = (prompt + " " + outputPath).ToLowerInvariant();
+                                bool isPerson = pLower.Contains("avatar") || pLower.Contains("portrait") || pLower.Contains("nhân viên") ||
+                                                pLower.Contains("chân dung") || pLower.Contains("đại diện") || pLower.Contains("person") ||
+                                                pLower.Contains("user") || pLower.Contains("man") || pLower.Contains("woman") || pLower.Contains("face");
+
+                                int w = aspectRatio == "1:1" ? 600 : aspectRatio == "4:3" ? 800 : 800;
+                                int h = aspectRatio == "1:1" ? 600 : aspectRatio == "4:3" ? 600 : 500;
+                                string photoUrl = isPerson
+                                    ? $"https://i.pravatar.cc/600?u={Guid.NewGuid():N}"
+                                    : $"https://picsum.photos/{w}/{h}?random={Random.Shared.Next(1, 99999)}";
+
+                                using var httpCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                                using var hReq = new HttpRequestMessage(HttpMethod.Get, photoUrl);
+                                hReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                using var hRes = await new HttpClient().SendAsync(hReq, httpCts.Token);
+                                if (hRes.IsSuccessStatusCode)
+                                {
+                                    byte[] bytes = await hRes.Content.ReadAsByteArrayAsync();
+                                    if (bytes.Length > 1000)
+                                    {
+                                        await System.IO.File.WriteAllBytesAsync(fullPath, bytes);
+                                        generated = true;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (!generated)
+                        {
                             if (ext == ".svg")
                             {
                                 string svg = GenerateSvgPlaceholder(prompt, outputPath);
@@ -4250,6 +4283,25 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 })
                 {
                     canvas.DrawRoundRect(new SKRoundRect(new SKRect(width * 0.08f, height * 0.08f, width * 0.92f, height * 0.92f), 20, 20), strokePaint);
+                }
+
+                // 4. If avatar/person, draw a stylized avatar silhouette so it looks like a real avatar
+                if (pLower.Contains("avatar") || pLower.Contains("portrait") || pLower.Contains("nhân viên") || pLower.Contains("person") || pLower.Contains("user") || pLower.Contains("chân dung"))
+                {
+                    using var avatarPaint = new SKPaint
+                    {
+                        Color = new SKColor(255, 255, 255, 140),
+                        IsAntialias = true,
+                        Style = SKPaintStyle.Fill
+                    };
+                    float cx = width / 2f;
+                    float cy = height * 0.40f;
+                    float headRadius = Math.Min(width, height) * 0.17f;
+                    canvas.DrawCircle(cx, cy, headRadius, avatarPaint);
+
+                    float bodyTop = cy + headRadius * 1.25f;
+                    float bodyWidth = headRadius * 2.6f;
+                    canvas.DrawRoundRect(new SKRoundRect(new SKRect(cx - bodyWidth / 2f, bodyTop, cx + bodyWidth / 2f, height * 0.88f), 24, 24), avatarPaint);
                 }
 
                 // 4. Encode to 100% valid binary image

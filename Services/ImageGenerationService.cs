@@ -445,15 +445,16 @@ Rules:
             }
 
             // =========================================================================
-            // FALLBACK CUỐI CÙNG: Pollinations.ai (Fast attempt, no blocking sleep)
             // =========================================================================
-            Console.WriteLine("[IMAGE FALLBACK] Trying Pollinations FLUX/Turbo (no sleep)...");
+            // FALLBACK 2: Pollinations.ai (Flux / Turbo with 12s timeout)
+            // =========================================================================
+            Console.WriteLine("[IMAGE FALLBACK] Trying Pollinations FLUX/Turbo...");
             try
             {
                 string encodedPrompt = Uri.EscapeDataString(prompt);
                 string fluxUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?model=turbo&width={imgWidth}&height={imgHeight}&nologo=true";
 
-                using var ctsPoll = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var ctsPoll = new CancellationTokenSource(TimeSpan.FromSeconds(12));
                 using var req = new HttpRequestMessage(HttpMethod.Get, fluxUrl);
                 req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
@@ -461,7 +462,7 @@ Rules:
                 if (!res.IsSuccessStatusCode)
                 {
                     string defaultUrl = $"https://image.pollinations.ai/prompt/{encodedPrompt}?width={imgWidth}&height={imgHeight}&nologo=true";
-                    using var ctsDef = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                    using var ctsDef = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                     using var defReq = new HttpRequestMessage(HttpMethod.Get, defaultUrl);
                     defReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                     res = await _httpClient.SendAsync(defReq, ctsDef.Token);
@@ -491,6 +492,55 @@ Rules:
             catch (Exception ex)
             {
                 Console.WriteLine("[POLLINATIONS EXCEPTION] " + ex.Message);
+            }
+
+            // =========================================================================
+            // FALLBACK 3: Real High-Definition Photography Fallback (Pravatar / Picsum)
+            // =========================================================================
+            try
+            {
+                string pLower = (rawPrompt + " " + prompt).ToLowerInvariant();
+                bool isPersonOrAvatar = pLower.Contains("avatar") || pLower.Contains("portrait") || pLower.Contains("nhân viên") ||
+                                       pLower.Contains("chân dung") || pLower.Contains("đại diện") || pLower.Contains("person") ||
+                                       pLower.Contains("user") || pLower.Contains("man") || pLower.Contains("woman") || pLower.Contains("face");
+
+                int targetSize = Math.Min(imgWidth, imgHeight);
+                if (targetSize < 400) targetSize = 400;
+                if (targetSize > 1000) targetSize = 1000;
+
+                string realPhotoUrl = isPersonOrAvatar
+                    ? $"https://i.pravatar.cc/{targetSize}?u={Guid.NewGuid():N}"
+                    : $"https://picsum.photos/{imgWidth}/{imgHeight}?random={Random.Shared.Next(1, 99999)}";
+
+                using var ctsPhoto = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                using var photoReq = new HttpRequestMessage(HttpMethod.Get, realPhotoUrl);
+                photoReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                var photoRes = await _httpClient.SendAsync(photoReq, ctsPhoto.Token);
+
+                if (photoRes.IsSuccessStatusCode)
+                {
+                    byte[]? imgBytes = await photoRes.Content.ReadAsByteArrayAsync();
+                    if (imgBytes != null && imgBytes.Length > 1000)
+                    {
+                        string publicUrl = await SaveImageLocallyAsync(imgBytes, "image/jpeg");
+                        Console.WriteLine($"[IMAGE SUCCESS: Real Photo Fallback] Source: {realPhotoUrl} | Saved to: {publicUrl} ({imgBytes.Length} bytes)");
+
+                        if (cid > 0) _lastImagePrompts[cid] = CleanPromptForAI(prompt);
+
+                        return new JsonObject
+                        {
+                            ["success"] = true,
+                            ["mimeType"] = "image/jpeg",
+                            ["imageBase64"] = Convert.ToBase64String(imgBytes),
+                            ["imageUrl"] = publicUrl,
+                            ["model"] = isPersonOrAvatar ? "pravatar-portrait" : "picsum-photo"
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[REAL PHOTO FALLBACK EXCEPTION] " + ex.Message);
             }
 
             return new JsonObject { ["success"] = false, ["error"] = "Không thể vẽ ảnh vào lúc này. Vui lòng thử lại sau ít phút." };

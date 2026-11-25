@@ -195,14 +195,14 @@ function applyRootProjectCollapseState(projId) {
     }
 
     if (rootChevron) {
-        rootChevron.className = isCollapsed 
-            ? "bi bi-chevron-right me-1.5 text-secondary" 
+        rootChevron.className = isCollapsed
+            ? "bi bi-chevron-right me-1.5 text-secondary"
             : "bi bi-chevron-down me-1.5 text-secondary";
     }
 
     if (folderIcon) {
-        folderIcon.className = isCollapsed 
-            ? "bi bi-folder text-warning me-1.5" 
+        folderIcon.className = isCollapsed
+            ? "bi bi-folder text-warning me-1.5"
             : "bi bi-folder2-open text-warning me-1.5";
     }
 }
@@ -838,7 +838,7 @@ async function openFileInEditor(filePath, forceReload = false) {
 
     // Normalize relative path and trim project prefixes
     let cleanPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-    
+
     // Auto-detect project if activeProjectId is empty or if cleanPath starts with a project prefix
     if (!activeProjectId) {
         if (cleanPath.includes('/')) {
@@ -886,7 +886,7 @@ async function openFileInEditor(filePath, forceReload = false) {
             renderTabBar();
             saveOpenTabsState();
             hideEmptyWorkspaceState();
-            try { monacoEditor.layout(); } catch {}
+            try { monacoEditor.layout(); } catch { }
             return;
         }
     }
@@ -939,7 +939,7 @@ async function openFileInEditor(filePath, forceReload = false) {
             renderTabBar();
             saveOpenTabsState();
             hideEmptyWorkspaceState();
-            try { monacoEditor.layout(); } catch {}
+            try { monacoEditor.layout(); } catch { }
 
         } else {
             console.debug("[IDE] File content not available:", cleanPath, data.error || data.message);
@@ -1706,7 +1706,7 @@ async function closeTerminalSession(sessionId) {
 
     const s = terminalSessions[idx];
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-        terminalHubConn.invoke("KillRunningProcessInSession", sessionId).catch(() => {});
+        terminalHubConn.invoke("KillRunningProcessInSession", sessionId).catch(() => { });
     }
 
     try { s.xterm?.dispose(); } catch (e) { }
@@ -2130,10 +2130,10 @@ function detectProjectType() {
     const hasRootAngular = files.some(f => (f.path === "angular.json" || f.path === "./angular.json" || f.path === "/angular.json"));
     const hasFrontendAngular = files.some(f => (f.path.startsWith("frontend/") || f.path.startsWith("frontend\\")) && f.path.includes("angular.json"));
     const inFrontend = hasFrontendAngular && !hasRootAngular;
-    const hasAngular = hasRootAngular || hasFrontendAngular 
-        || files.some(f => f.path.includes("angular.json") || (f.path.includes("package.json") && f.path.includes("frontend"))) 
+    const hasAngular = hasRootAngular || hasFrontendAngular
+        || files.some(f => f.path.includes("angular.json") || (f.path.includes("package.json") && f.path.includes("frontend")))
         || (activeProjectId && activeProjectId.toLowerCase().includes("angular"));
-    
+
     const hasIndexHtml = files.some(f => f.path === "index.html" || f.path.endsWith("/index.html") || f.path.endsWith("\\index.html"));
     if (hasAngular) {
         return { type: "angular", inFrontend: inFrontend };
@@ -2561,7 +2561,7 @@ async function openLivePreview() {
         // Luôn xóa sạch srcdoc để tránh opaque null origin trong Chrome làm hỏng script / localStorage
         try {
             iframe.removeAttribute("srcdoc");
-        } catch {}
+        } catch { }
         // Nạp trực tiếp URL cùng domain để có đầy đủ quyền same-origin, chạy JavaScript và tải CSS hoàn hảo
         iframe.src = previewUrl;
     }
@@ -2659,8 +2659,8 @@ async function loadAgentChatHistory(projectId) {
                     agentMsg.className = "d-flex flex-column gap-2 extra-small text-light mb-2";
                     let parsedPlan = [];
                     let parsedOps = [];
-                    try { if (item.planJson) parsedPlan = JSON.parse(item.planJson); } catch(e){}
-                    try { if (item.toolActionsJson) parsedOps = JSON.parse(item.toolActionsJson); } catch(e){}
+                    try { if (item.planJson) parsedPlan = JSON.parse(item.planJson); } catch (e) { }
+                    try { if (item.toolActionsJson) parsedOps = JSON.parse(item.toolActionsJson); } catch (e) { }
                     if (!parsedPlan.length && Array.isArray(item.plan)) parsedPlan = item.plan;
                     if (!parsedOps.length && Array.isArray(item.operations)) parsedOps = item.operations;
 
@@ -2915,7 +2915,7 @@ async function sendAgentTask() {
     if (sendBtn) {
         sendBtn.innerHTML = `<i class="bi bi-stop-fill text-danger fs-5"></i>`;
         sendBtn.title = "Dừng Agent (Stop)";
-        sendBtn.onclick = function() {
+        sendBtn.onclick = function () {
             if (window.currentAgentAbortController) {
                 window.currentAgentAbortController.abort();
             }
@@ -2956,7 +2956,7 @@ async function sendAgentTask() {
             try {
                 const errData = await res.json();
                 errMsg = errData.message || errData.error || errMsg;
-            } catch {}
+            } catch { }
             agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${errMsg}</div>`;
             return;
         }
@@ -3204,7 +3204,7 @@ async function sendAgentTask() {
         }
         agentMsg.innerHTML = errHtml;
         if (typeof refreshFileTree === 'function') {
-            try { await refreshFileTree(); } catch(e) { console.warn(e); }
+            try { await refreshFileTree(); } catch (e) { console.warn(e); }
         }
     } finally {
         clearInterval(ticker);
@@ -3218,7 +3218,7 @@ async function sendAgentTask() {
     }
 }
 
-window.continueAgentRemaining = function(origPrompt) {
+window.continueAgentRemaining = function (origPrompt) {
     const input = document.getElementById("agentPromptInput");
     if (input) {
         input.value = `Tiếp tục hoàn thiện các tệp còn thiếu trong dự án theo yêu cầu: "${origPrompt}". BẮT BUỘC gọi write_file để tạo các tệp chưa có với code hoàn chỉnh 100%.`;
@@ -3513,7 +3513,7 @@ async function applyAllAgentOperations() {
                 if (data.ok && data.content) {
                     op.content = data.content;
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
     }
 
@@ -3750,8 +3750,8 @@ async function submitCreateProject() {
     } catch (err) {
         clearTimeout(timeoutId);
         console.error("Error creating project:", err);
-        const msg = err.name === "AbortError" 
-            ? "Lệnh khởi tạo CLI mất quá nhiều thời gian (>90s). Vui lòng kiểm tra lại kết nối mạng." 
+        const msg = err.name === "AbortError"
+            ? "Lệnh khởi tạo CLI mất quá nhiều thời gian (>90s). Vui lòng kiểm tra lại kết nối mạng."
             : (err.message || "Lỗi khi gọi API tạo dự án.");
         if (errBox) {
             errBox.textContent = "❌ " + msg;
@@ -5230,11 +5230,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (Array.isArray(terminalSessions) && terminalSessions.length > 0) {
                     terminalSessions.forEach(s => {
                         if (s.fitAddon && typeof s.fitAddon.fit === 'function') {
-                            try { s.fitAddon.fit(); } catch {}
+                            try { s.fitAddon.fit(); } catch { }
                         }
                     });
                 } else if (window.fitAddon && typeof window.fitAddon.fit === 'function') {
-                    try { window.fitAddon.fit(); } catch {}
+                    try { window.fitAddon.fit(); } catch { }
                 }
             }).observe(termPanes);
         }
@@ -5253,7 +5253,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // Mobile IDE Tab Switcher
-window.switchMobileIdeTab = function(tabName) {
+window.switchMobileIdeTab = function (tabName) {
     const container = document.querySelector('.vscode-main-container');
     if (container) {
         container.setAttribute('data-mobile-tab', tabName);
@@ -5261,7 +5261,7 @@ window.switchMobileIdeTab = function(tabName) {
     document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.remove('active'));
     const btn = document.getElementById(
         tabName === 'explorer' ? 'mTabBtnExplorer' :
-        tabName === 'editor' ? 'mTabBtnEditor' : 'mTabBtnAgent'
+            tabName === 'editor' ? 'mTabBtnEditor' : 'mTabBtnAgent'
     );
     if (btn) btn.classList.add('active');
 
