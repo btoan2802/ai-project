@@ -1959,6 +1959,7 @@ async function loadActivePorts() {
         const res = await fetch(`/api/ide/ports?project=${encodeURIComponent(activeProjectId || "")}`, {
             headers: getApiHeaders()
         });
+        if (!res.ok) return;
         const data = await res.json();
         const container = document.getElementById("portsListTableContainer");
         const countBadge = document.getElementById("portsActiveCount");
@@ -2171,7 +2172,7 @@ async function fetchDynamicPortAndRun(type, prefix = "") {
 
     if (type === "dotnet") {
         showToastNotification(`Đang khởi chạy .NET trên cổng động :${port}...`);
-        runCustomTerminalCmd(`dotnet run --urls http://127.0.0.1:${port}`);
+        runCustomTerminalCmd(`dotnet run --no-launch-profile --urls http://127.0.0.1:${port}`);
     } else if (type === "angular") {
         showToastNotification(`Đang khởi chạy Angular trên cổng động :${port}...`);
         const projInfo = detectProjectType();

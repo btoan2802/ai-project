@@ -3035,11 +3035,12 @@ QUY TRÌNH 4 BƯỚC THỰC THI TỰ ĐỘNG CHUẨN ANTIGRAVITY (AUTONOMOUS 4-S
    - Luôn khảo sát cấu trúc dự án (list_dir, grep_search) và gọi read_file đọc các tệp cấu hình chính (Program.cs, .csproj, package.json, index.html) trước khi chỉnh sửa.
 2. PHA 2 (PLAN):
    - Xác định danh sách các file cần tạo/sửa ngắn gọn, thực tế.
-3. PHA 3 (IMPLEMENT):
-   - Viết mã nguồn hoàn chỉnh 100%, giao diện thẩm mỹ cao (CSS variables, Flexbox/Grid, responsive mobile, animation mượt mà, nghiệp vụ tính toán chuẩn xác), TUYỆT ĐỐI CẤM để placeholder '// TODO', '...' hay hàm rỗng.
+3. PHA 3 (IMPLEMENT - MÃ NGUỒN LÀ TRÊN HẾT):
+   - ƯU TIÊN SỐ 1: Bắt tay ngay vào việc gọi 'write_file' để tạo các tệp mã nguồn hoàn chỉnh (index.html, style.css, script.js hoặc Controllers, Models, Views) NGAY TỪ LƯỢT ĐẦU TIÊN (Turn 1).
+   - GIỚI HẠN HÌNH ẢNH (TỐI ĐA 1-2 ẢNH): Chỉ gọi generate_image tối đa 1 hoặc 2 lần (ví dụ: 1 banner chính 'images/hero.jpg' và 1 sản phẩm). TUYỆT ĐỐI KHÔNG sinh nhiều lượt chỉ để tạo ảnh mà chưa viết mã nguồn!
    - Với ứng dụng công cụ/tính toán (tính lương, tính điểm, to-do, máy tính, dashboard): TUYỆT ĐỐI KHÔNG gọi generate_image tạo ảnh thừa; tập trung 100% vào HTML/CSS/JS chất lượng cao.
-   - Chỉ gọi generate_image khi trang thực sự cần hình ảnh thực tế (shop, landing page, blog, tỏ tình).
    - Với dự án Web (HTML/CSS/JS): BẮT BUỘC tách thành 3 tệp hoàn chỉnh: 'index.html', 'style.css', 'script.js'.
+   - Viết mã nguồn hoàn chỉnh 100%, giao diện thẩm mỹ cao (CSS variables, Flexbox/Grid, responsive mobile, animation mượt mà, nghiệp vụ tính toán chuẩn xác), TUYỆT ĐỐI CẤM để placeholder '// TODO', '...' hay hàm rỗng.
 4. PHA 4 (VERIFY & SELF-HEAL):
    - Đối với dự án biên dịch (.NET /.csproj hoặc Node/Angular/package.json): BẮT BUỘC gọi run_command(""dotnet build"") hoặc run_command(""npm run build"") trước khi kết thúc.
    - Nếu ExitCode != 0, bạn phải đọc chi tiết lỗi compiler, gọi read_file + patch_file sửa lỗi và chạy lại build cho tới khi đạt 0 Error(s).
@@ -3475,8 +3476,25 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                             _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
 
-                            // Execute the tool on the real workspace filesystem
-                            string toolResult = await ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
+                            // Execute the tool on the real workspace filesystem with 15s safety timeout
+                            string toolResult;
+                            try
+                            {
+                                var toolTask = ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
+                                if (await Task.WhenAny(toolTask, Task.Delay(15000)) == toolTask)
+                                {
+                                    toolResult = await toolTask;
+                                }
+                                else
+                                {
+                                    toolResult = $"ERROR: Thao tác thực thi công cụ '{toolName}' bị quá thời gian cho phép (15s timeout). Bỏ qua và chuyển sang bước kế tiếp.";
+                                    _logger.LogWarning("Tool execution timed out after 15s: {ToolName}", toolName);
+                                }
+                            }
+                            catch (Exception exTool)
+                            {
+                                toolResult = $"ERROR: {exTool.Message}";
+                            }
 
                             int lines = 0;
                             if ((toolName == "write_file" || toolName == "edit_file" || toolName == "patch_file") &&
@@ -3909,56 +3927,21 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         var dir = Path.GetDirectoryName(fullPath);
                         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
+                        int existingImgCount = modifiedFiles.Count(f => f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || 
+                                                                       f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
+                                                                       f.EndsWith(".webp", StringComparison.OrdinalIgnoreCase));
+                        if (existingImgCount >= 2)
+                        {
+                            return "Đã có đủ 2 hình ảnh minh họa trong dự án. BÂY GIỜ BẮT BUỘC PHẢI GỌI 'write_file' ĐỂ TẠO CÁC TỆP MÃ NGUỒN (HTML, CSS, JS hoặc C#/Views) NGAY!";
+                        }
+
                         string ext = Path.GetExtension(fullPath).ToLowerInvariant();
                         string format = ext == ".png" ? "image/png" : ext == ".webp" ? "image/webp" : ext == ".svg" ? "image/svg+xml" : "image/jpeg";
                         bool generated = false;
 
-                        // Priority 1: AI image generation via ImageGenerationService
-                        if (!generated && imageGenService != null)
+                        // High-Speed Real Photography Fetcher (Unsplash HD / Picsum) - 300ms, zero token burn
+                        try
                         {
-                            try
-                            {
-                                var imgReq = new ViewModels.ImageGenerationRequestModel
-                                {
-                                    Prompt = prompt,
-                                    Aspect_Ratio = string.IsNullOrWhiteSpace(aspectRatio) ? "16:9" : aspectRatio
-                                };
-                                var res = await imageGenService.GenerateImageAsync(imgReq);
-                                if (res != null && res["success"]?.GetValue<bool>() == true)
-                                {
-                                    string? b64 = res["imageBase64"]?.ToString();
-                                    if (!string.IsNullOrEmpty(b64))
-                                    {
-                                        await System.IO.File.WriteAllBytesAsync(fullPath, Convert.FromBase64String(b64));
-                                        generated = true;
-                                        Console.WriteLine($"[generate_image] AI generated image saved to: {outputPath}");
-                                    }
-                                    else
-                                    {
-                                        string? imgUrl = res["imageUrl"]?.ToString();
-                                        if (!string.IsNullOrEmpty(imgUrl) && !string.IsNullOrEmpty(webRootPath))
-                                        {
-                                            string localUploadPath = Path.Combine(webRootPath, imgUrl.TrimStart('/'));
-                                            if (System.IO.File.Exists(localUploadPath))
-                                            {
-                                                System.IO.File.Copy(localUploadPath, fullPath, true);
-                                                generated = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            catch (Exception exImg)
-                            {
-                                Console.WriteLine($"[generate_image] AI gen failed: {exImg.Message}");
-                            }
-                        }
-
-                        if (!generated)
-                        {
-                            // Priority 2: Real Photography fallback (Unsplash HD / Picsum)
-                            try
-                            {
                                 string outLower = (outputPath ?? "").ToLowerInvariant();
                                 string pLower = (prompt ?? "").ToLowerInvariant();
 
@@ -4027,7 +4010,6 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                 }
                             }
                             catch { }
-                        }
 
                         if (!generated)
                         {
