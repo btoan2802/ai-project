@@ -1224,6 +1224,20 @@ function toggleLeftSidebar() {
     triggerEditorLayout();
 }
 
+function openRightAgentPanel() {
+    const panel = document.getElementById("rightAgentPanel");
+    const resizer = document.getElementById("resizerAgent");
+    if (!panel) return;
+    const isHidden = panel.style.display === "none" || panel.classList.contains("ide-panel-hidden") || panel.classList.contains("d-none");
+    if (isHidden) {
+        panel.classList.remove("ide-panel-hidden", "d-none");
+        panel.style.display = "flex";
+        if (resizer) resizer.style.display = "block";
+        triggerEditorLayout();
+    }
+}
+window.openRightAgentPanel = openRightAgentPanel;
+
 function toggleRightAgentPanel() {
     const panel = document.getElementById("rightAgentPanel");
     const resizer = document.getElementById("resizerAgent");
@@ -2722,16 +2736,56 @@ function checkTerminalOutputForErrors(chunk) {
 }
 
 function askAgentToFixTerminalError() {
-    const err = window.lastTerminalErrorSnippet || "";
     openRightAgentPanel();
-    const input = document.getElementById("agentTaskInput");
-    if (input) {
-        input.value = `/fix Sửa lỗi trong Terminal:\n${err}`;
-        sendAgentTask();
+
+    // 2. Đọc 30–50 dòng log gần nhất từ buffer của xterm.js (hoặc biến lưu output lệnh gần nhất)
+    let terminalLogs = "";
+    if (xtermInstance && xtermInstance.buffer && xtermInstance.buffer.active) {
+        const buffer = xtermInstance.buffer.active;
+        const lines = [];
+        const total = buffer.length;
+        const start = Math.max(0, total - 50);
+        for (let i = start; i < total; i++) {
+            const line = buffer.getLine(i);
+            if (line) {
+                lines.push(line.translateToString(true));
+            }
+        }
+        terminalLogs = lines.join('\n');
     }
+
+    if (!terminalLogs || terminalLogs.trim().length === 0) {
+        if (window.lastTerminalErrorSnippet) {
+            terminalLogs = window.lastTerminalErrorSnippet;
+        }
+    }
+
+    // Lọc bỏ toàn bộ mã màu điều khiển ANSI (\x1b\[[0-9;]*[a-zA-Z]) để lấy văn bản sạch
+    terminalLogs = (terminalLogs || "").replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+
+    const input = document.getElementById("agentTaskInput");
+    if (!terminalLogs) {
+        if (typeof showToastNotification === "function") {
+            showToastNotification("Terminal hiện chưa có log lỗi để gửi.");
+        }
+        if (input) input.focus();
+        return;
+    }
+
+    // 3. Điền nội dung vào ô nhập chat của Btoan Agent theo mẫu
+    const promptText = `Hãy kiểm tra và sửa lỗi sau trong Terminal của dự án:\n\`\`\`\n${terminalLogs}\n\`\`\``;
+    if (input) {
+        input.value = promptText;
+        // Tự động kích hoạt gửi tới Btoan Agent
+        if (typeof sendAgentTask === "function") {
+            sendAgentTask();
+        }
+    }
+
     const fixBtn = document.getElementById("btnTerminalAskAgentFix");
     if (fixBtn) fixBtn.classList.add("d-none");
 }
+window.askAgentToFixTerminalError = askAgentToFixTerminalError;
 
 async function restoreProjectCheckpoint(checkpointId) {
     if (!checkpointId || !activeProjectId) return;

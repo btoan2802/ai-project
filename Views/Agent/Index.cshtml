@@ -1301,7 +1301,20 @@
     <input type="file" id="folderUploadInput" webkitdirectory directory multiple style="display:none;" onchange="handleFolderSelected(event)">
     <input type="file" id="filesUploadInput" multiple style="display:none;" onchange="handleFilesSelected(event)">
 
-    <!-- Scripts -->
-    <script src="~/js/agent_ide.js?v=20261126_autoexpand_v3" asp-append-version="true"></script>
+    <!-- Safety Fallbacks & Scripts -->
+    <script>
+        window.openRightAgentPanel = window.openRightAgentPanel || function () {
+            const panel = document.getElementById("rightAgentPanel");
+            const resizer = document.getElementById("resizerAgent");
+            if (!panel) return;
+            if (panel.style.display === "none" || panel.classList.contains("ide-panel-hidden") || panel.classList.contains("d-none")) {
+                panel.classList.remove("ide-panel-hidden", "d-none");
+                panel.style.display = "flex";
+                if (resizer) resizer.style.display = "block";
+                if (typeof triggerEditorLayout === "function") triggerEditorLayout();
+            }
+        };
+    </script>
+    <script src="~/js/agent_ide.js?v=20261126_fixtool_v4" asp-append-version="true"></script>
 </body>
 </html>
