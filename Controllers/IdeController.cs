@@ -2951,13 +2951,9 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 {
                     selectedModel = "gemini-3.8-flash";
                 }
-                else if (model.Model.Contains("3.5-flash-lite") || model.Model.Contains("flash-lite"))
+                else
                 {
                     selectedModel = "gemini-3.5-flash-lite";
-                }
-                else if (!model.Model.Contains("2.5"))
-                {
-                    selectedModel = model.Model;
                 }
             }
             bool isFastMode = string.Equals(model.Mode, "fast", StringComparison.OrdinalIgnoreCase);
@@ -3368,7 +3364,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 {
                     if (currentTurn > 0)
                     {
-                        await Task.Delay(400);
+                        await Task.Delay(800);
                     }
                     currentTurn++;
                     await SendSseEventAsync("turn_start", new { turn = currentTurn, message = $"Btoan Agent đang phân tích & lên phương án thực thi (Lượt {currentTurn}/{maxTurns})..." });
@@ -3913,8 +3909,12 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         var dir = Path.GetDirectoryName(fullPath);
                         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
+                        string ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                        string format = ext == ".png" ? "image/png" : ext == ".webp" ? "image/webp" : ext == ".svg" ? "image/svg+xml" : "image/jpeg";
                         bool generated = false;
-                        if (imageGenService != null)
+
+                        // Priority 1: AI image generation via ImageGenerationService
+                        if (!generated && imageGenService != null)
                         {
                             try
                             {
@@ -3931,6 +3931,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     {
                                         await System.IO.File.WriteAllBytesAsync(fullPath, Convert.FromBase64String(b64));
                                         generated = true;
+                                        Console.WriteLine($"[generate_image] AI generated image saved to: {outputPath}");
                                     }
                                     else
                                     {
@@ -3947,15 +3948,15 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     }
                                 }
                             }
-                            catch { }
+                            catch (Exception exImg)
+                            {
+                                Console.WriteLine($"[generate_image] AI gen failed: {exImg.Message}");
+                            }
                         }
-
-                        string ext = Path.GetExtension(fullPath).ToLowerInvariant();
-                        string format = ext == ".png" ? "image/png" : ext == ".webp" ? "image/webp" : ext == ".svg" ? "image/svg+xml" : "image/jpeg";
 
                         if (!generated)
                         {
-                            // Real Photography fallback (Unsplash HD / Picsum)
+                            // Priority 2: Real Photography fallback (Unsplash HD / Picsum)
                             try
                             {
                                 string outLower = (outputPath ?? "").ToLowerInvariant();

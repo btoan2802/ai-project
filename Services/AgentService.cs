@@ -113,7 +113,7 @@ NỘI DUNG CÁC FILE LIÊN QUAN TRONG DỰ ÁN:
                     }
                 };
 
-                var geminiResult = await _geminiService.GenerateContentAsync("gemini-3.5-flash", geminiPayload);
+                var geminiResult = await _geminiService.GenerateContentAsync("gemini-3.5-flash-lite", geminiPayload);
                 string aiRaw = ExtractTextFromGeminiResult(geminiResult);
                 string cleanJson = CleanJsonString(aiRaw);
 
@@ -309,7 +309,7 @@ MÃ NGUỒN HIỆN TẠI:
                     }
                 };
 
-                var res = await _geminiService.GenerateContentAsync("gemini-3.5-flash", payload);
+                var res = await _geminiService.GenerateContentAsync("gemini-3.5-flash-lite", payload);
                 string aiRaw = ExtractTextFromGeminiResult(res);
                 string cleanJson = CleanJsonString(aiRaw);
 

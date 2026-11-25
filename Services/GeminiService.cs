@@ -102,22 +102,26 @@ namespace BtoanAiNet.Services
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
 
-            // Priority 1: User requested model (if not discontinued 2.5)
-            if (!string.IsNullOrWhiteSpace(cleanModel) && !cleanModel.Contains("2.5"))
-            {
-                candidateModels.Add(cleanModel);
-            }
-            if (cleanModel.Contains("pro") || cleanModel.Contains("3.8"))
+            // High Availability & Tested Working Fallback Chain:
+            // Priority 1: gemini-3.5-flash-lite (Rock solid 200 OK, full function calling, high RPM)
+            // Priority 2: gemini-flash-lite-latest (Fast lite backup)
+            // Priority 3: gemini-3.8-flash (Advanced reasoning/pro backup)
+            if (cleanModel.Contains("3.8") || cleanModel.Contains("pro"))
             {
                 candidateModels.Add("gemini-3.8-flash");
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
-
-            // High Availability & Tested Working Fallback Chain:
-            candidateModels.Add("gemini-3.5-flash-lite");
-            candidateModels.Add("gemini-flash-lite-latest");
-            candidateModels.Add("gemini-3.8-flash");
-            candidateModels.Add("gemini-3.5-flash");
-            candidateModels.Add("gemini-flash-latest");
+            else
+            {
+                candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add("gemini-3.8-flash");
+                if (!string.IsNullOrWhiteSpace(cleanModel) && !cleanModel.Contains("2.5") && !cleanModel.Contains("lite"))
+                {
+                    candidateModels.Add(cleanModel);
+                }
+            }
             candidateModels = candidateModels.Where(m => !m.Contains("2.5")).Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
@@ -127,14 +131,13 @@ namespace BtoanAiNet.Services
             }
             if (payload["generationConfig"] is JsonObject gConfig)
             {
-                if (!isThinkingMode)
-                {
-                    gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
-                }
-                else if (!gConfig.ContainsKey("thinkingConfig"))
+                if (isThinkingMode && !gConfig.ContainsKey("thinkingConfig"))
                 {
                     gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 2048 };
                 }
+                // NOTE: Do NOT set thinkingBudget=0 here — gemini-3.5-flash-lite/gemini-flash-lite-latest
+                // reject thinkingConfig entirely with HTTP 400 "Invalid argument".
+                // We strip it per-model in the per-model payload loop below.
             }
 
             var allKeys = GetConfiguredApiKeys();
@@ -207,10 +210,14 @@ namespace BtoanAiNet.Services
                         if (!response.IsSuccessStatusCode)
                         {
                             int statusCode = (int)response.StatusCode;
-                            // Fast retry (1.5s) on temporary spikes: 503, 429, 500, 502
+                            // Fast retry on temporary spikes: 503, 429, 500, 502
                             if (statusCode == 503 || statusCode == 429 || statusCode == 500 || statusCode == 502)
                             {
-                                await Task.Delay(1500);
+                                if (statusCode == 429 && onStatusUpdate != null)
+                                {
+                                    try { await onStatusUpdate("⏳ Hạn mức AI đang bận (429), đang tự động điều tiết và luân chuyển khóa..."); } catch { }
+                                }
+                                await Task.Delay(2000);
                                 try
                                 {
                                     using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
@@ -275,21 +282,19 @@ namespace BtoanAiNet.Services
 
             var candidateModels = new List<string>();
             string cleanModel = (model ?? "").Trim().ToLowerInvariant();
-            if (isThinkingMode || cleanModel.Contains("pro"))
+            if (isThinkingMode || cleanModel.Contains("pro") || cleanModel.Contains("3.8"))
             {
-                candidateModels.Add("gemini-3.5-flash");
+                candidateModels.Add("gemini-3.8-flash");
                 candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-3-flash-preview");
                 candidateModels.Add("gemini-flash-lite-latest");
             }
             else
             {
-                candidateModels.Add("gemini-3.5-flash");
                 candidateModels.Add("gemini-3.5-flash-lite");
-                candidateModels.Add("gemini-3-flash-preview");
                 candidateModels.Add("gemini-flash-lite-latest");
+                candidateModels.Add("gemini-3.8-flash");
             }
-            candidateModels = candidateModels.Distinct().ToList();
+            candidateModels = candidateModels.Where(m => !m.Contains("2.5")).Distinct().ToList();
 
             // Ensure thinkingBudget is 0 in Fast mode, or > 0 in Thinking mode
             if (!payload.ContainsKey("generationConfig") || payload["generationConfig"] == null)
@@ -298,14 +303,13 @@ namespace BtoanAiNet.Services
             }
             if (payload["generationConfig"] is JsonObject gConfig)
             {
-                if (!isThinkingMode)
-                {
-                    gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
-                }
-                else if (!gConfig.ContainsKey("thinkingConfig"))
+                if (isThinkingMode && !gConfig.ContainsKey("thinkingConfig"))
                 {
                     gConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 2048 };
                 }
+                // NOTE: Do NOT set thinkingBudget=0 here — gemini-3.5-flash-lite/gemini-flash-lite-latest
+                // reject thinkingConfig entirely with HTTP 400 "Invalid argument".
+                // We strip it per-model in the per-model payload loop below.
             }
 
             var allKeys = GetConfiguredApiKeys();
