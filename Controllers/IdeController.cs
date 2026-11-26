@@ -1201,7 +1201,13 @@ export class AppComponent {{
 
             if (actualExe.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
             {
-                if (actualArgs.Contains("build", StringComparison.OrdinalIgnoreCase))
+                bool isBuildCommand = !actualArgs.Contains("--no-build", StringComparison.OrdinalIgnoreCase) &&
+                    (actualArgs.StartsWith("build", StringComparison.OrdinalIgnoreCase) || actualArgs.Contains(" build ", StringComparison.OrdinalIgnoreCase));
+
+                bool isRestoreCommand = !actualArgs.Contains("--no-restore", StringComparison.OrdinalIgnoreCase) &&
+                    (actualArgs.StartsWith("restore", StringComparison.OrdinalIgnoreCase) || actualArgs.Contains(" restore ", StringComparison.OrdinalIgnoreCase));
+
+                if (isBuildCommand)
                 {
                     if (!actualArgs.Contains("disable-build-servers", StringComparison.OrdinalIgnoreCase))
                     {
@@ -1212,7 +1218,7 @@ export class AppComponent {{
                         actualArgs += " -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
                     }
                 }
-                else if (actualArgs.Contains("restore", StringComparison.OrdinalIgnoreCase))
+                else if (isRestoreCommand)
                 {
                     if (!actualArgs.Contains("disable-build-servers", StringComparison.OrdinalIgnoreCase))
                     {
