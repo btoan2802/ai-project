@@ -157,18 +157,22 @@ namespace BtoanAiNet.Controllers
                 requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-For", Request.HttpContext.Connection.RemoteIpAddress.ToString());
             }
 
-            // Copy body for write methods
+            // Copy body for write methods (buffering into ByteArrayContent to ensure Content-Length is sent and avoid chunked transfer for forms)
             if (HttpMethods.IsPost(Request.Method) || HttpMethods.IsPut(Request.Method) || HttpMethods.IsPatch(Request.Method))
             {
-                if (Request.Body != null && Request.ContentLength > 0)
+                using var ms = new MemoryStream();
+                if (Request.Body != null)
                 {
-                    var streamContent = new StreamContent(Request.Body);
-                    if (!string.IsNullOrEmpty(Request.ContentType))
-                    {
-                        streamContent.Headers.TryAddWithoutValidation("Content-Type", Request.ContentType);
-                    }
-                    requestMessage.Content = streamContent;
+                    await Request.Body.CopyToAsync(ms);
                 }
+                byte[] bodyBytes = ms.ToArray();
+                var byteContent = new ByteArrayContent(bodyBytes);
+                if (!string.IsNullOrEmpty(Request.ContentType))
+                {
+                    byteContent.Headers.TryAddWithoutValidation("Content-Type", Request.ContentType);
+                }
+                byteContent.Headers.ContentLength = bodyBytes.Length;
+                requestMessage.Content = byteContent;
             }
 
             try
