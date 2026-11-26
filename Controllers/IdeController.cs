@@ -3360,37 +3360,41 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
 
             async Task SendSseEventAsync(string eventType, object data)
             {
-                if (!isStream) return;
-                await sseLock.WaitAsync();
+                if (!isStream || HttpContext.RequestAborted.IsCancellationRequested) return;
+                if (!await sseLock.WaitAsync(TimeSpan.FromSeconds(3))) return;
                 try
                 {
                     string json = JsonSerializer.Serialize(data);
                     string sse = $"event: {eventType}\ndata: {json}\n\n";
                     byte[] bytes = Encoding.UTF8.GetBytes(sse);
-                    await Response.Body.WriteAsync(bytes, 0, bytes.Length);
-                    await Response.Body.FlushAsync();
+                    using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(HttpContext.RequestAborted);
+                    writeCts.CancelAfter(TimeSpan.FromSeconds(5));
+                    await Response.Body.WriteAsync(bytes, 0, bytes.Length, writeCts.Token);
+                    await Response.Body.FlushAsync(writeCts.Token);
                 }
                 catch { }
                 finally
                 {
-                    sseLock.Release();
+                    try { sseLock.Release(); } catch { }
                 }
             }
 
             async Task SendKeepaliveCommentAsync()
             {
-                if (!isStream) return;
-                await sseLock.WaitAsync();
+                if (!isStream || HttpContext.RequestAborted.IsCancellationRequested) return;
+                if (!await sseLock.WaitAsync(TimeSpan.FromSeconds(2))) return;
                 try
                 {
                     byte[] bytes = Encoding.UTF8.GetBytes(": keepalive\n\n");
-                    await Response.Body.WriteAsync(bytes, 0, bytes.Length);
-                    await Response.Body.FlushAsync();
+                    using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(HttpContext.RequestAborted);
+                    writeCts.CancelAfter(TimeSpan.FromSeconds(4));
+                    await Response.Body.WriteAsync(bytes, 0, bytes.Length, writeCts.Token);
+                    await Response.Body.FlushAsync(writeCts.Token);
                 }
                 catch { }
                 finally
                 {
-                    sseLock.Release();
+                    try { sseLock.Release(); } catch { }
                 }
             }
 
@@ -3982,19 +3986,20 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
                             _logger.LogInformation("Agent executed Tool [{Turn}/{Max}]: {ToolName}", currentTurn, maxTurns, toolName);
 
-                            // Execute the tool on the real workspace filesystem with 15s safety timeout
+                            // Execute the tool on the real workspace filesystem with safety timeout (60s for CLI commands, 30s for file/image ops)
                             string toolResult;
                             try
                             {
+                                int toolWaitMs = toolName == "run_command" ? 60000 : 30000;
                                 var toolTask = ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
-                                if (await Task.WhenAny(toolTask, Task.Delay(15000)) == toolTask)
+                                if (await Task.WhenAny(toolTask, Task.Delay(toolWaitMs)) == toolTask)
                                 {
                                     toolResult = await toolTask;
                                 }
                                 else
                                 {
-                                    toolResult = $"ERROR: Thao tác thực thi công cụ '{toolName}' bị quá thời gian cho phép (15s timeout). Bỏ qua và chuyển sang bước kế tiếp.";
-                                    _logger.LogWarning("Tool execution timed out after 15s: {ToolName}", toolName);
+                                    toolResult = $"ERROR: Thao tác thực thi công cụ '{toolName}' bị quá thời gian cho phép ({toolWaitMs / 1000}s timeout). Bỏ qua và chuyển sang bước kế tiếp.";
+                                    _logger.LogWarning("Tool execution timed out after {Sec}s: {ToolName}", toolWaitMs / 1000, toolName);
                                 }
                             }
                             catch (Exception exTool)
@@ -4771,6 +4776,23 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         {
                             timeoutSec = Math.Min(tSec, 180);
                         }
+
+                        if (lowerCmd.Contains("dotnet restore"))
+                        {
+                            timeoutSec = Math.Min(timeoutSec, 30);
+                            if (!command.Contains("--disable-parallel", StringComparison.OrdinalIgnoreCase))
+                            {
+                                command += " --disable-parallel --nologo";
+                            }
+                        }
+                        else if (lowerCmd.Contains("dotnet build"))
+                        {
+                            if (!command.Contains("UseSharedCompilation", StringComparison.OrdinalIgnoreCase))
+                            {
+                                command += " --nologo -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
+                            }
+                        }
+
                         var (ok, output) = await RunCliProcessAsync(projectPath, command, "", timeoutSec);
                         if (command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase) && ok)
                         {

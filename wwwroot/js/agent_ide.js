@@ -2802,27 +2802,27 @@ async function loadAgentChatHistory(projectId) {
             }
         } catch (e) { }
 
-    const localKey = "btoan_chat_history_" + projectId;
-    if (!Array.isArray(list) || list.length === 0) {
-        try {
-            const cached = localStorage.getItem(localKey);
-            if (cached) {
-                const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    list = parsed;
+        const localKey = "btoan_chat_history_" + projectId;
+        if (!Array.isArray(list) || list.length === 0) {
+            try {
+                const cached = localStorage.getItem(localKey);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        list = parsed;
+                    }
                 }
-            }
-        } catch (e) { }
-    } else {
-        try {
-            localStorage.setItem(localKey, JSON.stringify(list));
-        } catch (e) { }
-    }
+            } catch (e) { }
+        } else {
+            try {
+                localStorage.setItem(localKey, JSON.stringify(list));
+            } catch (e) { }
+        }
 
-    if (Array.isArray(list) && list.length > 0) {
-        if (splash) splash.style.display = "none";
-        container.style.display = "flex";
-        container.innerHTML = "";
+        if (Array.isArray(list) && list.length > 0) {
+            if (splash) splash.style.display = "none";
+            container.style.display = "flex";
+            container.innerHTML = "";
 
             list.forEach(item => {
                 if (item.role === "user") {
@@ -3434,8 +3434,8 @@ async function sendAgentTask() {
                                 pill.innerHTML = `<i class="bi bi-image text-info me-1"></i> Đã tạo ảnh ${escapeHtml(fileName)}`;
                                 pill.onclick = () => showImagePreviewModal(rawTarget);
                             } else if (eventData.tool === 'run_command') {
-                                pill.className = "agent-action-pill command";
-                                pill.innerHTML = `<i class="bi bi-terminal text-info me-1"></i> ${escapeHtml(rawTarget)}`;
+                                // Handled by command_run event with exitCode badge
+                                return;
                             } else {
                                 pill.className = "agent-action-pill read";
                                 pill.innerHTML = `<i class="bi bi-check2 text-success me-1"></i> ${escapeHtml(fileName)}${linesSuffix}`;
