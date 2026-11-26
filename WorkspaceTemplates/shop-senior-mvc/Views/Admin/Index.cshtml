@@ -1,0 +1,98 @@
+@model List<shop_senior_mvc.Models.Order>
+@{
+    ViewData["Title"] = "Trang quản trị (Admin Dashboard)";
+    decimal totalRevenue = ViewBag.TotalRevenue != null ? (decimal)ViewBag.TotalRevenue : 0;
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h2 class="fw-bold text-primary mb-1">
+            <i class="bi bi-speedometer2 me-2"></i>Bảng điều khiển quản trị
+        </h2>
+        <p class="text-secondary small mb-0">Hệ thống tổng quan và vận hành cửa hàng Sneaker Shop</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Products" class="btn btn-outline-light btn-sm rounded-pill px-3">
+            <i class="bi bi-box-seam me-1"></i>Quản lý sản phẩm
+        </a>
+        <a asp-action="Orders" class="btn btn-outline-info btn-sm rounded-pill px-3">
+            <i class="bi bi-receipt me-1"></i>Quản lý đơn hàng
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-start border-primary border-4">
+            <div class="text-secondary small">Tổng sản phẩm</div>
+            <div class="fs-3 fw-bold text-white mt-1">@ViewBag.TotalProducts</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-start border-success border-4">
+            <div class="text-secondary small">Tổng đơn hàng</div>
+            <div class="fs-3 fw-bold text-white mt-1">@ViewBag.TotalOrders</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-start border-info border-4">
+            <div class="text-secondary small">Doanh thu tích lũy</div>
+            <div class="fs-3 fw-bold text-info mt-1">@totalRevenue.ToString("N0") đ</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-start border-warning border-4">
+            <div class="text-secondary small">Thành viên đăng ký</div>
+            <div class="fs-3 fw-bold text-white mt-1">@ViewBag.TotalUsers</div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Orders -->
+<div class="card p-4 shadow">
+    <h4 class="fw-bold text-white mb-3">
+        <i class="bi bi-clock-history text-info me-2"></i>Đơn hàng gần đây
+    </h4>
+
+    @if (Model == null || Model.Count == 0)
+    {
+        <div class="text-center py-4 text-secondary">
+            Chưa có đơn hàng nào được tạo.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Mã đơn</th>
+                        <th>Khách hàng</th>
+                        <th>Điện thoại</th>
+                        <th>Tổng tiền</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày đặt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in Model)
+                    {
+                        <tr>
+                            <td class="fw-bold text-info">#@o.Id</td>
+                            <td>@o.CustomerName</td>
+                            <td>@o.CustomerPhone</td>
+                            <td class="fw-bold text-success">@o.TotalAmount.ToString("N0") đ</td>
+                            <td>
+                                <span class="badge @(o.Status == "Đã giao" ? "bg-success" : "bg-warning text-dark")">
+                                    @o.Status
+                                </span>
+                            </td>
+                            <td class="small text-secondary">@o.OrderDate.ToString("dd/MM/yyyy HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

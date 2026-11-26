@@ -1,0 +1,70 @@
+@model shop_senior_mvc.Models.Product
+@{
+    ViewData["Title"] = "Chỉnh sửa sản phẩm";
+    var categories = ViewBag.Categories as List<shop_senior_mvc.Models.Category> ?? new List<shop_senior_mvc.Models.Category>();
+}
+
+<div class="row justify-content-center mt-3">
+    <div class="col-md-7">
+        <div class="card p-4 shadow">
+            <div class="d-flex align-items-center justify-content-between mb-3 border-bottom border-secondary pb-3">
+                <h4 class="fw-bold text-primary mb-0">
+                    <i class="bi bi-pencil-square me-2"></i>Chỉnh sửa sản phẩm #@Model.Id
+                </h4>
+                <a asp-action="Products" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>Quay lại
+                </a>
+            </div>
+
+            <form asp-action="EditProduct" method="post">
+                <input type="hidden" asp-for="Id" />
+
+                <div class="mb-3">
+                    <label class="form-label text-secondary small">Tên sản phẩm</label>
+                    <input asp-for="Name" class="form-control bg-dark text-white border-secondary" required />
+                    <span asp-validation-for="Name" class="text-danger small"></span>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-secondary small">Danh mục</label>
+                        <select asp-for="CategoryId" class="form-select bg-dark text-white border-secondary" required>
+                            @foreach (var c in categories)
+                            {
+                                if (c.Id == Model.CategoryId)
+                                {
+                                    <option value="@c.Id" selected>@c.Name</option>
+                                }
+                                else
+                                {
+                                    <option value="@c.Id">@c.Name</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-secondary small">Giá bán (VNĐ)</label>
+                        <input asp-for="Price" type="number" step="1000" min="0" class="form-control bg-dark text-white border-secondary" required />
+                        <span asp-validation-for="Price" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label text-secondary small">Đường dẫn hình ảnh (URL)</label>
+                    <input asp-for="ImageUrl" class="form-control bg-dark text-white border-secondary" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label text-secondary small">Mô tả sản phẩm</label>
+                    <textarea asp-for="Description" rows="4" class="form-control bg-dark text-white border-secondary"></textarea>
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-warning text-dark fw-bold py-2">
+                        <i class="bi bi-save me-1"></i>Cập nhật thông tin
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

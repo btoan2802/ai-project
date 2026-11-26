@@ -1,0 +1,78 @@
+@model List<shop_senior_mvc.Models.Order>
+@{
+    ViewData["Title"] = "Quản lý đơn hàng";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h2 class="fw-bold text-primary mb-1">
+            <i class="bi bi-receipt me-2"></i>Quản lý đơn hàng
+        </h2>
+        <p class="text-secondary small mb-0">Theo dõi và cập nhật trạng thái đơn đặt mua của khách hàng</p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i>Về Dashboard
+    </a>
+</div>
+
+<div class="card p-4 shadow">
+    @if (Model == null || Model.Count == 0)
+    {
+        <div class="text-center py-5 text-secondary">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Chưa có đơn hàng nào trong hệ thống.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr class="text-secondary small">
+                        <th>Mã đơn</th>
+                        <th>Khách hàng</th>
+                        <th>Liên hệ</th>
+                        <th>Địa chỉ giao</th>
+                        <th>Tổng tiền</th>
+                        <th>Trạng thái</th>
+                        <th>Cập nhật</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in Model)
+                    {
+                        <tr>
+                            <td class="fw-bold text-info">#@o.Id</td>
+                            <td>
+                                <div class="fw-semibold">@o.CustomerName</div>
+                                <div class="extra-small text-secondary">@o.CustomerEmail</div>
+                            </td>
+                            <td>@o.CustomerPhone</td>
+                            <td class="small" style="max-width: 200px;">@o.ShippingAddress</td>
+                            <td class="fw-bold text-success">@o.TotalAmount.ToString("N0") đ</td>
+                            <td>
+                                <span class="badge @(o.Status == "Đã giao" ? "bg-success" : o.Status == "Đang giao" ? "bg-info text-dark" : "bg-warning text-dark")">
+                                    @o.Status
+                                </span>
+                            </td>
+                            <td>
+                                <form asp-action="UpdateOrderStatus" method="post" class="d-flex gap-1">
+                                    <input type="hidden" name="orderId" value="@o.Id" />
+                                    <select name="status" class="form-select form-select-sm bg-dark text-white border-secondary py-0" style="width: 120px;">
+                                        <option value="Chờ xác nhận" selected="@(o.Status == "Chờ xác nhận")">Chờ xác nhận</option>
+                                        <option value="Đang giao" selected="@(o.Status == "Đang giao")">Đang giao</option>
+                                        <option value="Đã giao" selected="@(o.Status == "Đã giao")">Đã giao</option>
+                                        <option value="Đã hủy" selected="@(o.Status == "Đã hủy")">Đã hủy</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-2" title="Lưu trạng thái">
+                                        <i class="bi bi-check"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
