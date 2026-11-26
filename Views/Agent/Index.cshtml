@@ -57,6 +57,19 @@
 
     <!-- Btoan Studio IDE Dark Modern CSS -->
     <link rel="stylesheet" href="~/css/agent_ide.css?v=20261126_antigravity_complete_v1" asp-append-version="true" />
+    <style>
+        @@keyframes pulseFixBtn {
+            0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); border-color: #f59e0b; }
+            70% { box-shadow: 0 0 0 7px rgba(234, 179, 8, 0); border-color: #fbbf24; }
+            100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); border-color: #f59e0b; }
+        }
+        .pulse-fix-btn {
+            animation: pulseFixBtn 1.6s infinite ease-in-out !important;
+            background: rgba(245, 158, 11, 0.2) !important;
+            color: #fef08a !important;
+            border-color: #f59e0b !important;
+        }
+    </style>
 </head>
 <body class="agent-ide-body">
 
@@ -718,7 +731,10 @@
                     <div class="d-flex align-items-center gap-2">
                         <!-- Dynamic Terminal Session Tabs in Header -->
                         <div id="terminalHeaderTabsContainer" class="d-flex align-items-center gap-1 me-2 overflow-x-auto" style="max-width: 320px;"></div>
-                        <button id="btnTerminalAskAgentFix" onclick="askAgentToFixTerminalError()" class="btn btn-xs btn-outline-warning extra-small py-0.5 px-2 d-none" title="Nhờ Agent sửa lỗi Terminal"><i class="bi bi-stars text-warning me-1"></i>Nhờ Agent sửa lỗi</button>
+                        <button id="btnAskAgentFixTerminal" onclick="askAgentToFixTerminalError()" class="btn btn-xs btn-outline-warning extra-small py-0.5 px-2" style="display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; font-weight: 500; font-size: 11px;" title="Nhờ Btoan Agent phân tích và tự động sửa lỗi Terminal">
+                            <i class="bi bi-stars text-warning"></i>
+                            <span>✨ Nhờ Agent sửa lỗi</span>
+                        </button>
                         <button onclick="createNewTerminalSession()" class="btn-icon text-secondary" title="New Terminal Session"><i class="bi bi-plus-lg"></i></button>
                         <button onclick="splitTerminalView()" class="btn-icon text-secondary" title="Split Terminal"><i class="bi bi-layout-split"></i></button>
                         <button onclick="closeCurrentTerminalSession()" class="btn-icon text-secondary" title="Kill Terminal Session"><i class="bi bi-trash"></i></button>
@@ -1361,7 +1377,7 @@
                 return;
             }
 
-            const promptText = `Hãy kiểm tra và sửa lỗi sau trong Terminal của dự án:\n\`\`\`\n${terminalLogs}\n\`\`\``;
+            const promptText = `Hãy kiểm tra và sửa triệt để lỗi biên dịch/chạy sau trong dự án:\n\`\`\`\n${terminalLogs}\n\`\`\``;
             if (input) {
                 input.value = promptText;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1371,10 +1387,10 @@
                 }
             }
 
-            const fixBtn = document.getElementById("btnTerminalAskAgentFix");
-            if (fixBtn) fixBtn.classList.add("d-none");
+            const fixBtn = document.getElementById("btnAskAgentFixTerminal") || document.getElementById("btnTerminalAskAgentFix");
+            if (fixBtn) fixBtn.classList.remove("pulse-fix-btn");
         };
     </script>
-    <script src="~/js/agent_ide.js?v=20261126_persistent_v17" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261126_persistent_v18" asp-append-version="true"></script>
 </body>
 </html>

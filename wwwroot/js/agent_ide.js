@@ -1299,13 +1299,13 @@ function openRightAgentPanel() {
     const panel = document.getElementById("rightAgentPanel");
     const resizer = document.getElementById("resizerAgent");
     if (!panel) return;
-    const isHidden = panel.style.display === "none" || panel.classList.contains("ide-panel-hidden") || panel.classList.contains("d-none");
-    if (isHidden) {
-        panel.classList.remove("ide-panel-hidden", "d-none");
-        panel.style.display = "flex";
-        if (resizer) resizer.style.display = "block";
-        triggerEditorLayout();
+    panel.classList.remove("ide-panel-hidden", "d-none");
+    panel.style.display = "flex";
+    if (panel.style.width === "0px" || panel.style.width === "0" || !panel.style.width) {
+        panel.style.width = "380px";
     }
+    if (resizer) resizer.style.display = "block";
+    triggerEditorLayout();
 }
 window.openRightAgentPanel = openRightAgentPanel;
 
@@ -2393,6 +2393,9 @@ async function runDotnetProjectBackground() {
                 targetXterm.write(`\r\n${prompt}`);
             }
             showToastNotification("❌ Biên dịch dự án thất bại. Xem chi tiết trong Terminal.", "error");
+            if (typeof checkTerminalOutputForErrors === "function") {
+                checkTerminalOutputForErrors(`[Build Failed] ${data.error || ""}`);
+            }
         }
     } catch (err) {
         if (targetXterm) {
@@ -2400,6 +2403,9 @@ async function runDotnetProjectBackground() {
             targetXterm.write(`\r\n${prompt}`);
         }
         showToastNotification(`Lỗi khởi chạy: ${err.message}`, "error");
+        if (typeof checkTerminalOutputForErrors === "function") {
+            checkTerminalOutputForErrors(`[Build Failed] ${err.message}`);
+        }
     }
 }
 
@@ -2894,11 +2900,16 @@ async function loadAgentChatHistory(projectId) {
 window.lastTerminalErrorSnippet = "";
 function checkTerminalOutputForErrors(chunk) {
     if (!chunk) return;
-    if (chunk.includes("error CS") || chunk.includes("Exception:") || chunk.includes("Unhandled exception") || chunk.includes("ERR!") || (chunk.includes("TS") && chunk.includes("error"))) {
-        window.lastTerminalErrorSnippet = chunk.trim();
-        const fixBtn = document.getElementById("btnTerminalAskAgentFix");
+    const errorKeywords = ["[Build Failed]", "error CS", "Unhandled exception", "ERR!", "Exception", "Lỗi biên dịch", "Build FAILED", "SyntaxError", "ReferenceError", "Error:"];
+    const hasError = errorKeywords.some(kw => chunk.includes(kw));
+    if (hasError) {
+        window.lastTerminalErrorSnippet = (window.lastTerminalErrorSnippet ? window.lastTerminalErrorSnippet + "\n" : "") + chunk.trim();
+        if (window.lastTerminalErrorSnippet.length > 4000) {
+            window.lastTerminalErrorSnippet = window.lastTerminalErrorSnippet.slice(-4000);
+        }
+        const fixBtn = document.getElementById("btnAskAgentFixTerminal") || document.getElementById("btnTerminalAskAgentFix");
         if (fixBtn) {
-            fixBtn.classList.remove("d-none");
+            fixBtn.classList.add("pulse-fix-btn");
         }
     }
 }
@@ -2906,7 +2917,7 @@ function checkTerminalOutputForErrors(chunk) {
 function askAgentToFixTerminalError() {
     openRightAgentPanel();
 
-    // 2. Đọc 30–50 dòng log gần nhất từ buffer của xterm.js (hoặc biến lưu output lệnh gần nhất)
+    // 2. Trích xuất 40 dòng log gần nhất từ buffer của xterm.js (bao gồm cả log do nút ▶ Run in ra)
     let terminalLogs = "";
     try {
         const session = (Array.isArray(terminalSessions) && terminalSessions.length > 0)
@@ -2918,7 +2929,7 @@ function askAgentToFixTerminalError() {
             const buffer = targetXterm.buffer.active;
             const lines = [];
             const total = buffer.length;
-            const start = Math.max(0, total - 50);
+            const start = Math.max(0, total - 40);
             for (let i = start; i < total; i++) {
                 const line = buffer.getLine(i);
                 if (line) {
@@ -2955,8 +2966,8 @@ function askAgentToFixTerminalError() {
         return;
     }
 
-    // 3. Điền nội dung vào ô nhập chat của Btoan Agent theo mẫu
-    const promptText = `Hãy kiểm tra và sửa lỗi sau trong Terminal của dự án:\n\`\`\`\n${terminalLogs}\n\`\`\``;
+    // 3. Điền nội dung vào ô nhập chat của Btoan Agent theo đúng mẫu người dùng yêu cầu:
+    const promptText = `Hãy kiểm tra và sửa triệt để lỗi biên dịch/chạy sau trong dự án:\n\`\`\`\n${terminalLogs}\n\`\`\``;
     if (input) {
         input.value = promptText;
         input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2967,8 +2978,11 @@ function askAgentToFixTerminalError() {
         }
     }
 
-    const fixBtn = document.getElementById("btnTerminalAskAgentFix");
-    if (fixBtn) fixBtn.classList.add("d-none");
+    // Tắt hiệu ứng nhấp nháy nổi bật nhưng nút luôn hiển thị cố định
+    const fixBtn = document.getElementById("btnAskAgentFixTerminal") || document.getElementById("btnTerminalAskAgentFix");
+    if (fixBtn) {
+        fixBtn.classList.remove("pulse-fix-btn");
+    }
 }
 window.askAgentToFixTerminalError = askAgentToFixTerminalError;
 
