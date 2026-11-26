@@ -5243,7 +5243,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             // 3. Cấp phát cổng động (5200..5299)
             int port = RunningAppSessionManager.AllocatePort(userId, cleanProj);
 
-            // 4. Khởi chạy dotnet run ở chế độ nền
+            // 4. Khởi chạy ứng dụng trực tiếp từ .dll (hoặc dotnet run) ở chế độ nền
             try
             {
                 var psi = new ProcessStartInfo
@@ -5255,15 +5255,27 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     RedirectStandardError = true
                 };
 
-                if (OperatingSystem.IsWindows())
+                string dllPath = Path.Combine(projectPath, "bin", "Debug", "net10.0", $"{cleanProj}.dll");
+                if (!System.IO.File.Exists(dllPath))
                 {
-                    psi.FileName = "dotnet.exe";
-                    psi.Arguments = $"run --no-build --no-launch-profile --urls http://127.0.0.1:{port}";
+                    var binDir = Path.Combine(projectPath, "bin");
+                    if (Directory.Exists(binDir))
+                    {
+                        var dlls = Directory.GetFiles(binDir, "*.dll", SearchOption.AllDirectories)
+                            .Where(f => !f.Contains("ref" + Path.DirectorySeparatorChar))
+                            .ToList();
+                        dllPath = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d) == cleanProj) ?? dlls.FirstOrDefault() ?? "";
+                    }
+                }
+
+                psi.FileName = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+                if (System.IO.File.Exists(dllPath))
+                {
+                    psi.Arguments = $"\"{dllPath}\" --urls http://127.0.0.1:{port}";
                 }
                 else
                 {
-                    psi.FileName = "/bin/bash";
-                    psi.Arguments = $"-c \"dotnet run --no-build --no-launch-profile --urls http://127.0.0.1:{port}\"";
+                    psi.Arguments = $"run --no-build --no-launch-profile --urls http://127.0.0.1:{port}";
                 }
 
                 psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
@@ -5274,13 +5286,52 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
                 psi.Environment["UseSharedCompilation"] = "false";
 
+                if (!OperatingSystem.IsWindows())
+                {
+                    psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
+                    string curPath = psi.Environment.ContainsKey("PATH") ? (psi.Environment["PATH"] ?? "") : (Environment.GetEnvironmentVariable("PATH") ?? "");
+                    if (!curPath.Contains("/usr/share/dotnet"))
+                    {
+                        psi.Environment["PATH"] = $"/usr/share/dotnet:{curPath}";
+                    }
+                }
+
                 var proc = Process.Start(psi);
                 if (proc != null)
                 {
+                    var appLogs = new StringBuilder();
+                    proc.OutputDataReceived += (s, e) => { if (e.Data != null) appLogs.AppendLine(e.Data); };
+                    proc.ErrorDataReceived += (s, e) => { if (e.Data != null) appLogs.AppendLine(e.Data); };
+                    proc.BeginOutputReadLine();
+                    proc.BeginErrorReadLine();
+
                     RunningAppSessionManager.RegisterActiveApp(port, userId, cleanProj, proc.Id);
 
-                    // Wait briefly for app to bind
-                    await Task.Delay(1200);
+                    // Chờ và kiểm tra xem ứng dụng đã thực sự bind cổng thành công chưa
+                    using var hc = new HttpClient { Timeout = TimeSpan.FromMilliseconds(400) };
+                    bool bound = false;
+                    for (int i = 0; i < 20; i++)
+                    {
+                        if (proc.HasExited) break;
+                        try
+                        {
+                            var resp = await hc.GetAsync($"http://127.0.0.1:{port}/");
+                            if (resp.StatusCode != 0) { bound = true; break; }
+                        }
+                        catch { }
+                        await Task.Delay(250);
+                    }
+
+                    if (proc.HasExited && !bound)
+                    {
+                        return Ok(new
+                        {
+                            ok = false,
+                            stage = "start_failed",
+                            error = $"Tiến trình ứng dụng đã thoát đột ngột (Exit Code: {proc.ExitCode}):\n{appLogs}",
+                            message = "Không thể khởi chạy web server. Vui lòng kiểm tra log lỗi."
+                        });
+                    }
 
                     return Ok(new
                     {
