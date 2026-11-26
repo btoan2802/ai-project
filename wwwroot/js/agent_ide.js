@@ -3568,17 +3568,19 @@ async function sendAgentTask() {
                             const cached = JSON.parse(localStorage.getItem(localKey) || "[]");
                             cached.push({
                                 role: "assistant",
-                                content: finalData.explanation || finalExplanation,
-                                thoughtText: accumulatedThought.toString(),
-                                thoughtSeconds: agentDurationSecs,
-                                planJson: JSON.stringify(finalData.plan || planSteps),
-                                filePillsJson: JSON.stringify(finalData.modifiedFiles || modifiedFiles),
-                                toolActionsJson: JSON.stringify(finalData.operations || toolOperations),
+                                content: finalData.explanation || finalData.message || (thoughtBody ? thoughtBody.innerText : ""),
+                                thoughtText: (thoughtBody ? thoughtBody.innerText : ""),
+                                thoughtSeconds: elapsedSec,
+                                planJson: JSON.stringify(finalData.plan || []),
+                                filePillsJson: JSON.stringify(finalData.modifiedFiles || []),
+                                toolActionsJson: JSON.stringify(finalData.operations || []),
                                 checkpointId: finalData.checkpointId || null,
                                 createdAt: new Date().toISOString()
                             });
                             localStorage.setItem(localKey, JSON.stringify(cached));
-                        } catch (e) { }
+                        } catch (e) {
+                            console.error("[BtoanAgent] Error caching assistant message:", e);
+                        }
 
                         // Attach Checkpoint restore button to user message if checkpoint created
                         if (finalData.checkpointId && userMsgWrapper) {
@@ -3702,16 +3704,19 @@ async function sendAgentTask() {
                     const cached = JSON.parse(localStorage.getItem(localKey) || "[]");
                     cached.push({
                         role: "assistant",
-                        content: (explanationEl && explanationEl.innerText.trim()) || finalExplanation || "Nhiệm vụ đã được thực thi một phần trên workspace.",
-                        thoughtText: accumulatedThought.toString(),
-                        thoughtSeconds: agentDurationSecs,
-                        planJson: JSON.stringify(planSteps),
-                        filePillsJson: JSON.stringify(modifiedFiles),
-                        toolActionsJson: JSON.stringify(toolOperations),
+                        content: (explanationEl && explanationEl.innerText.trim()) || (finalData && (finalData.explanation || finalData.message)) || "Nhiệm vụ đã được thực thi một phần trên workspace.",
+                        thoughtText: (thoughtBody ? thoughtBody.innerText : ""),
+                        thoughtSeconds: elapsedSec,
+                        planJson: JSON.stringify((finalData && finalData.plan) || []),
+                        filePillsJson: JSON.stringify((finalData && finalData.modifiedFiles) || []),
+                        toolActionsJson: JSON.stringify((finalData && finalData.operations) || []),
+                        checkpointId: (finalData && finalData.checkpointId) || null,
                         createdAt: new Date().toISOString()
                     });
                     localStorage.setItem(localKey, JSON.stringify(cached));
-                } catch (e) { }
+                } catch (e) {
+                    console.error("[BtoanAgent] Error caching partial assistant message:", e);
+                }
             } else {
                 console.log("[BtoanAgent] No partial content received. Showing graceful disconnect message.");
                 agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger mt-1">❌ Kết nối máy chủ bị ngắt trước khi phản hồi (Stream ended unexpectedly). Vui lòng thử lại.</div>`;
