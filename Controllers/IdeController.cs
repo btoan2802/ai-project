@@ -930,6 +930,21 @@ document.addEventListener(""DOMContentLoaded"", () => {
                 actualExe = actualExe.Substring(0, firstSpace).Trim();
             }
 
+            // Docker/Linux container optimization: prevent Roslyn compiler server socket deadlock and MSBuild node reuse
+            psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+            psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+            psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
+            psi.Environment["DOTNET_NOLOGO"] = "1";
+            psi.Environment["UseSharedCompilation"] = "false";
+
+            if (actualExe.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && actualArgs.Contains("build", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!actualArgs.Contains("UseSharedCompilation", StringComparison.OrdinalIgnoreCase))
+                {
+                    actualArgs += " -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
+                }
+            }
+
             if (OperatingSystem.IsWindows())
             {
                 psi.FileName = "cmd.exe";
@@ -5159,8 +5174,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             // Auto-fix settings and assets
             AutoFixMapStaticAssets(projectPath);
 
-            // 2. Chạy dotnet build trước tuần tự
-            var buildRes = await RunCliProcessAsync(projectPath, "dotnet", "build --nologo", 60);
+            // 2. Chạy dotnet build trước tuần tự (không khóa nodeReuse, không dùng Roslyn shared socket để tránh deadlock)
+            var buildRes = await RunCliProcessAsync(projectPath, "dotnet", "build --nologo -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1", 90);
             if (!buildRes.ok)
             {
                 return Ok(new

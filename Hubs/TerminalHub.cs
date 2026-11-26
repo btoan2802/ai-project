@@ -393,6 +393,7 @@ namespace BtoanAiNet.Hubs
             psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
             psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
             psi.Environment["DOTNET_NOLOGO"] = "1";
+            psi.Environment["UseSharedCompilation"] = "false";
             if (!OperatingSystem.IsWindows())
             {
                 psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
