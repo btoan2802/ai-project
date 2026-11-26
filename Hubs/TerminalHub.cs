@@ -397,6 +397,7 @@ namespace BtoanAiNet.Hubs
             psi.Environment["CI"] = "false";
             psi.Environment["FORCE_COLOR"] = "1";
             psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+            psi.Environment["ASPNETCORE_FORWARDEDHEADERS_ENABLED"] = "true";
             psi.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:5200";
             psi.Environment["PORT"] = "5200";
             psi.Environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1";

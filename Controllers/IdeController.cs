@@ -148,6 +148,54 @@ namespace BtoanAiNet.Controllers
 
             AutoFixSqliteConnectionStrings(projectPath);
             AutoFixSessionExtensions(projectPath);
+            AutoFixAntiforgery(projectPath);
+        }
+
+        public static void AutoFixAntiforgery(string projectPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
+
+                // 1. Configure Antiforgery in child Program.cs for loopback proxy
+                var progFiles = Directory.GetFiles(projectPath, "Program.cs", SearchOption.AllDirectories)
+                    .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
+
+                foreach (var progPath in progFiles)
+                {
+                    string pContent = System.IO.File.ReadAllText(progPath, Encoding.UTF8);
+                    bool modified = false;
+
+                    if (!pContent.Contains("AddAntiforgery") && pContent.Contains("builder.Services.AddControllersWithViews();"))
+                    {
+                        pContent = pContent.Replace("builder.Services.AddControllersWithViews();",
+                            "builder.Services.AddControllersWithViews();\nbuilder.Services.AddAntiforgery(options => {\n    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;\n    options.SuppressXFrameOptionsHeader = true;\n});");
+                        modified = true;
+                    }
+
+                    if (modified)
+                    {
+                        System.IO.File.WriteAllText(progPath, pContent, Encoding.UTF8);
+                    }
+                }
+
+                // 2. Replace [ValidateAntiForgeryToken] with [IgnoreAntiforgeryToken] in child controllers for loopback proxy form submission
+                var csFiles = Directory.GetFiles(projectPath, "*.cs", SearchOption.AllDirectories)
+                    .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
+
+                foreach (var csFile in csFiles)
+                {
+                    string text = System.IO.File.ReadAllText(csFile, Encoding.UTF8);
+                    if (text.Contains("[ValidateAntiForgeryToken]"))
+                    {
+                        text = text.Replace("[ValidateAntiForgeryToken]", "[IgnoreAntiforgeryToken]");
+                        System.IO.File.WriteAllText(csFile, text, Encoding.UTF8);
+                    }
+                }
+            }
+            catch { }
         }
 
         public static void AutoFixSqliteConnectionStrings(string projectPath)
@@ -5393,6 +5441,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 }
 
                 psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+                psi.Environment["ASPNETCORE_FORWARDEDHEADERS_ENABLED"] = "true";
                 psi.Environment["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
                 psi.Environment["PORT"] = port.ToString();
                 psi.Environment["DOTNET_NOLOGO"] = "1";

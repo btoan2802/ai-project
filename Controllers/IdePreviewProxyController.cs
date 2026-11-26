@@ -162,6 +162,7 @@ namespace BtoanAiNet.Controllers
             }
 
             // Forwarded headers for inner Kestrel
+            requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "https");
             requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Host", Request.Host.Value);
             if (Request.HttpContext.Connection.RemoteIpAddress != null)
             {
