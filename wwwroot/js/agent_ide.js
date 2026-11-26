@@ -3155,12 +3155,19 @@ window.removeAttachedImage = function () {
     if (fileInput) fileInput.value = "";
 };
 
+let isAgentBusy = false;
+
 async function sendAgentTask() {
+    if (isAgentBusy) return;
     const input = document.getElementById("agentTaskInput");
     if (!input) return;
     const task = input.value.trim();
     if (!task) return;
     input.value = "";
+
+    isAgentBusy = true;
+    let isStreamCompleted = false;
+    let isAbort = false;
 
     // Hide splash, show messages
     document.getElementById("chatSplashArea").style.display = "none";
@@ -3480,6 +3487,7 @@ async function sendAgentTask() {
                             pillsContainer.appendChild(cmdPill);
                         }
                     } else if (eventType === "done") {
+                        isStreamCompleted = true;
                         if (!isThinkingDone) {
                             isThinkingDone = true;
                             if (thoughtEl) {
@@ -3563,7 +3571,7 @@ async function sendAgentTask() {
         }
     } catch (err) {
         clearTimeout(timeoutId);
-        const isAbort = err.name === 'AbortError' || controller.signal.aborted;
+        isAbort = err.name === 'AbortError' || controller.signal.aborted;
         let errHtml = isAbort
             ? `<div class="text-warning extra-small p-2 bg-dark rounded border border-warning">🛑 Đã dừng phiên Agent theo yêu cầu. Các tệp tin đã tạo được giữ nguyên trên ổ đĩa.</div>`
             : `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger">❌ ${err.message.includes('timeout') ? 'Quá thời gian xử lý (timeout 240s). Vui lòng thử lại với prompt cụ thể hơn.' : ('Error: ' + err.message)}</div>`;
@@ -3581,16 +3589,49 @@ async function sendAgentTask() {
             try { await refreshFileTree(); } catch (e) { console.warn(e); }
         }
     } finally {
+        isAgentBusy = false;
         clearInterval(ticker);
         window.currentAgentAbortController = null;
+
+        // 1. Tắt toàn bộ icon loading/spinner đang quay ở các thẻ tool call và task card
+        try {
+            const runningPills = agentMsg.querySelectorAll(".task-running-pill");
+            runningPills.forEach(p => p.remove());
+
+            const runningSteps = agentMsg.querySelectorAll(".agent-task-step-item.running");
+            runningSteps.forEach(st => {
+                st.classList.remove("running");
+                st.classList.add("done");
+                const sp = st.querySelector(".spinner-border");
+                if (sp) sp.outerHTML = '<i class="bi bi-check-circle-fill text-success me-1.5"></i>';
+            });
+
+            const spinners = agentMsg.querySelectorAll(".spinner-border");
+            spinners.forEach(s => s.remove());
+        } catch (e) { }
+
+        // 2. Mở khóa nút gửi tin nhắn
         const sendBtn = document.getElementById("btnSendAgentTask");
         if (sendBtn) {
+            sendBtn.disabled = false;
             sendBtn.innerHTML = `<i class="bi bi-arrow-up"></i>`;
             sendBtn.title = "Send (Enter)";
             sendBtn.onclick = sendAgentTask;
         }
+
+        // 3. Nếu stream bị đóng đột ngột trước khi nhận sự kiện 'done', tự động gọi loadAgentChatHistory sau 1 giây
+        if (!isStreamCompleted && !isAbort) {
+            const curProj = activeProjectId || "shop-senior-mvc";
+            console.log(`[BtoanAgent] Stream ended before 'done' event, resyncing chat history for ${curProj}...`);
+            setTimeout(() => {
+                if (typeof loadAgentChatHistory === "function") {
+                    loadAgentChatHistory(curProj);
+                }
+            }, 1000);
+        }
     }
 }
+window.loadAgentHistory = loadAgentChatHistory;
 
 window.continueAgentRemaining = function (origPrompt) {
     const input = document.getElementById("agentPromptInput");

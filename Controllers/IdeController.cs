@@ -3412,33 +3412,47 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             async Task SendKeepaliveCommentAsync()
             {
                 if (!isStream || HttpContext.RequestAborted.IsCancellationRequested) return;
-                if (!await sseLock.WaitAsync(TimeSpan.FromSeconds(2))) return;
+                bool lockTaken = false;
                 try
                 {
-                    byte[] bytes = Encoding.UTF8.GetBytes(": keepalive\n\n");
+                    lockTaken = await sseLock.WaitAsync(TimeSpan.FromSeconds(3), HttpContext.RequestAborted);
+                    if (!lockTaken) return;
+
+                    byte[] bytes = Encoding.UTF8.GetBytes(": keep-alive\n\n");
                     using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(HttpContext.RequestAborted);
-                    writeCts.CancelAfter(TimeSpan.FromSeconds(4));
+                    writeCts.CancelAfter(TimeSpan.FromSeconds(5));
                     await Response.Body.WriteAsync(bytes, 0, bytes.Length, writeCts.Token);
                     await Response.Body.FlushAsync(writeCts.Token);
                 }
                 catch { }
                 finally
                 {
-                    try { sseLock.Release(); } catch { }
+                    if (lockTaken)
+                    {
+                        try { sseLock.Release(); } catch { }
+                    }
                 }
             }
 
             using var keepaliveCts = new CancellationTokenSource();
             var keepaliveTask = isStream ? Task.Run(async () =>
             {
-                while (!keepaliveCts.Token.IsCancellationRequested)
+                while (!keepaliveCts.Token.IsCancellationRequested && !HttpContext.RequestAborted.IsCancellationRequested)
                 {
                     try
                     {
-                        await Task.Delay(3000, keepaliveCts.Token);
+                        await Task.Delay(10000, keepaliveCts.Token);
+                        if (keepaliveCts.Token.IsCancellationRequested || HttpContext.RequestAborted.IsCancellationRequested) break;
                         await SendKeepaliveCommentAsync();
                     }
-                    catch { break; }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "SSE keepalive error ignored");
+                    }
                 }
             }) : Task.CompletedTask;
 
@@ -4817,9 +4831,10 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         }
                         else if (lowerCmd.Contains("dotnet build"))
                         {
+                            timeoutSec = Math.Min(timeoutSec, 35);
                             if (!command.Contains("UseSharedCompilation", StringComparison.OrdinalIgnoreCase))
                             {
-                                command += " --nologo -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
+                                command += " --nologo --disable-build-servers -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
                             }
                         }
 
