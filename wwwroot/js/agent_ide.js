@@ -455,16 +455,23 @@ async function switchActiveProject(projName) {
 }
 window.switchActiveProject = switchActiveProject;
 
-async function refreshFileTree() {
+async function refreshFileTree(retryCount = 0) {
     const container = document.getElementById("workspaceTreeContainer");
     if (!container) return;
 
-    container.innerHTML = `<div class="text-secondary extra-small p-2"><div class="spinner-border spinner-border-sm me-1 text-info"></div> Loading files...</div>`;
+    if (retryCount === 0 && (!workspaceFilesList || workspaceFilesList.length === 0)) {
+        container.innerHTML = `<div class="text-secondary extra-small p-2"><div class="spinner-border spinner-border-sm me-1 text-info"></div> Loading files...</div>`;
+    }
 
     try {
-        const res = await fetch(`/api/ide/files?project=${encodeURIComponent(activeProjectId)}`, {
+        const res = await fetch(`/api/ide/files?project=${encodeURIComponent(activeProjectId || "")}`, {
             headers: getApiHeaders()
         });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+
         const data = await res.json();
 
         if (data.ok && Array.isArray(data.files)) {
@@ -480,10 +487,28 @@ async function refreshFileTree() {
                 }
             }
         } else {
-            container.innerHTML = `<div class="text-warning extra-small p-2">${data.message || "No files found in workspace"}</div>`;
+            if (retryCount < 2) {
+                setTimeout(() => refreshFileTree(retryCount + 1), 1500);
+            } else {
+                container.innerHTML = `<div class="text-warning extra-small p-2">${data.message || "No files found in workspace"}</div>`;
+            }
         }
     } catch (err) {
-        container.innerHTML = `<div class="text-danger extra-small p-2">Failed to load file tree: ${err.message}</div>`;
+        // Auto-retry up to 3 times on transient network hiccup or server restart (e.g. 502)
+        if (retryCount < 3) {
+            setTimeout(() => refreshFileTree(retryCount + 1), 1500);
+        } else {
+            // Keep existing files rendered if available, otherwise show friendly retry button
+            if (!workspaceFilesList || workspaceFilesList.length === 0) {
+                container.innerHTML = `
+                    <div class="text-secondary extra-small p-2 text-center">
+                        <span class="text-warning">Đang kết nối lại máy chủ...</span><br/>
+                        <button onclick="refreshFileTree(0)" class="btn btn-xs btn-outline-info mt-2 extra-small py-0.5 px-2">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Tải lại tệp
+                        </button>
+                    </div>`;
+            }
+        }
     }
 }
 
