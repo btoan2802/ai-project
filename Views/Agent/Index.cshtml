@@ -56,7 +56,7 @@
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
     <!-- Btoan Studio IDE Dark Modern CSS -->
-    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261126_antigravity_complete_v1" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261127_persistent_v21" asp-append-version="true" />
     <style>
         @@keyframes pulseFixBtn {
             0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); border-color: #f59e0b; }
@@ -470,8 +470,8 @@
                 <div class="explorer-header">
                     <span class="panel-section-title">EXPLORER</span>
                     <div class="d-flex align-items-center gap-1">
-                        <button onclick="openCreateFileModal()" class="btn-icon" title="New File"><i class="bi bi-file-earmark-plus"></i></button>
-                        <button onclick="openCreateFolderModal()" class="btn-icon" title="New Folder"><i class="bi bi-folder-plus"></i></button>
+                        <button onclick="startInlineCreate(false)" class="btn-icon" title="Tạo tệp mới (New File)"><i class="bi bi-file-earmark-plus"></i></button>
+                        <button onclick="startInlineCreate(true)" class="btn-icon" title="Tạo thư mục mới (New Folder)"><i class="bi bi-folder-plus"></i></button>
                         <button onclick="refreshFileTree()" class="btn-icon" title="Refresh Explorer"><i class="bi bi-arrow-clockwise"></i></button>
                         <button onclick="openCreateProjectModal()" class="btn-icon" title="+ Create Project"><i class="bi bi-plus-lg"></i></button>
                     </div>
@@ -1293,21 +1293,24 @@
         <div class="context-menu-item" onclick="terminalContextClear()"><i class="bi bi-trash text-secondary me-2"></i>Clear Terminal <span class="menu-shortcut">cls</span></div>
     </div>
 
-    <!-- 13. MODAL CONFIRM DELETE -->
-    <div id="deleteConfirmModal" class="modal fade" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-sm">
-            <div class="modal-content bg-dark text-light border-secondary">
-                <div class="modal-header border-secondary py-2">
-                    <h6 class="modal-title extra-small text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1.5"></i> Delete Permanently</h6>
-                    <button type="button" class="btn-close btn-close-white extra-small" data-bs-dismiss="modal"></button>
+    <!-- 13. MODAL CONFIRM DELETE (Dark Mode IDE) -->
+    <div id="deleteConfirmModal" class="modal fade" tabindex="-1" style="z-index: 10555;">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+            <div class="modal-content text-light" style="background-color: #1e1e1e; border: 1px solid #333333; border-radius: 8px; box-shadow: 0 12px 36px rgba(0,0,0,0.7);">
+                <div class="modal-header py-2.5 px-3" style="border-bottom: 1px solid #333333;">
+                    <h6 class="modal-title fs-6 text-danger fw-bold d-flex align-items-center mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>
+                        <span id="deleteModalTitle">Xác nhận xóa vĩnh viễn</span>
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white extra-small" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body extra-small py-3">
-                    Are you sure you want to delete <strong id="deleteTargetName" class="text-warning"></strong>?<br>
-                    <span class="text-secondary extra-small">This action cannot be undone.</span>
+                <div class="modal-body py-3 px-3 small" style="color: #cccccc; line-height: 1.5;">
+                    <div id="deleteModalMessage">Bạn có chắc chắn muốn xóa <strong id="deleteTargetName" class="text-warning text-break"></strong> không?</div>
+                    <div class="text-secondary mt-1 extra-small"><i class="bi bi-info-circle me-1"></i>Thao tác này không thể hoàn tác!</div>
                 </div>
-                <div class="modal-footer border-secondary py-1">
-                    <button type="button" class="btn btn-secondary btn-sm extra-small" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" onclick="confirmDeleteTargetItem()" class="btn btn-danger btn-sm extra-small">Delete</button>
+                <div class="modal-footer py-2 px-3" style="border-top: 1px solid #333333; gap: 8px;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1 extra-small" data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" id="btnExecuteDeleteConfirm" onclick="executeConfirmedDelete()" class="btn btn-sm btn-danger px-3 py-1 extra-small fw-semibold">Xóa vĩnh viễn</button>
                 </div>
             </div>
         </div>
@@ -1391,6 +1394,6 @@
             if (fixBtn) fixBtn.classList.remove("pulse-fix-btn");
         };
     </script>
-    <script src="~/js/agent_ide.js?v=20261126_persistent_v20" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261127_persistent_v21" asp-append-version="true"></script>
 </body>
 </html>

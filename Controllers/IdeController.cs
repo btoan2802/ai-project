@@ -3350,6 +3350,13 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             return Ok(new { ok = true, project = cleanProj, message = "Đã khởi tạo phiên trò chuyện mới thành công." });
         }
 
+        private static bool IsCasualGreeting(string? prompt)
+        {
+            if (string.IsNullOrWhiteSpace(prompt)) return false;
+            string clean = prompt.Trim().ToLowerInvariant().TrimEnd('!', '?', '.', '~', ' ', ',');
+            return clean is "ê" or "e" or "ê bạn" or "alo" or "alô" or "hi" or "hello" or "chào" or "chào bạn" or "bạn ơi" or "test" or "hey" or "yo" or "ơi" or "oi";
+        }
+
         // POST /api/ide/agent-chat and /api/ide/agent-run
         [HttpPost("agent-chat")]
         [HttpPost("agent-run")]
@@ -3509,6 +3516,38 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 _logger.LogWarning(ex, "Failed to persist user agent chat message");
             }
 
+            // Fast Intent Gate: Trả lời chào hỏi / hội thoại thông thường ngay lập tức (không chạy tool hay quét dự án)
+            if (IsCasualGreeting(model.Prompt))
+            {
+                string greetingResponse = "Chào bạn! Mình là Btoan AI Agent. Dự án của bạn đã sẵn sàng, bạn cần mình hỗ trợ viết code, giải thích logic hay sửa lỗi phần nào không?";
+                await SendSseEventAsync("status", new { stage = "chat", message = "Btoan Agent sẵn sàng hỗ trợ..." });
+                await Task.Delay(150);
+                await SendSseEventAsync("done", new
+                {
+                    explanation = greetingResponse,
+                    plan = Array.Empty<string>(),
+                    modifiedFiles = Array.Empty<string>(),
+                    operations = Array.Empty<object>(),
+                    checkpointId
+                });
+                try
+                {
+                    var botChatMsg = new Models.AgentChatMessage
+                    {
+                        UserId = userId,
+                        ProjectName = cleanProj,
+                        Role = "assistant",
+                        Content = greetingResponse,
+                        CheckpointId = checkpointId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.AgentChatMessages.Add(botChatMsg);
+                    await _dbContext.SaveChangesAsync();
+                }
+                catch { }
+                return;
+            }
+
             var sbContext = new StringBuilder();
             AutoFixMapStaticAssets(projectPath);
 
@@ -3545,6 +3584,14 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
 
             string agentSystemInstruction = $@"Bạn là Btoan AI Autonomous Coding Agent trong Btoan Studio IDE (tương đương chuẩn Antigravity IDE & Senior Software Architect).
 Bạn đang làm việc trực tiếp trên thư mục dự án: '{cleanProj}'.
+
+QUY TẮC PHÂN LOẠI Ý ĐỊNH (INTENT GATE) BẮT BUỘC (QUAN TRỌNG NHẤT):
+- Nhánh 1 — Trò chuyện, chào hỏi & hỏi đáp thông thường (Conversational / Q&A Mode):
+  + Kích hoạt khi người dùng chỉ chào hỏi, gọi thử (""ê"", ""alo"", ""hi"", ""hello"", ""bạn ơi"", ""test"", ""hey"", ""ơi""), trò chuyện phiếm, hoặc hỏi giải thích/tư vấn (""file này làm gì"", ""tại sao bị lỗi này"", ""nên dùng cách nào"", ""cấu trúc dự án ra sao"") mà KHÔNG yêu cầu tạo, sửa, xóa file hay chạy lệnh.
+  + BẮT BUỘC: Trả lời ngắn gọn, tự nhiên, thân thiện bằng tiếng Việt như một cộng sự lập trình. TUYỆT ĐỐI KHÔNG quét toàn bộ dự án, KHÔNG xuất thẻ Plan/kế hoạch, và TUYỆT ĐỐI KHÔNG gọi bất kỳ công cụ chỉnh sửa/thực thi nào (list_dir, write_file, patch_file, edit_file, delete_file, run_command, generate_image).
+  + ĐẶC BIỆT: Nếu ô chat có gắn thẻ chip file đính kèm (@file, ví dụ shop-senior-mvc.csproj) nhưng người dùng chỉ nhắn tin chào hỏi thông thường (""ê"", ""hi""), bạn CHỈ CHÀO LẠI BÌNH THƯỜNG chứ TUYỆT ĐỐI KHÔNG tự động sửa hay can thiệp vào file đính kèm đó. Chỉ đọc và phân tích file đính kèm khi người dùng hỏi cụ thể về nội dung file đó.
+- Nhánh 2 — Thực thi kỹ thuật (Action / Coding Mode):
+  + Chỉ kích hoạt khi người dùng đưa ra yêu cầu hành động rõ ràng (ví dụ: ""tạo..."", ""sửa..."", ""thêm..."", ""xóa..."", ""fix lỗi..."", ""build..."", ""viết code..."", ""chạy lệnh...""). Khi đó mới lập kế hoạch và gọi các công cụ thực thi mã nguồn.
 
 CÁC CÔNG CỤ THỰC THI (FUNCTION CALLING) BẠN ĐƯỢC CẤP:
 - list_dir(path): Liệt kê cấu trúc cây thư mục kèm dung lượng (bytes) và số dòng của từng tệp.
@@ -5417,6 +5464,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
     {
         public string? Project { get; set; }
         public string Path { get; set; } = string.Empty;
+        public string? File { set { if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(Path)) Path = value; } }
         public bool IsDirectory { get; set; }
         public string? Content { get; set; }
     }

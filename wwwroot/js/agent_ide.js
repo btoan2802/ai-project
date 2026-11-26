@@ -2603,10 +2603,7 @@ async function handleFolderSelected(event) {
     if (!proj) {
         // Lấy tên thư mục cấp cao nhất từ file đầu tiên
         const firstRel = files[0].webkitRelativePath || files[0].name;
-        const defaultName = firstRel.split('/')[0] || "UploadedProject";
-        const customName = prompt("Nhập tên dự án cho thư mục tải lên:", defaultName);
-        if (!customName) return;
-        proj = customName.trim();
+        proj = (firstRel.split('/')[0] || "UploadedProject").trim();
 
         // Tạo project trước
         await fetch('/api/ide/projects/create', {
@@ -3005,26 +3002,32 @@ window.askAgentToFixTerminalError = askAgentToFixTerminalError;
 
 async function restoreProjectCheckpoint(checkpointId) {
     if (!checkpointId || !activeProjectId) return;
-    if (!confirm("Bạn có chắc chắn muốn khôi phục dự án về trạng thái trước lượt chạy này không?")) return;
-    try {
-        const res = await fetch('/api/ide/checkpoint/restore', {
-            method: 'POST',
-            headers: getApiHeaders(),
-            body: JSON.stringify({ project: activeProjectId, checkpointId: checkpointId })
-        });
-        const data = await res.json();
-        if (data.ok) {
-            showToastNotification("✅ Đã khôi phục checkpoint thành công!");
-            await refreshFileTree();
-            if (activeFilePath) {
-                await openFileInEditor(activeFilePath, true);
+    showDarkDeleteConfirm(
+        "Khôi phục trạng thái dự án",
+        "Bạn có chắc chắn muốn khôi phục toàn bộ dự án về checkpoint",
+        checkpointId,
+        async () => {
+            try {
+                const res = await fetch('/api/ide/checkpoint/restore', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ project: activeProjectId, checkpointId: checkpointId })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    showToastNotification("✅ Đã khôi phục checkpoint thành công!");
+                    await refreshFileTree();
+                    if (activeFilePath) {
+                        await openFileInEditor(activeFilePath, true);
+                    }
+                } else {
+                    showToastNotification("⚠️ Khôi phục thất bại: " + (data.error || data.message));
+                }
+            } catch (err) {
+                showToastNotification("Lỗi kết nối: " + err.message);
             }
-        } else {
-            alert("⚠️ Khôi phục thất bại: " + (data.error || data.message));
         }
-    } catch (err) {
-        alert("Lỗi kết nối: " + err.message);
-    }
+    );
 }
 
 function onPromptInput(e) {
@@ -3174,6 +3177,12 @@ window.removeAttachedImage = function () {
 
 let isAgentBusy = false;
 
+function isCasualGreetingText(text) {
+    if (!text) return false;
+    const clean = text.trim().toLowerCase().replace(/[!?.~,]/g, '').trim();
+    return ["ê", "e", "ê bạn", "alo", "alô", "hi", "hello", "chào", "chào bạn", "bạn ơi", "test", "hey", "yo", "ơi", "oi"].includes(clean);
+}
+
 async function sendAgentTask() {
     if (isAgentBusy) return;
     const input = document.getElementById("agentTaskInput");
@@ -3229,16 +3238,17 @@ async function sendAgentTask() {
     } catch (e) { }
 
     // Append Agent Loading Indicator (Antigravity Thought Accordion & Live Task Card)
+    const isCasual = isCasualGreetingText(task);
     const thoughtId = `thought_${Date.now()}`;
     const agentMsg = document.createElement("div");
     agentMsg.className = "d-flex flex-column gap-2 extra-small text-light";
     agentMsg.innerHTML = `
-        <details id="${thoughtId}" class="agent-thought-accordion" open>
+        <details id="${thoughtId}" class="agent-thought-accordion" ${isCasual ? '' : 'open'}>
             <summary class="agent-thought-summary">
                 <span class="agent-thought-arrow">›</span>
                 <span class="agent-thought-title">Thought... <span class="thought-timer">1s</span></span>
             </summary>
-            <div class="agent-thought-body">Đang phân tích yêu cầu, khảo sát cấu trúc dự án và lập kế hoạch thực thi...</div>
+            <div class="agent-thought-body">${isCasual ? 'Đang chuẩn bị câu trả lời...' : 'Đang phân tích yêu cầu, khảo sát cấu trúc dự án và lập kế hoạch thực thi...'}</div>
         </details>
         <div class="agent-live-task-card" style="display: none;">
             <div class="d-flex align-items-center justify-content-between mb-1.5 pb-1 border-bottom border-secondary">
@@ -3250,7 +3260,7 @@ async function sendAgentTask() {
         <div class="agent-action-pills-container"></div>
         <div class="task-running-pill">
             <div class="spinner-border spinner-border-sm text-info" style="width: 12px; height: 12px;"></div>
-            <span>Đang phân tích yêu cầu...</span>
+            <span>${isCasual ? 'Đang phản hồi...' : 'Đang phân tích yêu cầu...'}</span>
         </div>
     `;
     container.appendChild(agentMsg);
@@ -3917,9 +3927,7 @@ async function applyAllAgentOperations() {
 
     let proj = activeProjectId;
     if (!proj) {
-        const customName = prompt("Nhập tên dự án mới để lưu các tệp tin này:", "MyWebProject");
-        if (!customName) return;
-        proj = customName.trim();
+        proj = "MyWebProject";
 
         // Tạo project
         await fetch('/api/ide/projects/create', {
@@ -4098,14 +4106,11 @@ function openCreateProjectModal() {
     setTimeout(() => nameInput?.focus(), 150);
 }
 function openImportGitModal() { showModalSafely("importGitModal"); }
-function openCreateFileModal() { showModalSafely("createFileModal"); }
-function openCreateFolderModal() { showModalSafely("createFolderModal"); }
+function openCreateFileModal() { startInlineCreate(false); }
+function openCreateFolderModal() { startInlineCreate(true); }
 function openQuickOpenModal() {
-    const q = prompt("Nhập tên file cần mở nhanh (Ctrl+P):");
-    if (q) {
-        const match = workspaceFilesList.find(f => f.name.toLowerCase().includes(q.toLowerCase()));
-        if (match) openFileInEditor(match.path);
-        else alert("Không tìm thấy file phù hợp.");
+    if (typeof openCommandPalette === "function") {
+        openCommandPalette();
     }
 }
 
@@ -4881,65 +4886,151 @@ function onProjectContextMenu(e) {
     onExplorerContextMenu(e, "", true, rootHeader, true);
 }
 
-// Project Actions: Rename & Delete
-async function promptRenameActiveProject() {
+// Project Actions: Inline Rename & Dark Confirm Delete
+function promptRenameActiveProject() {
     hideExplorerContextMenu();
     if (!activeProjectId) {
-        alert("Chưa có dự án nào được chọn.");
+        showToastNotification("Chưa có dự án nào được chọn.");
         return;
     }
-    const newName = prompt(`Nhập tên mới cho dự án "${activeProjectId}":`, activeProjectId);
-    if (!newName || newName.trim() === "" || newName.trim() === activeProjectId) return;
+    startInlineProjectRename();
+}
 
-    try {
-        const uid = localStorage.getItem("user_id") || "1";
-        const res = await fetch('/api/ide/projects/rename', {
-            method: 'POST',
-            headers: getApiHeaders(),
-            body: JSON.stringify({ oldName: activeProjectId, newName: newName.trim(), userId: parseInt(uid) || 1 })
-        });
-        const data = await res.json();
-        if (data.ok) {
-            showToastNotification(data.message || `Đã đổi tên dự án thành "${newName.trim()}"`);
-            await loadUserProjects();
-            await switchActiveProject(newName.trim());
-        } else {
-            alert("❌ " + (data.error || "Không thể đổi tên dự án"));
+function startInlineProjectRename() {
+    const rootHeader = document.getElementById("workspaceRootHeader");
+    const nameSpan = document.getElementById("workspaceRootName");
+    if (!rootHeader || !nameSpan || !activeProjectId) return;
+
+    if (rootHeader.querySelector(".inline-project-rename-input")) return;
+
+    const oldName = activeProjectId;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "inline-tree-input inline-project-rename-input";
+    input.value = oldName;
+    input.style.width = "calc(100% - 30px)";
+
+    nameSpan.style.display = "none";
+    nameSpan.parentNode.insertBefore(input, nameSpan.nextSibling);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const commitProjectRename = async () => {
+        if (finished) return;
+        finished = true;
+        const newName = input.value.trim();
+        if (!newName || newName === oldName) {
+            input.remove();
+            nameSpan.style.display = "";
+            return;
         }
-    } catch (err) {
-        alert("❌ Lỗi đổi tên dự án: " + err.message);
+
+        try {
+            const uid = localStorage.getItem("user_id") || "1";
+            const res = await fetch('/api/ide/projects/rename', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ oldName: oldName, newName: newName, userId: parseInt(uid) || 1 })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                showToastNotification(data.message || `Đã đổi tên dự án thành "${newName}"`);
+                input.remove();
+                nameSpan.innerText = newName;
+                nameSpan.style.display = "";
+                await loadUserProjects();
+                await switchActiveProject(newName);
+            } else {
+                input.remove();
+                nameSpan.style.display = "";
+                showToastNotification("❌ " + (data.error || "Không thể đổi tên dự án"));
+            }
+        } catch (err) {
+            input.remove();
+            nameSpan.style.display = "";
+            showToastNotification("❌ Lỗi đổi tên dự án: " + err.message);
+        }
+    };
+
+    input.onkeydown = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            commitProjectRename();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            finished = true;
+            input.remove();
+            nameSpan.style.display = "";
+        }
+    };
+
+    input.onblur = () => {
+        setTimeout(commitProjectRename, 150);
+    };
+}
+
+let pendingDeleteAction = null;
+
+function showDarkDeleteConfirm(title, message, targetName, onConfirm) {
+    pendingDeleteAction = onConfirm;
+    const modalEl = document.getElementById("deleteConfirmModal");
+    if (!modalEl) {
+        if (typeof onConfirm === "function") onConfirm();
+        return;
+    }
+    const titleEl = document.getElementById("deleteModalTitle");
+    if (titleEl) titleEl.textContent = title || "Xác nhận xóa vĩnh viễn";
+
+    const msgEl = document.getElementById("deleteModalMessage");
+    if (msgEl) {
+        msgEl.innerHTML = `${message || "Bạn có chắc chắn muốn xóa"} <strong id="deleteTargetName" class="text-warning text-break">${escapeHtml(targetName || "")}</strong> không?`;
+    }
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+}
+
+async function executeConfirmedDelete() {
+    hideModalSafely("deleteConfirmModal");
+    if (typeof pendingDeleteAction === "function") {
+        const action = pendingDeleteAction;
+        pendingDeleteAction = null;
+        await action();
     }
 }
 
 async function confirmDeleteActiveProject() {
     hideExplorerContextMenu();
     if (!activeProjectId) {
-        alert("Chưa có dự án nào được chọn.");
+        showToastNotification("Chưa có dự án nào được chọn.");
         return;
     }
-    if (!confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ dự án "${activeProjectId}" và tất cả file bên trong không? Thao tác này không thể hoàn tác!`)) {
-        return;
-    }
-
-    try {
-        const uid = localStorage.getItem("user_id") || "1";
-        const res = await fetch('/api/ide/projects/delete', {
-            method: 'POST',
-            headers: getApiHeaders(),
-            body: JSON.stringify({ name: activeProjectId, userId: parseInt(uid) || 1 })
-        });
-        const data = await res.json();
-        if (data.ok) {
-            showToastNotification(data.message || `Đã xóa dự án "${activeProjectId}"`);
-            openTabsMap.clear();
-            renderTabBar();
-            await loadUserProjects();
-        } else {
-            alert("❌ " + (data.error || "Không thể xóa dự án"));
+    showDarkDeleteConfirm(
+        "Xóa vĩnh viễn dự án",
+        "Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ dự án và tất cả file bên trong không?",
+        activeProjectId,
+        async () => {
+            try {
+                const uid = localStorage.getItem("user_id") || "1";
+                const res = await fetch('/api/ide/projects/delete', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ name: activeProjectId, userId: parseInt(uid) || 1 })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    showToastNotification(data.message || `Đã xóa dự án "${activeProjectId}"`);
+                    openTabsMap.clear();
+                    renderTabBar();
+                    await loadUserProjects();
+                } else {
+                    showToastNotification("❌ " + (data.error || "Không thể xóa dự án"));
+                }
+            } catch (err) {
+                showToastNotification("❌ Lỗi xóa dự án: " + err.message);
+            }
         }
-    } catch (err) {
-        alert("❌ Lỗi xóa dự án: " + err.message);
-    }
+    );
 }
 
 function hideExplorerContextMenu() {
@@ -4977,23 +5068,206 @@ function selectAgentModel(modelId, label) {
     if (dd) dd.style.display = "none";
 }
 
-// Inline New File / Folder
-function contextMenuInlineNewFile() {
+// Inline New File / Folder in Explorer (VS Code standard)
+function getParentFolderPath(itemPath) {
+    if (!itemPath) return "";
+    const parts = itemPath.replace(/\\/g, '/').split('/');
+    parts.pop();
+    return parts.join('/');
+}
+
+function startInlineCreate(isFolder = false, targetParentPath = null) {
     hideExplorerContextMenu();
-    const parentFolder = contextTargetItem?.isDirectory ? contextTargetItem.path : "";
-    const fileName = prompt(parentFolder ? `Tạo file mới trong '${parentFolder}':` : "Tạo file mới:");
-    if (!fileName) return;
-    const fullPath = parentFolder ? `${parentFolder}/${fileName.trim()}` : fileName.trim();
-    createFileDirectly(fullPath);
+    let parentFolder = "";
+    if (typeof targetParentPath === "string") {
+        parentFolder = targetParentPath;
+    } else if (contextTargetItem) {
+        parentFolder = contextTargetItem.isDirectory ? contextTargetItem.path : getParentFolderPath(contextTargetItem.path);
+    } else if (activeTreeNode) {
+        parentFolder = activeTreeNode.isDirectory ? activeTreeNode.path : getParentFolderPath(activeTreeNode.path);
+    }
+
+    let targetContainer = document.getElementById("workspaceTreeContainer");
+    let depth = 0;
+
+    if (parentFolder) {
+        const folderNode = document.querySelector(`.tree-node[data-path="${parentFolder}"][data-is-dir="true"]`);
+        if (folderNode) {
+            const childrenContainer = folderNode.nextElementSibling;
+            if (childrenContainer && childrenContainer.dataset.parentPath === parentFolder) {
+                childrenContainer.style.display = "block";
+                const ch = folderNode.querySelector(".chevron-icon");
+                if (ch) ch.className = "bi bi-chevron-down text-secondary extra-small chevron-icon";
+                const iconWrapper = folderNode.querySelector(".folder-icon-wrapper");
+                if (iconWrapper) {
+                    const fName = parentFolder.split(/[\\/]/).pop();
+                    iconWrapper.innerHTML = getFolderIconHtml(fName, true);
+                }
+                targetContainer = childrenContainer;
+                const curPad = parseInt(folderNode.style.paddingLeft || "6", 10);
+                depth = Math.max(0, Math.round((curPad - 6) / 14)) + 1;
+            }
+        }
+    }
+
+    cancelInlineCreate();
+
+    const rowEl = document.createElement("div");
+    rowEl.className = "tree-node inline-create-row active-inline-create";
+    rowEl.style.paddingLeft = `${depth * 14 + (isFolder ? 6 : 18)}px`;
+
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "inline-item-icon-wrapper me-1.5";
+    iconSpan.innerHTML = isFolder ? getFolderIconHtml("", false) : getFileIconHtml("");
+
+    const inputWrapper = document.createElement("div");
+    inputWrapper.className = "d-flex flex-column flex-grow-1 position-relative";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "inline-tree-input";
+    input.placeholder = isFolder ? "Tên thư mục..." : "Tên tệp (vd: Index.cshtml)...";
+    input.spellcheck = false;
+    input.autocomplete = "off";
+
+    const errBox = document.createElement("div");
+    errBox.className = "inline-input-error-msg";
+    errBox.style.display = "none";
+
+    const labelRow = document.createElement("div");
+    labelRow.className = "tree-node-label w-100 d-flex align-items-center";
+
+    if (isFolder) {
+        const chev = document.createElement("i");
+        chev.className = "bi bi-chevron-right text-secondary extra-small me-1";
+        labelRow.appendChild(chev);
+    }
+    labelRow.appendChild(iconSpan);
+    inputWrapper.appendChild(input);
+    inputWrapper.appendChild(errBox);
+    labelRow.appendChild(inputWrapper);
+    rowEl.appendChild(labelRow);
+
+    if (targetContainer && targetContainer.firstChild) {
+        targetContainer.insertBefore(rowEl, targetContainer.firstChild);
+    } else if (targetContainer) {
+        targetContainer.appendChild(rowEl);
+    }
+
+    input.oninput = () => {
+        errBox.style.display = "none";
+        const val = input.value.trim();
+        if (isFolder) {
+            iconSpan.innerHTML = getFolderIconHtml(val, false);
+        } else {
+            const fName = val.split(/[\\/]/).pop() || "";
+            iconSpan.innerHTML = getFileIconHtml(fName);
+        }
+    };
+
+    let isCommitting = false;
+
+    const commitCreate = async () => {
+        if (isCommitting) return;
+        const val = input.value.trim();
+        if (!val) {
+            cancelInlineCreate();
+            return;
+        }
+
+        if (/[*?"<>|:]/.test(val)) {
+            errBox.innerText = "Tên chứa ký tự không hợp lệ (* ? \" < > | :)";
+            errBox.style.display = "block";
+            input.focus();
+            return;
+        }
+
+        isCommitting = true;
+        const fullRelPath = parentFolder ? `${parentFolder}/${val}`.replace(/\/+/g, '/') : val.replace(/\/+/g, '/');
+
+        try {
+            if (isFolder) {
+                const res = await fetch('/api/ide/folder/create', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ project: activeProjectId, folder: fullRelPath })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    cancelInlineCreate();
+                    await refreshFileTree();
+                    showToastNotification("Đã tạo thư mục: " + fullRelPath);
+                } else {
+                    isCommitting = false;
+                    errBox.innerText = data.error || data.message || "Lỗi tạo thư mục";
+                    errBox.style.display = "block";
+                    input.focus();
+                }
+            } else {
+                const res = await fetch('/api/ide/create-file', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ project: activeProjectId, path: fullRelPath, content: "" })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    cancelInlineCreate();
+                    await refreshFileTree();
+                    await openFileInEditor(fullRelPath);
+                    showToastNotification("Đã tạo tệp: " + fullRelPath);
+                } else {
+                    isCommitting = false;
+                    errBox.innerText = data.error || data.message || "Lỗi tạo tệp tin";
+                    errBox.style.display = "block";
+                    input.focus();
+                }
+            }
+        } catch (err) {
+            isCommitting = false;
+            errBox.innerText = "Lỗi kết nối: " + err.message;
+            errBox.style.display = "block";
+            input.focus();
+        }
+    };
+
+    input.onkeydown = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            commitCreate();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancelInlineCreate();
+        }
+    };
+
+    input.onblur = () => {
+        setTimeout(() => {
+            if (document.activeElement !== input && !isCommitting) {
+                if (!input.value.trim()) {
+                    cancelInlineCreate();
+                } else {
+                    commitCreate();
+                }
+            }
+        }, 150);
+    };
+
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 30);
+}
+
+function cancelInlineCreate() {
+    document.querySelectorAll(".inline-create-row").forEach(el => el.remove());
+}
+
+function contextMenuInlineNewFile() {
+    startInlineCreate(false);
 }
 
 function contextMenuInlineNewFolder() {
-    hideExplorerContextMenu();
-    const parentFolder = contextTargetItem?.isDirectory ? contextTargetItem.path : "";
-    const folderName = prompt(parentFolder ? `Tạo thư mục mới trong '${parentFolder}':` : "Tạo thư mục mới:");
-    if (!folderName) return;
-    const fullPath = parentFolder ? `${parentFolder}/${folderName.trim()}` : folderName.trim();
-    createFolderDirectly(fullPath);
+    startInlineCreate(true);
 }
 
 async function createFileDirectly(filePath) {
@@ -5003,6 +5277,7 @@ async function createFileDirectly(filePath) {
             headers: getApiHeaders(),
             body: JSON.stringify({
                 project: activeProjectId,
+                path: filePath,
                 file: filePath,
                 content: ""
             })
@@ -5016,7 +5291,7 @@ async function createFileDirectly(filePath) {
             showRestrictedLoginPrompt(data.message || data.error);
         }
     } catch (err) {
-        alert("Lỗi tạo file: " + err.message);
+        showToastNotification("Lỗi tạo file: " + err.message);
     }
 }
 
@@ -5038,7 +5313,7 @@ async function createFolderDirectly(folderPath) {
             showRestrictedLoginPrompt(data.message || data.error);
         }
     } catch (err) {
-        alert("Lỗi tạo thư mục: " + err.message);
+        showToastNotification("Lỗi tạo thư mục: " + err.message);
     }
 }
 
@@ -5296,43 +5571,42 @@ function startInlineRename(targetItem) {
 function contextMenuDeletePermanently() {
     hideExplorerContextMenu();
     if (!contextTargetItem || !contextTargetItem.path) return;
-    const modalEl = document.getElementById("deleteConfirmModal");
-    if (!modalEl) {
-        contextMenuDelete();
-        return;
-    }
-    const nameEl = document.getElementById("deleteTargetName");
-    if (nameEl) nameEl.textContent = contextTargetItem.path;
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
+    const itemPath = contextTargetItem.path;
+    const isDir = contextTargetItem.isDirectory;
+
+    showDarkDeleteConfirm(
+        isDir ? "Xóa vĩnh viễn thư mục" : "Xóa vĩnh viễn tệp tin",
+        `Bạn có chắc chắn muốn xóa vĩnh viễn ${isDir ? "thư mục" : "tệp"}`,
+        itemPath,
+        async () => {
+            try {
+                const res = await fetch('/api/ide/item/delete', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({
+                        project: activeProjectId,
+                        file: itemPath
+                    })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    if (openTabsMap.has(itemPath)) {
+                        closeTab(itemPath);
+                    }
+                    await refreshFileTree();
+                    showToastNotification("Đã xóa vĩnh viễn: " + itemPath);
+                } else {
+                    showRestrictedLoginPrompt(data.message || data.error);
+                }
+            } catch (err) {
+                showToastNotification("Lỗi xóa: " + err.message);
+            }
+        }
+    );
 }
 
 async function confirmDeleteTargetItem() {
-    hideModalSafely("deleteConfirmModal");
-    if (!contextTargetItem || !contextTargetItem.path) return;
-
-    try {
-        const res = await fetch('/api/ide/item/delete', {
-            method: 'POST',
-            headers: getApiHeaders(),
-            body: JSON.stringify({
-                project: activeProjectId,
-                file: contextTargetItem.path
-            })
-        });
-        const data = await res.json();
-        if (data.ok) {
-            if (openTabsMap.has(contextTargetItem.path)) {
-                closeTab(contextTargetItem.path);
-            }
-            await refreshFileTree();
-            showToastNotification("Deleted permanently: " + contextTargetItem.path);
-        } else {
-            showRestrictedLoginPrompt(data.message || data.error);
-        }
-    } catch (err) {
-        alert("Lỗi xóa: " + err.message);
-    }
+    await executeConfirmedDelete();
 }
 
 // ==========================================
