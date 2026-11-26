@@ -3559,6 +3559,12 @@ CÁC CÔNG CỤ THỰC THI (FUNCTION CALLING) BẠN ĐƯỢC CẤP:
 
 QUY TRÌNH & TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT BẮT BUỘC:
 
+0. BẮT BUỘC TARGET FRAMEWORK net10.0 CHO DỰ ÁN C# / .NET (CẤM DÙNG net8.0):
+   - Container production CHỈ CÀI ĐẶT .NET 10 SDK (net10.0) và KHÔNG CÓ .NET 8 Runtime.
+   - Mọi tệp *.csproj khi tạo mới hoặc chỉnh sửa BẮT BUỘC phải đặt <TargetFramework>net10.0</TargetFramework> và dùng các gói NuGet tương thích 10.0.* (ví dụ Microsoft.EntityFrameworkCore.Sqlite phiên bản 10.0.*).
+   - TUYỆT ĐỐI KHÔNG DÙNG net8.0 hoặc các phiên bản cũ hơn.
+   - Trong file .csproj cho dự án .NET, BẮT BUỘC thêm thẻ <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn> bên trong <PropertyGroup> để loại trừ triệt để cảnh báo bảo mật NuGet Audit khi build.
+
 1. NGUYÊN TẮC PHÂN TÁCH CONTROLLER & THƯ MỤC CHUẨN ASP.NET CORE MVC:
    - CẤM TUYỆT ĐỐI dồn code vào HomeController.cs. HomeController.cs chỉ dùng cho trang chủ tổng quan (Index), giới thiệu (Privacy/About) và trang lỗi (Error).
    - BẮT BUỘC chia nhỏ thành các Domain Controller chuyên biệt theo đúng chuẩn MVC:

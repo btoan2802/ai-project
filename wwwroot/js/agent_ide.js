@@ -2917,7 +2917,7 @@ function checkTerminalOutputForErrors(chunk) {
 function askAgentToFixTerminalError() {
     openRightAgentPanel();
 
-    // 2. Trích xuất 40 dòng log gần nhất từ buffer của xterm.js (bao gồm cả log do nút ▶ Run in ra)
+    // 2. Trích xuất 45 dòng log cuối cùng từ đáy buffer của xterm.js (bao gồm cả log do nút ▶ Run in ra)
     let terminalLogs = "";
     try {
         const session = (Array.isArray(terminalSessions) && terminalSessions.length > 0)
@@ -2926,12 +2926,11 @@ function askAgentToFixTerminalError() {
         const targetXterm = (session && session.xterm) ? session.xterm : xtermInstance;
 
         if (targetXterm && targetXterm.buffer && targetXterm.buffer.active) {
-            const buffer = targetXterm.buffer.active;
+            const buf = targetXterm.buffer.active;
             const lines = [];
-            const total = buffer.length;
-            const start = Math.max(0, total - 40);
-            for (let i = start; i < total; i++) {
-                const line = buffer.getLine(i);
+            const start = Math.max(0, buf.length - 45);
+            for (let i = start; i < buf.length; i++) {
+                const line = buf.getLine(i);
                 if (line) {
                     const str = line.translateToString(true);
                     if (str && str.trim()) {
@@ -2939,7 +2938,25 @@ function askAgentToFixTerminalError() {
                     }
                 }
             }
-            terminalLogs = lines.join('\n');
+            if (lines.length < 5 && buf.length > 0) {
+                const nonBlankLines = [];
+                for (let i = buf.length - 1; i >= 0 && nonBlankLines.length < 45; i--) {
+                    const line = buf.getLine(i);
+                    if (line) {
+                        const str = line.translateToString(true);
+                        if (str && str.trim()) {
+                            nonBlankLines.unshift(str);
+                        }
+                    }
+                }
+                if (nonBlankLines.length > lines.length) {
+                    terminalLogs = nonBlankLines.join('\n');
+                } else {
+                    terminalLogs = lines.join('\n');
+                }
+            } else {
+                terminalLogs = lines.join('\n');
+            }
         }
     } catch (e) {
         console.warn("[askAgentToFixTerminalError] Could not read terminal buffer:", e);

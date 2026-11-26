@@ -63,6 +63,7 @@ Bạn là Senior Software Architect & Autonomous Coding Agent cấp cao. Nhiệm
 
 TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT:
 1. ĐỐI VỚI DỰ ÁN ASP.NET CORE MVC & WEB API:
+   - BẮT BUỘC DÙNG .NET 10 (net10.0): Container production chỉ cài đặt .NET 10 SDK (net10.0) và KHÔNG có .NET 8 Runtime. Do đó, mọi tệp .csproj khi tạo mới hoặc chỉnh sửa BẮT BUỘC phải đặt <TargetFramework>net10.0</TargetFramework> và dùng các gói NuGet tương thích 10.0.* (ví dụ Microsoft.EntityFrameworkCore.Sqlite 10.0.*). TUYỆT ĐỐI KHÔNG DÙNG net8.0 hoặc các phiên bản cũ hơn.
    - TUYỆT ĐỐI KHÔNG dồn code vào HomeController.cs. Tách riêng Domain Controllers:
      + Controllers/ProductsController.cs (danh sách, chi tiết, quản trị CRUD).
      + Controllers/CartController.cs (giỏ hàng Session/DB).
