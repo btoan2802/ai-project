@@ -147,6 +147,7 @@ namespace BtoanAiNet.Controllers
             catch { }
 
             AutoFixSqliteConnectionStrings(projectPath);
+            AutoFixSessionExtensions(projectPath);
         }
 
         public static void AutoFixSqliteConnectionStrings(string projectPath)
@@ -233,6 +234,157 @@ namespace BtoanAiNet.Controllers
                                 "string rawConn = builder.Configuration.GetConnectionString(\"DefaultConnection\") ?? \"Data Source=shop_senior.db\";\nif (rawConn.Contains(\"Server=\", StringComparison.OrdinalIgnoreCase) || !rawConn.Contains(\"Data Source=\", StringComparison.OrdinalIgnoreCase))\n{\n    rawConn = \"Data Source=shop_senior.db\";\n}\nbuilder.Services.AddDbContext<AppDbContext>(options =>\n    options.UseSqlite(rawConn));"
                             );
                             System.IO.File.WriteAllText(pFile, pSrc, Encoding.UTF8);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static void AutoFixSessionExtensions(string projectPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
+
+                var csprojFiles = Directory.GetFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly);
+                if (csprojFiles.Length == 0) return;
+
+                string projName = Path.GetFileNameWithoutExtension(csprojFiles[0]);
+                string cleanNamespace = Regex.Replace(projName, @"[^a-zA-Z0-9_]", "_");
+
+                var allCodeFiles = Directory.GetFiles(projectPath, "*.*", SearchOption.AllDirectories)
+                    .Where(f => (f.EndsWith(".cs") || f.EndsWith(".cshtml")) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
+                    .ToList();
+
+                bool callsIsUserLoggedIn = allCodeFiles.Any(f => {
+                    try { return System.IO.File.ReadAllText(f).Contains("IsUserLoggedIn"); }
+                    catch { return false; }
+                });
+
+                if (callsIsUserLoggedIn)
+                {
+                    string helpersDir = Path.Combine(projectPath, "Helpers");
+                    if (!Directory.Exists(helpersDir)) Directory.CreateDirectory(helpersDir);
+
+                    string sessionExtPath = Path.Combine(helpersDir, "SessionExtensions.cs");
+                    if (!System.IO.File.Exists(sessionExtPath))
+                    {
+                        string defaultExt = $@"using Microsoft.AspNetCore.Http;
+using Newtonsoft.Json;
+
+namespace {cleanNamespace}.Helpers
+{{
+    public static class SessionExtensions
+    {{
+        public static void SetObjectAsJson(this ISession session, string key, object value)
+        {{
+            session.SetString(key, JsonConvert.SerializeObject(value));
+        }}
+
+        public static T? GetObjectFromJson<T>(this ISession session, string key)
+        {{
+            var value = session.GetString(key);
+            return value == null ? default : JsonConvert.DeserializeObject<T>(value);
+        }}
+
+        public static bool IsUserLoggedIn(this ISession session)
+        {{
+            return !string.IsNullOrEmpty(session.GetString(""UserId"")) || 
+                   !string.IsNullOrEmpty(session.GetString(""user_id"")) ||
+                   !string.IsNullOrEmpty(session.GetString(""UserEmail""));
+        }}
+
+        public static string? GetUserId(this ISession session)
+        {{
+            return session.GetString(""UserId"") ?? session.GetString(""user_id"");
+        }}
+
+        public static string? GetUsername(this ISession session)
+        {{
+            return session.GetString(""Username"") ?? session.GetString(""username"") ?? ""Khách hàng"";
+        }}
+
+        public static void SetUserLoggedIn(this ISession session, string userId, string username)
+        {{
+            session.SetString(""UserId"", userId);
+            session.SetString(""user_id"", userId);
+            session.SetString(""Username"", username);
+            session.SetString(""username"", username);
+        }}
+    }}
+}}";
+                        System.IO.File.WriteAllText(sessionExtPath, defaultExt, Encoding.UTF8);
+                    }
+                    else
+                    {
+                        string content = System.IO.File.ReadAllText(sessionExtPath, Encoding.UTF8);
+                        if (!content.Contains("IsUserLoggedIn"))
+                        {
+                            string injectMethods = @"
+        public static bool IsUserLoggedIn(this ISession session)
+        {
+            return !string.IsNullOrEmpty(session.GetString(""UserId"")) || 
+                   !string.IsNullOrEmpty(session.GetString(""user_id"")) ||
+                   !string.IsNullOrEmpty(session.GetString(""UserEmail""));
+        }
+
+        public static string? GetUserId(this ISession session)
+        {
+            return session.GetString(""UserId"") ?? session.GetString(""user_id"");
+        }
+
+        public static string? GetUsername(this ISession session)
+        {
+            return session.GetString(""Username"") ?? session.GetString(""username"") ?? ""Khách hàng"";
+        }
+
+        public static void SetUserLoggedIn(this ISession session, string userId, string username)
+        {
+            session.SetString(""UserId"", userId);
+            session.SetString(""user_id"", userId);
+            session.SetString(""Username"", username);
+            session.SetString(""username"", username);
+        }
+";
+                            int lastBrace = content.LastIndexOf('}');
+                            if (lastBrace > 0)
+                            {
+                                int classBrace = content.LastIndexOf('}', lastBrace - 1);
+                                if (classBrace > 0)
+                                {
+                                    content = content.Insert(classBrace, injectMethods);
+                                    System.IO.File.WriteAllText(sessionExtPath, content, Encoding.UTF8);
+                                }
+                            }
+                        }
+                    }
+
+                    // Auto-ensure _ViewImports.cshtml has @using ...Helpers
+                    string viewImports = Path.Combine(projectPath, "Views", "_ViewImports.cshtml");
+                    if (System.IO.File.Exists(viewImports))
+                    {
+                        string viContent = System.IO.File.ReadAllText(viewImports, Encoding.UTF8);
+                        if (!viContent.Contains(".Helpers"))
+                        {
+                            viContent += $"\n@using {cleanNamespace}.Helpers\n";
+                            System.IO.File.WriteAllText(viewImports, viContent, Encoding.UTF8);
+                        }
+                    }
+
+                    // Auto-ensure Controllers calling IsUserLoggedIn have using Helpers
+                    var controllerFiles = Directory.GetFiles(projectPath, "*Controller.cs", SearchOption.AllDirectories)
+                        .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                    !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
+                    foreach (var cf in controllerFiles)
+                    {
+                        string cText = System.IO.File.ReadAllText(cf, Encoding.UTF8);
+                        if (cText.Contains("IsUserLoggedIn") && !cText.Contains(".Helpers"))
+                        {
+                            cText = $"using {cleanNamespace}.Helpers;\n" + cText;
+                            System.IO.File.WriteAllText(cf, cText, Encoding.UTF8);
                         }
                     }
                 }
