@@ -375,17 +375,32 @@ namespace {cleanNamespace}.Helpers
                         }
                     }
 
-                    // Auto-ensure Controllers calling IsUserLoggedIn have using Helpers
-                    var controllerFiles = Directory.GetFiles(projectPath, "*Controller.cs", SearchOption.AllDirectories)
+                    // Auto-ensure ALL .cs files calling IsUserLoggedIn have using Helpers
+                    var allCsFiles = Directory.GetFiles(projectPath, "*.cs", SearchOption.AllDirectories)
                         .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
-                                    !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
-                    foreach (var cf in controllerFiles)
+                                    !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
+                                    !f.EndsWith("SessionExtensions.cs"));
+                    foreach (var cf in allCsFiles)
                     {
                         string cText = System.IO.File.ReadAllText(cf, Encoding.UTF8);
                         if (cText.Contains("IsUserLoggedIn") && !cText.Contains(".Helpers"))
                         {
                             cText = $"using {cleanNamespace}.Helpers;\n" + cText;
                             System.IO.File.WriteAllText(cf, cText, Encoding.UTF8);
+                        }
+                    }
+
+                    // Auto-ensure ALL .cshtml views calling IsUserLoggedIn have @using Helpers
+                    var allCshtmlFiles = Directory.GetFiles(projectPath, "*.cshtml", SearchOption.AllDirectories)
+                        .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
+                                    !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
+                    foreach (var vf in allCshtmlFiles)
+                    {
+                        string vText = System.IO.File.ReadAllText(vf, Encoding.UTF8);
+                        if (vText.Contains("IsUserLoggedIn") && !vText.Contains(".Helpers"))
+                        {
+                            vText = $"@using {cleanNamespace}.Helpers\n" + vText;
+                            System.IO.File.WriteAllText(vf, vText, Encoding.UTF8);
                         }
                     }
                 }
@@ -931,18 +946,33 @@ document.addEventListener(""DOMContentLoaded"", () => {
                 actualExe = actualExe.Substring(0, firstSpace).Trim();
             }
 
-            // Docker/Linux container optimization: prevent Roslyn compiler server socket deadlock and MSBuild node reuse
+            // Docker/Linux container optimization: prevent Roslyn compiler server socket deadlock, MSBuild Server hang, and MSBuild node reuse
+            psi.Environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1";
             psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
             psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
             psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
             psi.Environment["DOTNET_NOLOGO"] = "1";
             psi.Environment["UseSharedCompilation"] = "false";
 
-            if (actualExe.Equals("dotnet", StringComparison.OrdinalIgnoreCase) && actualArgs.Contains("build", StringComparison.OrdinalIgnoreCase))
+            if (actualExe.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
             {
-                if (!actualArgs.Contains("UseSharedCompilation", StringComparison.OrdinalIgnoreCase))
+                if (actualArgs.Contains("build", StringComparison.OrdinalIgnoreCase))
                 {
-                    actualArgs += " -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
+                    if (!actualArgs.Contains("disable-build-servers", StringComparison.OrdinalIgnoreCase))
+                    {
+                        actualArgs += " --disable-build-servers";
+                    }
+                    if (!actualArgs.Contains("UseSharedCompilation", StringComparison.OrdinalIgnoreCase))
+                    {
+                        actualArgs += " -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
+                    }
+                }
+                else if (actualArgs.Contains("restore", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!actualArgs.Contains("disable-build-servers", StringComparison.OrdinalIgnoreCase))
+                    {
+                        actualArgs += " --disable-build-servers --disable-parallel --nologo";
+                    }
                 }
             }
 
@@ -5198,7 +5228,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             AutoFixMapStaticAssets(projectPath);
 
             // 2. Chạy dotnet build trước tuần tự (không khóa nodeReuse, không dùng Roslyn shared socket để tránh deadlock)
-            var buildRes = await RunCliProcessAsync(projectPath, "dotnet", "build --nologo -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1", 90);
+            var buildRes = await RunCliProcessAsync(projectPath, "dotnet", "build --nologo --disable-build-servers -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1", 90);
             if (!buildRes.ok)
             {
                 return Ok(new
@@ -5240,6 +5270,9 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 psi.Environment["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
                 psi.Environment["PORT"] = port.ToString();
                 psi.Environment["DOTNET_NOLOGO"] = "1";
+                psi.Environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1";
+                psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+                psi.Environment["UseSharedCompilation"] = "false";
 
                 var proc = Process.Start(psi);
                 if (proc != null)
