@@ -272,7 +272,8 @@ namespace BtoanAiNet.Controllers
                     string sessionExtPath = Path.Combine(helpersDir, "SessionExtensions.cs");
                     if (!System.IO.File.Exists(sessionExtPath))
                     {
-                        string defaultExt = $@"using Microsoft.AspNetCore.Http;
+                        string defaultExt = $@"#nullable enable
+using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
 
 namespace {cleanNamespace}.Helpers
