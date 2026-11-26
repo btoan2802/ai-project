@@ -3760,7 +3760,7 @@ QUY TRÌNH & TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT BẮT BUỘC:
    - Nếu dùng C# 12 collection expressions: '[ ... ];' (mở ngoặc vuông thì đóng ngoặc vuông). TUYỆT ĐỐI KHÔNG nhầm lẫn đóng ngoặc.
 
 6. PHA VERIFY & SELF-HEAL (TỐI ĐA 2 LẦN BUILD - BẢO TOÀN MÃ NGUỒN):
-   - Với dự án C# / .NET (có tệp *.csproj): Trước khi kết thúc, chạy 'run_command("dotnet build -p:UseSharedCompilation=false")'.
+   - Với dự án C# / .NET (có tệp *.csproj): Trước khi kết thúc, chạy 'run_command(""dotnet build -p:UseSharedCompilation=false"")'.
    - Với dự án Web Tĩnh (HTML/CSS/JS): TUYỆT ĐỐI KHÔNG CHẠY LỆNH 'dotnet build' HAY BẤT KỲ LỆNH DOTNET NÀO! Khi đã tạo xong index.html, styles.css, app.js là hoàn tất nhiệm vụ.
    - Nếu ExitCode == 0 (hoặc 0 Error(s)), coi như THÀNH CÔNG HOÀN TOÀN (bỏ qua Warning), dừng gọi tool ngay và báo cáo kết quả cho người dùng.
    - Nếu có lỗi compiler, đọc lỗi kỹ và gọi patch_file sửa lỗi tối đa 2 lần.
@@ -4341,7 +4341,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         }
 
                         // Check project type: compiled (.NET / .csproj) or Angular vs static web
-                        bool hasCsproj = Directory.GetFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly).Any();
+                        hasCsproj = Directory.GetFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly).Any();
                         bool isAngular = System.IO.File.Exists(Path.Combine(projectPath, "angular.json")) ||
                                          Directory.Exists(Path.Combine(projectPath, "src", "app"));
                         bool isDotNetOrAngular = hasCsproj || isAngular ||
