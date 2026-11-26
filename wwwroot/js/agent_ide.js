@@ -1797,8 +1797,8 @@ async function initTerminalSignalR() {
         .build();
 
     // Prevent client timeout during long-running builds or continuous server runs
-    terminalHubConn.serverTimeoutInMilliseconds = 1000 * 60 * 60; // 60 minutes
-    terminalHubConn.keepAliveIntervalInMilliseconds = 1000 * 5;   // 5 seconds
+    terminalHubConn.serverTimeoutInMilliseconds = 1000 * 60 * 10; // 10 minutes
+    terminalHubConn.keepAliveIntervalInMilliseconds = 1000 * 10;  // 10 seconds
 
     terminalHubConn.on("TerminalOutput", (chunk, sId) => {
         const target = terminalSessions.find(s => s.id === (sId || activeTerminalSessionId)) || terminalSessions[0];
@@ -2308,7 +2308,67 @@ function runSmartAction() {
     if (activeFilePath && activeFilePath.endsWith('Test.cs')) {
         runCustomTerminalCmd("dotnet test");
     } else {
-        fetchDynamicPortAndRun("dotnet");
+        runDotnetProjectBackground();
+    }
+}
+
+async function runDotnetProjectBackground() {
+    switchBottomTab('terminal');
+    const session = terminalSessions.find(s => s.id === activeTerminalSessionId) || terminalSessions[0];
+    const targetXterm = (session && session.xterm) ? session.xterm : xtermInstance;
+    const prompt = (session && session.prompt) ? session.prompt : terminalPrompt;
+
+    if (targetXterm) {
+        targetXterm.writeln(`\r\n\x1b[36m⚡ [Run] Đang dọn tiến trình cũ & biên dịch dự án ${activeProjectId || ""}...\x1b[0m`);
+    }
+    showToastNotification("Đang dọn tiến trình cũ & biên dịch dự án...");
+
+    try {
+        const res = await fetch('/api/ide/run-project', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ project: activeProjectId || "app" })
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+            if (targetXterm) {
+                targetXterm.writeln(`\x1b[32m✔ [Build] Biên dịch thành công!\x1b[0m`);
+                targetXterm.writeln(`\x1b[32m✔ [Running] Ứng dụng đã sẵn sàng trên cổng :${data.port} (${data.url})\x1b[0m`);
+                targetXterm.write(`\r\n${prompt}`);
+            }
+            showToastNotification(`🟢 Ứng dụng đã sẵn sàng trên cổng :${data.port}!`);
+
+            currentLiveAppPort = data.port;
+            const portEl = document.getElementById("tabLiveAppPort");
+            if (portEl) portEl.textContent = `:${data.port}`;
+            const badge = document.getElementById("tabLiveAppBadge");
+            if (badge) badge.classList.remove("d-none");
+            const btnOpen = document.getElementById("tabBtnOpenApp");
+            if (btnOpen) btnOpen.classList.remove("d-none");
+            const btnStop = document.getElementById("tabBtnStopApp");
+            if (btnStop) btnStop.classList.remove("d-none");
+            loadActivePorts();
+
+            setTimeout(() => {
+                openLivePreview();
+            }, 800);
+        } else {
+            if (targetXterm) {
+                targetXterm.writeln(`\r\n\x1b[31m❌ [Build Failed] Lỗi biên dịch dự án:\x1b[0m`);
+                if (data.error) {
+                    targetXterm.writeln(`\x1b[31m${data.error.replace(/\r?\n/g, '\r\n')}\x1b[0m`);
+                }
+                targetXterm.write(`\r\n${prompt}`);
+            }
+            showToastNotification("❌ Biên dịch dự án thất bại. Xem chi tiết trong Terminal.", "error");
+        }
+    } catch (err) {
+        if (targetXterm) {
+            targetXterm.writeln(`\r\n\x1b[31m[Error] ${err.message}\x1b[0m`);
+            targetXterm.write(`\r\n${prompt}`);
+        }
+        showToastNotification(`Lỗi khởi chạy: ${err.message}`, "error");
     }
 }
 

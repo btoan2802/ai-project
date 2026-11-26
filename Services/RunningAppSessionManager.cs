@@ -255,6 +255,70 @@ namespace BtoanAiNet.Services
             return !IsPortAvailable(port);
         }
 
+        public static async Task KillProjectProcessesAsync(string projectName, int userId = 0)
+        {
+            if (string.IsNullOrWhiteSpace(projectName)) return;
+
+            // 1. Release all active sessions for this project in RunningAppSessionManager
+            foreach (var kvp in ActiveSessions)
+            {
+                if (string.Equals(kvp.Value.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (userId <= 0 || kvp.Value.UserId == userId || userId == 1)
+                    {
+                        if (kvp.Value.ProcessId > 0)
+                        {
+                            KillProcessSafe(kvp.Value.ProcessId);
+                        }
+                        ReleasePort(kvp.Key);
+                    }
+                }
+            }
+
+            // 2. Kill OS processes running in project directory or matching project name
+            try
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c for /f \"tokens=2\" %a in ('tasklist /nh /fi \"imagename eq dotnet.exe\"') do (wmic process where \"ProcessId=%a and CommandLine like '%{projectName}%'\" call terminate >nul 2>&1)",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p != null)
+                    {
+                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(3));
+                        await p.WaitForExitAsync(cts.Token);
+                    }
+                }
+                else
+                {
+                    // Linux inside Docker container: pkill -9 -f
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "/bin/bash",
+                        Arguments = $"-c \"pkill -9 -f '{projectName}' 2>/dev/null || true\"",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p != null)
+                    {
+                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(3));
+                        await p.WaitForExitAsync(cts.Token);
+                    }
+                }
+            }
+            catch { }
+        }
+
         private static void KillProcessSafe(int pid)
         {
             if (pid <= 0) return;

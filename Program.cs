@@ -183,8 +183,8 @@ builder.Services.AddScoped<IAgentToolLoopOrchestrator, AgentToolLoopOrchestrator
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
-    options.KeepAliveInterval = TimeSpan.FromSeconds(5);
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(120);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+    options.ClientTimeoutInterval = TimeSpan.FromMinutes(3);
     options.HandshakeTimeout = TimeSpan.FromSeconds(30);
 });
 

@@ -4896,11 +4896,109 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                 return BadRequest(new { ok = false, error = ex.Message });
             }
         }
+
+        // POST /api/ide/run-project
+        [HttpPost("run-project")]
+        public async Task<IActionResult> RunProjectEndpoint([FromBody] RunProjectRequestModel model)
+        {
+            if (model == null || string.IsNullOrWhiteSpace(model.Project))
+            {
+                return BadRequest(new { ok = false, error = "Project name is required" });
+            }
+
+            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            string cleanProj = SanitizeProjectName(model.Project);
+            string projectPath = ResolveWorkspacePath(cleanProj);
+            if (!Directory.Exists(projectPath))
+            {
+                return NotFound(new { ok = false, error = $"Không tìm thấy thư mục dự án '{cleanProj}'." });
+            }
+
+            // 1. Dọn dẹp mọi tiến trình cũ đang chạy từ dự án này để giải phóng hoàn toàn khóa file .dll và .db
+            await RunningAppSessionManager.KillProjectProcessesAsync(cleanProj, userId);
+
+            // Auto-fix settings and assets
+            AutoFixMapStaticAssets(projectPath);
+
+            // 2. Chạy dotnet build trước tuần tự
+            var buildRes = await RunCliProcessAsync(projectPath, "dotnet build", "--nologo", 60);
+            if (!buildRes.ok)
+            {
+                return Ok(new
+                {
+                    ok = false,
+                    stage = "build",
+                    error = buildRes.output,
+                    message = "Biên dịch dự án thất bại. Vui lòng kiểm tra thông báo lỗi bên dưới."
+                });
+            }
+
+            // 3. Cấp phát cổng động (5200..5299)
+            int port = RunningAppSessionManager.AllocatePort(userId, cleanProj);
+
+            // 4. Khởi chạy dotnet run ở chế độ nền
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    WorkingDirectory = projectPath,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+
+                if (OperatingSystem.IsWindows())
+                {
+                    psi.FileName = "dotnet.exe";
+                    psi.Arguments = $"run --no-build --no-launch-profile --urls http://127.0.0.1:{port}";
+                }
+                else
+                {
+                    psi.FileName = "/bin/bash";
+                    psi.Arguments = $"-c \"dotnet run --no-build --no-launch-profile --urls http://127.0.0.1:{port}\"";
+                }
+
+                psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+                psi.Environment["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
+                psi.Environment["PORT"] = port.ToString();
+                psi.Environment["DOTNET_NOLOGO"] = "1";
+
+                var proc = Process.Start(psi);
+                if (proc != null)
+                {
+                    RunningAppSessionManager.RegisterActiveApp(port, userId, cleanProj, proc.Id);
+
+                    // Wait briefly for app to bind
+                    await Task.Delay(1200);
+
+                    return Ok(new
+                    {
+                        ok = true,
+                        port = port,
+                        url = $"http://127.0.0.1:{port}",
+                        stage = "running",
+                        message = $"Ứng dụng đã khởi chạy thành công trên cổng :{port}."
+                    });
+                }
+
+                return StatusCode(500, new { ok = false, error = "Không thể khởi chạy tiến trình web server." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
     }
 
     // ==========================================
     // MODELS
     // ==========================================
+
+    public class RunProjectRequestModel
+    {
+        public string? Project { get; set; }
+    }
 
     public class IdeCreateProjectRequestModel
     {

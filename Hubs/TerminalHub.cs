@@ -322,7 +322,23 @@ namespace BtoanAiNet.Hubs
             }
 
             // 6. Execute process with real-time streaming
-            await Clients.Caller.SendAsync("TerminalOutput", $"\x1b[90m⏳ [Executing: {trimmedCmd} ...]\x1b[0m\r\n", sId);
+            if (trimmedCmd.Contains("dotnet build", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("dotnet run", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("dotnet test", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("ng serve", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("npm start", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunningAppSessionManager.KillProjectProcessesAsync(session.ProjectName, session.UserId);
+            }
+
+            if (trimmedCmd.Contains("dotnet run", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("dotnet watch", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("npm start", StringComparison.OrdinalIgnoreCase) ||
+                trimmedCmd.Contains("ng serve", StringComparison.OrdinalIgnoreCase))
+            {
+                await Clients.Caller.SendAsync("TerminalOutput", "\x1b[36m💡 Mẹo: Bạn có thể bấm nút Run (▶) trên thanh công cụ để chạy nền và tự động mở Live Preview.\x1b[0m\r\n", sId);
+            }
+
             await RunProcessStreamingAsync(session, trimmedCmd);
         }
 
@@ -412,13 +428,16 @@ namespace BtoanAiNet.Hubs
                 }
             };
 
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(session.Cts.Token, timeoutCts.Token);
+
             try
             {
                 process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
-                await process.WaitForExitAsync(session.Cts.Token);
+                await process.WaitForExitAsync(linkedCts.Token);
                 exitCode = process.ExitCode;
 
                 // Notify client that command completed
@@ -427,7 +446,14 @@ namespace BtoanAiNet.Hubs
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
-                await caller.SendAsync("TerminalOutput", "\r\n\x1b[31m^C (Process terminated by user)\x1b[0m\r\n", sId);
+                if (timeoutCts.IsCancellationRequested)
+                {
+                    await caller.SendAsync("TerminalOutput", "\r\n\x1b[33m⏱️ [Timeout 90s] Lệnh đã chạy quá 90 giây. Nếu muốn chạy server liên tục, vui lòng bấm nút Run (▶) để chạy nền mà không chiếm giữ Terminal.\x1b[0m\r\n", sId);
+                }
+                else
+                {
+                    await caller.SendAsync("TerminalOutput", "\r\n\x1b[31m^C (Process terminated by user)\x1b[0m\r\n", sId);
+                }
                 await caller.SendAsync("TerminalCommandFinished", new { exitCode = 130, command, sessionId = sId }, sId);
             }
             catch (Exception ex)
