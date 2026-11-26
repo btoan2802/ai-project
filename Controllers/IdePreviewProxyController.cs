@@ -192,6 +192,8 @@ namespace BtoanAiNet.Controllers
 
                 // Set status code
                 Response.StatusCode = (int)responseMessage.StatusCode;
+                Response.Headers["X-Debug-Cookie-In"] = Request.Headers.ContainsKey("Cookie") ? Request.Headers["Cookie"].ToString() : "NONE";
+                Response.Headers["X-Debug-Cookie-Out"] = requestMessage.Headers.Contains("Cookie") ? string.Join("; ", requestMessage.Headers.GetValues("Cookie")) : "NONE";
 
                 // Handle Redirects (Rewrite Location header)
                 if (responseMessage.Headers.Location != null)
