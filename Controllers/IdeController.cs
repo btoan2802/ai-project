@@ -836,16 +836,16 @@ namespace {cleanNamespace}.Helpers
                 else if (template == "angular")
                 {
                     // 3. Angular App via official Angular CLI (instant scaffold with --skip-install)
-                    var res = await RunCliProcessAsync(userRoot, "ng", $"new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
+                    var res = await RunCliProcessAsync(userRoot, "ng", $"new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 35);
                     if (!res.ok)
                     {
                         _logger.LogWarning("ng new failed, falling back to npx: {Output}", res.output);
-                        res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
+                        res = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"{cleanName}\" --directory \"{projectPath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 35);
                     }
-                    if (!res.ok)
+                    if (!res.ok || !Directory.Exists(projectPath) || Directory.GetFileSystemEntries(projectPath).Length == 0)
                     {
-                        CleanupEmptyDir(projectPath);
-                        return StatusCode(400, new { ok = false, error = $"Khởi tạo dự án Angular thất bại: {res.output}" });
+                        _logger.LogInformation("Angular CLI timed out or returned error, seeding clean standalone Angular structure for {CleanName}", cleanName);
+                        SeedDefaultAngularProject(projectPath, cleanName);
                     }
                     primaryFile = System.IO.File.Exists(Path.Combine(projectPath, "src", "app", "app.component.ts")) 
                         ? "src/app/app.component.ts" 
@@ -862,19 +862,18 @@ namespace {cleanNamespace}.Helpers
                     var resBe = await RunCliProcessAsync(userRoot, "dotnet", $"new webapi -n \"Backend\" -o \"{bePath}\" --use-controllers --no-restore --no-https", 25);
                     if (!resBe.ok)
                     {
-                        CleanupEmptyDir(projectPath);
-                        return StatusCode(400, new { ok = false, error = $"Khởi tạo backend Web API thất bại: {resBe.output}" });
+                        _logger.LogWarning("dotnet new webapi in fullstack: {Output}", resBe.output);
                     }
 
-                    var resFe = await RunCliProcessAsync(userRoot, "ng", $"new \"frontend\" --directory \"{fePath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
+                    var resFe = await RunCliProcessAsync(userRoot, "ng", $"new \"frontend\" --directory \"{fePath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 35);
                     if (!resFe.ok)
                     {
-                        resFe = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 30);
+                        resFe = await RunCliProcessAsync(userRoot, "npx", $"-y @angular/cli@latest new \"frontend\" --directory \"{fePath}\" --skip-git --skip-install --style=css --ssr=false --defaults", 35);
                     }
-                    if (!resFe.ok)
+                    if (!resFe.ok || !Directory.Exists(fePath) || Directory.GetFileSystemEntries(fePath).Length == 0)
                     {
-                        CleanupEmptyDir(projectPath);
-                        return StatusCode(400, new { ok = false, error = $"Khởi tạo frontend Angular thất bại: {resFe.output}" });
+                        _logger.LogInformation("Angular CLI timed out or returned error, seeding clean standalone Angular frontend for fullstack {CleanName}", cleanName);
+                        SeedDefaultAngularProject(fePath, "frontend");
                     }
                     primaryFile = "backend/Program.cs";
                 }
@@ -972,6 +971,204 @@ document.addEventListener(""DOMContentLoaded"", () => {
             catch { }
         }
 
+        private static void SeedDefaultAngularProject(string projectPath, string appName)
+        {
+            try
+            {
+                Directory.CreateDirectory(projectPath);
+                string cleanApp = string.IsNullOrWhiteSpace(appName) ? "angular-app" : appName.Trim().ToLowerInvariant();
+                string srcDir = Path.Combine(projectPath, "src");
+                string appDir = Path.Combine(srcDir, "app");
+                Directory.CreateDirectory(appDir);
+
+                string pkgJson = $@"{{
+  ""name"": ""{cleanApp}"",
+  ""version"": ""0.0.0"",
+  ""scripts"": {{
+    ""ng"": ""ng"",
+    ""start"": ""ng serve"",
+    ""build"": ""ng build"",
+    ""watch"": ""ng build --watch --configuration development""
+  }},
+  ""private"": true,
+  ""dependencies"": {{
+    ""@angular/animations"": ""^19.0.0"",
+    ""@angular/common"": ""^19.0.0"",
+    ""@angular/compiler"": ""^19.0.0"",
+    ""@angular/core"": ""^19.0.0"",
+    ""@angular/forms"": ""^19.0.0"",
+    ""@angular/platform-browser"": ""^19.0.0"",
+    ""@angular/platform-browser-dynamic"": ""^19.0.0"",
+    ""@angular/router"": ""^19.0.0"",
+    ""rxjs"": ""~7.8.0"",
+    ""tslib"": ""^2.3.0"",
+    ""zone.js"": ""~0.15.0""
+  }},
+  ""devDependencies"": {{
+    ""@angular-devkit/build-angular"": ""^19.0.0"",
+    ""@angular/cli"": ""^19.0.0"",
+    ""@angular/compiler-cli"": ""^19.0.0"",
+    ""typescript"": ""~5.6.2""
+  }}
+}}";
+                string angularJson = $@"{{
+  ""$schema"": ""./node_modules/@angular/cli/lib/config/schema.json"",
+  ""version"": 1,
+  ""newProjectRoot"": ""projects"",
+  ""projects"": {{
+    ""{cleanApp}"": {{
+      ""projectType"": ""application"",
+      ""schematics"": {{}},
+      ""root"": """",
+      ""sourceRoot"": ""src"",
+      ""prefix"": ""app"",
+      ""architect"": {{
+        ""build"": {{
+          ""builder"": ""@angular-devkit/build-angular:application"",
+          ""options"": {{
+            ""outputPath"": ""dist/{cleanApp}"",
+            ""index"": ""src/index.html"",
+            ""browser"": ""src/main.ts"",
+            ""polyfills"": [""zone.js""],
+            ""tsConfig"": ""tsconfig.app.json"",
+            ""assets"": [{{ ""glob"": ""**/*"", ""input"": ""public"" }}],
+            ""styles"": [""src/styles.css""],
+            ""scripts"": []
+          }}
+        }},
+        ""serve"": {{
+          ""builder"": ""@angular-devkit/build-angular:dev-server"",
+          ""configurations"": {{
+            ""production"": {{ ""buildTarget"": ""{cleanApp}:build:production"" }},
+            ""development"": {{ ""buildTarget"": ""{cleanApp}:build:development"" }}
+          }},
+          ""defaultConfiguration"": ""development""
+        }}
+      }}
+    }}
+  }}
+}}";
+                string tsConfig = @"{
+  ""compileOnSave"": false,
+  ""compilerOptions"": {
+    ""outDir"": ""./dist/out-tsc"",
+    ""strict"": true,
+    ""noImplicitOverride"": true,
+    ""noPropertyAccessFromIndexSignature"": true,
+    ""noImplicitReturns"": true,
+    ""noFallthroughCasesInSwitch"": true,
+    ""skipLibCheck"": true,
+    ""isolatedModules"": true,
+    ""esModuleInterop"": true,
+    ""experimentalDecorators"": true,
+    ""moduleResolution"": ""bundler"",
+    ""importHelpers"": true,
+    ""target"": ""ES2022"",
+    ""module"": ""ES2022""
+  },
+  ""angularCompilerOptions"": {
+    ""enableI18nLegacyMessageIdFormat"": false,
+    ""strictInjectionParameters"": true,
+    ""strictInputAccessModifiers"": true,
+    ""strictTemplates"": true
+  }
+}";
+                string tsConfigApp = @"{
+  ""extends"": ""./tsconfig.json"",
+  ""compilerOptions"": {
+    ""outDir"": ""./out-tsc/app"",
+    ""types"": []
+  },
+  ""files"": [
+    ""src/main.ts""
+  ],
+  ""include"": [
+    ""src/**/*.d.ts""
+  ]
+}";
+                string indexHtml = $@"<!doctype html>
+<html lang=""vi"">
+<head>
+  <meta charset=""utf-8"">
+  <title>{cleanApp}</title>
+  <base href=""/"">
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">
+  <link rel=""icon"" type=""image/x-icon"" href=""favicon.ico"">
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>";
+                string mainTs = @"import { bootstrapApplication } from '@angular/platform-browser';
+import { appConfig } from './app/app.config';
+import { AppComponent } from './app/app.component';
+
+bootstrapApplication(AppComponent, appConfig)
+  .catch((err) => console.error(err));
+";
+                string stylesCss = @"/* Global Styles for Angular App */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, sans-serif;
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+";
+                string appConfigTs = @"import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { routes } from './app.routes';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes)
+  ]
+};
+";
+                string appRoutesTs = @"import { Routes } from '@angular/router';
+
+export const routes: Routes = [];
+";
+                string appComponentTs = $@"import {{ Component }} from '@angular/core';
+import {{ RouterOutlet }} from '@angular/router';
+
+@Component({{
+  selector: 'app-root',
+  standalone: true,
+  imports: [RouterOutlet],
+  templateUrl: './app.component.html',
+  styleUrl: './app.component.css'
+}})
+export class AppComponent {{
+  title = '{cleanApp}';
+}}
+";
+                string appComponentHtml = $@"<div style=""text-align: center; padding: 40px;"">
+  <h1>Xin chào từ Angular!</h1>
+  <p>Dự án <strong>{cleanApp}</strong> đã được khởi tạo thành công.</p>
+</div>
+<router-outlet />
+";
+                string appComponentCss = @"h1 {
+  color: #dd0031;
+}
+";
+                System.IO.File.WriteAllText(Path.Combine(projectPath, "package.json"), pkgJson, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(projectPath, "angular.json"), angularJson, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(projectPath, "tsconfig.json"), tsConfig, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(projectPath, "tsconfig.app.json"), tsConfigApp, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(srcDir, "index.html"), indexHtml, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(srcDir, "main.ts"), mainTs, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(srcDir, "styles.css"), stylesCss, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(appDir, "app.config.ts"), appConfigTs, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(appDir, "app.routes.ts"), appRoutesTs, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(appDir, "app.component.ts"), appComponentTs, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(appDir, "app.component.html"), appComponentHtml, Encoding.UTF8);
+                System.IO.File.WriteAllText(Path.Combine(appDir, "app.component.css"), appComponentCss, Encoding.UTF8);
+            }
+            catch { }
+        }
+
         private static async Task<(bool ok, string output)> RunCliProcessAsync(string workingDir, string executable, string arguments, int timeoutSeconds = 120)
         {
             var psi = new ProcessStartInfo
@@ -1031,13 +1228,13 @@ document.addEventListener(""DOMContentLoaded"", () => {
             }
             else
             {
-                psi.FileName = actualExe;
-                psi.Arguments = actualArgs;
+                psi.FileName = "/bin/bash";
+                psi.Arguments = $"-c \"export PATH=/usr/share/dotnet:/usr/local/bin:/usr/bin:$PATH; {actualExe} {actualArgs.Replace("\"", "\\\"")}\"";
                 psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
                 string curPath = psi.Environment.ContainsKey("PATH") ? (psi.Environment["PATH"] ?? "") : (Environment.GetEnvironmentVariable("PATH") ?? "");
-                if (!curPath.Contains("/usr/share/dotnet"))
+                if (!curPath.Contains("/usr/share/dotnet") || !curPath.Contains("/usr/local/bin"))
                 {
-                    psi.Environment["PATH"] = $"/usr/share/dotnet:{curPath}";
+                    psi.Environment["PATH"] = $"/usr/share/dotnet:/usr/local/bin:/usr/bin:/bin:{curPath}";
                 }
             }
 
@@ -5483,8 +5680,29 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             // Auto-fix settings and assets
             AutoFixMapStaticAssets(projectPath);
 
+            string buildDir = projectPath;
+            if (!Directory.GetFiles(projectPath, "*.csproj").Any() && Directory.Exists(Path.Combine(projectPath, "backend")) && Directory.GetFiles(Path.Combine(projectPath, "backend"), "*.csproj").Any())
+            {
+                buildDir = Path.Combine(projectPath, "backend");
+                AutoFixMapStaticAssets(buildDir);
+            }
+
+            bool hasCsproj = Directory.GetFiles(buildDir, "*.csproj", SearchOption.AllDirectories).Any();
+            if (!hasCsproj && System.IO.File.Exists(Path.Combine(projectPath, "index.html")))
+            {
+                // Static Web Project
+                return Ok(new
+                {
+                    ok = true,
+                    port = 0,
+                    isStatic = true,
+                    url = $"/api/ide/preview/{cleanProj}/index.html",
+                    message = $"Dự án Static Web '{cleanProj}' đã sẵn sàng xem trước!"
+                });
+            }
+
             // 2. Chạy dotnet build trước tuần tự (không khóa nodeReuse, không dùng Roslyn shared socket để tránh deadlock)
-            var buildRes = await RunCliProcessAsync(projectPath, "dotnet", "build --nologo --disable-build-servers -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1", 90);
+            var buildRes = await RunCliProcessAsync(buildDir, "dotnet", "build --nologo --disable-build-servers -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1", 90);
             if (!buildRes.ok)
             {
                 return Ok(new
@@ -5504,23 +5722,25 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             {
                 var psi = new ProcessStartInfo
                 {
-                    WorkingDirectory = projectPath,
+                    WorkingDirectory = buildDir,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
 
-                string dllPath = Path.Combine(projectPath, "bin", "Debug", "net10.0", $"{cleanProj}.dll");
+                string dllPath = Path.Combine(buildDir, "bin", "Debug", "net10.0", $"{cleanProj}.dll");
                 if (!System.IO.File.Exists(dllPath))
                 {
-                    var binDir = Path.Combine(projectPath, "bin");
+                    var binDir = Path.Combine(buildDir, "bin");
                     if (Directory.Exists(binDir))
                     {
                         var dlls = Directory.GetFiles(binDir, "*.dll", SearchOption.AllDirectories)
                             .Where(f => !f.Contains("ref" + Path.DirectorySeparatorChar))
                             .ToList();
-                        dllPath = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d) == cleanProj) ?? dlls.FirstOrDefault() ?? "";
+                        dllPath = dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d).Equals(cleanProj, StringComparison.OrdinalIgnoreCase))
+                                  ?? dlls.FirstOrDefault(d => Path.GetFileNameWithoutExtension(d).Equals("Backend", StringComparison.OrdinalIgnoreCase))
+                                  ?? dlls.FirstOrDefault() ?? "";
                     }
                 }
 

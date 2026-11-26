@@ -2402,21 +2402,30 @@ async function runDotnetProjectBackground() {
         if (data.ok) {
             if (targetXterm) {
                 targetXterm.writeln(`\x1b[32m✔ [Build] Biên dịch thành công!\x1b[0m`);
-                targetXterm.writeln(`\x1b[32m✔ [Running] Ứng dụng đã sẵn sàng trên cổng :${data.port} (${data.url})\x1b[0m`);
+                if (data.port && data.port > 0) {
+                    targetXterm.writeln(`\x1b[32m✔ [Running] Ứng dụng đã sẵn sàng trên cổng :${data.port} (${data.url})\x1b[0m`);
+                } else {
+                    targetXterm.writeln(`\x1b[32m✔ [Static Web] ${data.message || "Dự án đã sẵn sàng xem trước."}\x1b[0m`);
+                }
                 targetXterm.write(`\r\n${prompt}`);
             }
-            showToastNotification(`🟢 Ứng dụng đã sẵn sàng trên cổng :${data.port}!`);
 
-            currentLiveAppPort = data.port;
-            const portEl = document.getElementById("tabLiveAppPort");
-            if (portEl) portEl.textContent = `:${data.port}`;
-            const badge = document.getElementById("tabLiveAppBadge");
-            if (badge) badge.classList.remove("d-none");
-            const btnOpen = document.getElementById("tabBtnOpenApp");
-            if (btnOpen) btnOpen.classList.remove("d-none");
-            const btnStop = document.getElementById("tabBtnStopApp");
-            if (btnStop) btnStop.classList.remove("d-none");
-            loadActivePorts();
+            if (data.port && data.port > 0) {
+                showToastNotification(`🟢 Ứng dụng đã sẵn sàng trên cổng :${data.port}!`);
+                currentLiveAppPort = data.port;
+                const portEl = document.getElementById("tabLiveAppPort");
+                if (portEl) portEl.textContent = `:${data.port}`;
+                const badge = document.getElementById("tabLiveAppBadge");
+                if (badge) badge.classList.remove("d-none");
+                const btnOpen = document.getElementById("tabBtnOpenApp");
+                if (btnOpen) btnOpen.classList.remove("d-none");
+                const btnStop = document.getElementById("tabBtnStopApp");
+                if (btnStop) btnStop.classList.remove("d-none");
+                loadActivePorts();
+            } else {
+                currentLiveAppPort = null;
+                showToastNotification(`🟢 ${data.message || "Dự án đã sẵn sàng xem trước!"}`);
+            }
 
             setTimeout(() => {
                 openLivePreview();
