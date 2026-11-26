@@ -49,6 +49,13 @@ function renderMarkdownWithMath(text) {
         return token;
     });
 
+    // 2.5 Handle streaming docx artifact indicator
+    let isStreamingDocx = false;
+    if (/\[ARTIFACT\s+type=["']docx["'][^\]]*\](?![\s\S]*?\[\/ARTIFACT\])/i.test(processed)) {
+        isStreamingDocx = true;
+        processed = processed.replace(/\[ARTIFACT\s+type=["']docx["'][^\]]*\][\s\S]*$/i, "\n\n@@DOCX_STREAMING_PLACEHOLDER@@\n\n");
+    }
+
     // 3. Parse Markdown
     let html = "";
     try {
@@ -56,6 +63,15 @@ function renderMarkdownWithMath(text) {
         html = marked.parse(escaped).replace(/language-j /g, "language-java");
     } catch (e) {
         html = processed;
+    }
+
+    if (isStreamingDocx) {
+        html = html.replace("@@DOCX_STREAMING_PLACEHOLDER@@", `
+            <div class="docx-artifact-streaming" style="background: #1e1e2e; border: 1px dashed #3b3b54; border-radius: 12px; padding: 12px 18px; margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                <span style="color: #93c5fd; font-size: 13px; font-weight: 500;">Đang tạo tệp Word...</span>
+            </div>
+        `);
     }
 
     // 4. Restore math tokens
@@ -66,11 +82,8 @@ function renderMarkdownWithMath(text) {
     return html;
 }
 
-function typesetMathInElement(elem) {
-    if (!elem) return;
-
 // ====== GLOBAL SIDEBAR TITLE SYNC ======
-window.syncSidebarChatTitle = function(arg1, arg2) {
+function syncSidebarChatTitle(arg1, arg2) {
     try {
         let newTitle = arg1;
         let cId = arg2;
@@ -91,6 +104,13 @@ window.syncSidebarChatTitle = function(arg1, arg2) {
                 el.innerText = cleanTitle;
                 found = true;
             });
+
+            // Call backend API to persist rename
+            fetch("/ai/api/rename_conversation.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: targetId, title: cleanTitle })
+            }).catch(() => {});
         }
         if (!found) {
             const activeTitleEl = document.querySelector('.chat-history-item.active .chat-title') ||
@@ -102,7 +122,11 @@ window.syncSidebarChatTitle = function(arg1, arg2) {
     } catch (e) {
         console.warn("syncSidebarChatTitle error:", e);
     }
-};
+}
+window.syncSidebarChatTitle = syncSidebarChatTitle;
+
+function typesetMathInElement(elem) {
+    if (!elem) return;
     if (elem !== document && elem !== document.body && !elem.isConnected) {
         requestAnimationFrame(() => {
             if (elem.isConnected && window.MathJax) {
@@ -1194,6 +1218,10 @@ async function callGemini(userText, images, files) {
 
 // ====== SEND ======
 async function send() {
+    let reply = null;
+    let geminiRes = null;
+    let exportType = null;
+    let current_chat_id = null;
 
     if (isSending) {
         if (Date.now() - (window._lastSendTimestamp || 0) > 12000) {
@@ -1388,8 +1416,8 @@ async function send() {
             return;
         }
 
-        let reply = geminiRes.text;
-        let current_chat_id = geminiRes.chat_id;
+        reply = geminiRes.text;
+        current_chat_id = geminiRes.chat_id;
 
         if (!reply || reply.trim() === "") {
             if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
@@ -1850,12 +1878,15 @@ async function send() {
         }, 100);
 
     } catch (e) {
-        typing.remove();
+        if (typing && typing.parentNode) typing.remove();
         console.error("sendMessage error:", e);
-        if (!reply || reply.trim().length === 0) {
-            addBotBubble("lỗi: " + e.message);
+        if (!reply || (typeof reply === "string" && reply.trim().length === 0)) {
+            addBotBubble("lỗi: " + (e?.message || e));
         }
+    } finally {
         isSending = false;
+        const sendBtn = document.getElementById("send_btn") || document.getElementById("btnSendChat");
+        if (sendBtn) sendBtn.disabled = false;
     }
 }
 

@@ -30,6 +30,9 @@ namespace BtoanAiNet.Services
 - Phản hồi trực tiếp, ngắn gọn, súc tích và tự nhiên bằng tiếng Việt (hoặc ngôn ngữ người dùng dùng).
 - Khi người dùng chào hỏi hoặc nhắn ngắn (như 'ê', 'chào', 'ko', 'ok', 'sao thế'), hãy phản hồi ngắn gọn, tự nhiên, thân thiện. Tuyệt đối không lặp lại quy tắc máy móc.
 - Nếu cuộc trò chuyện đang có tài liệu hoặc người dùng yêu cầu chỉnh sửa/điền/thêm dữ liệu, BẮT BUỘC xuất thẻ [ARTIFACT type=""..."" title=""...""] đầy đủ dữ liệu, TUYỆT ĐỐI KHÔNG hứa suông 'đợi chút' hay 'để mình làm'.
+- Khi người dùng yêu cầu 'bỏ vào word đi', 'xuất file word', 'tạo file docx':
+  1. Nếu cuộc trò chuyện đã có nội dung văn bản/tài liệu trước đó: BẮT BUỘC đưa 100% nội dung thực tế đó vào trong [ARTIFACT type=""docx"" title=""...""]...[/ARTIFACT].
+  2. Nếu cuộc trò chuyện đang trống hoặc chưa có nội dung/chủ đề cụ thể: TUYỆT ĐỐI KHÔNG tự bịa nội dung mẫu giữ chỗ chung chung; hãy hỏi ngắn gọn người dùng muốn đưa nội dung hoặc chủ đề gì vào file Word.
 - Tạo ảnh: kết thúc bằng [GENIMAGE] <prompt tiếng Anh chi tiết>
 - Tạo video: kết thúc bằng [GENVIDEO] <prompt tiếng Anh chi tiết>
 - Tạo nhạc: kết thúc bằng [GENMUSIC] <prompt tiếng Anh chi tiết>";
@@ -46,12 +49,13 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
 
 * QUY TẮC ARTIFACT STUDIO (KHI NGƯỜI DÙNG YÊU CẦU TẠO / XUẤT TÀI LIỆU HOẶC CHỈNH SỬA / ĐIỀN DỮ LIỆU):
 - TUYỆT ĐỐI CẤM NÓI SUÔNG: Không bao giờ trả lời bằng câu hoãn binh như 'để mình làm cho', 'bạn đợi chút', 'được rồi nha', 'để mình đồng bộ qua nhé' mà không kèm theo thẻ [ARTIFACT ...]. Khi người dùng phàn nàn bảng trống, yêu cầu thêm dữ liệu, hoặc hỏi 'đc chưa', bạn BẮT BUỘC PHẢI XUẤT NGAY THẺ [ARTIFACT] đầy đủ dữ liệu trong cùng một câu trả lời!
-- Khi người dùng yêu cầu soạn thảo, tạo hoặc xuất file tài liệu (Word .docx, PDF .pdf, Excel .xlsx, PowerPoint .pptx, hoặc yêu cầu nhiều file cùng lúc, hoặc bảo 'bỏ nội dung trên vào word/excel/ppt', 'bỏ vào word xuất file đi'):
-  + TUYỆT ĐỐI KHÔNG HỎI LẠI NGƯỜI DÙNG (CẤM các câu hỏi như: 'Bạn muốn soạn nội dung gì?', 'Hãy gửi nội dung cho mình'). BẮT BUỘC lấy trọn vẹn 100% nội dung đã tạo ở tin nhắn trước để đưa vào file.
-  + Bên ngoài chỉ viết 1-2 câu dẫn dắt ngắn gọn, tự nhiên.
-  + Toàn bộ nội dung thật đầy đủ, chi tiết và đẹp mắt BẮT BUỘC đặt trong thẻ [ARTIFACT type=""..."" title=""...""]...[/ARTIFACT].
-  + Có thể xuất NHIỀU thẻ [ARTIFACT] liên tiếp nếu người dùng yêu cầu nhiều định dạng (ví dụ: 1 thẻ docx + 1 thẻ xlsx + 1 thẻ pptx).
-  + Định dạng bên trong thẻ [ARTIFACT]:
+- Khi người dùng yêu cầu soạn thảo, tạo hoặc xuất file tài liệu (Word .docx, PDF .pdf, Excel .xlsx, PowerPoint .pptx, hoặc yêu cầu nhiều file cùng lúc, hoặc bảo 'bỏ nội dung trên vào word/excel/ppt', 'bỏ vào word xuất file đi', 'xuất file word', 'tạo file docx'):
+  1. NẾU TRONG LỊCH SỬ HỘI THOẠI HIỆN TẠI ĐÃ CÓ NỘI DUNG: AI BẮT BUỘC lấy trọn vẹn 100% nội dung thực tế đã tạo ở các tin nhắn trước để đưa vào bên trong cặp thẻ [ARTIFACT type=""..."" title=""...""]...[/ARTIFACT]. TUYỆT ĐỐI KHÔNG cắt xén, không viết tóm tắt đại khái, không bịa nội dung khác.
+  2. NẾU CUỘC TRÒ CHUYỆN ĐANG TRỐNG HOẶC CHƯA CÓ NỘI DUNG/CHỦ ĐỀ: AI TUYỆT ĐỐI KHÔNG tự bịa văn bản giữ chỗ chung chung (ví dụ: 'Tài liệu được soạn thảo theo yêu cầu của bạn...', 'Nội dung tài liệu đã được cập nhật thành công...'), mà PHẢI HỎI NGẮN GỌN LẠI người dùng muốn đưa nội dung hoặc chủ đề gì vào file Word.
+  3. Bên ngoài chỉ viết 1-2 câu dẫn dắt ngắn gọn, tự nhiên.
+  4. Toàn bộ nội dung thật đầy đủ, chi tiết và đẹp mắt BẮT BUỘC đặt trong thẻ [ARTIFACT type=""..."" title=""...""]...[/ARTIFACT].
+  5. Có thể xuất NHIỀU thẻ [ARTIFACT] liên tiếp nếu người dùng yêu cầu nhiều định dạng (ví dụ: 1 thẻ docx + 1 thẻ xlsx + 1 thẻ pptx).
+  6. Định dạng bên trong thẻ [ARTIFACT]:
     - Với type=""docx"" hoặc type=""pdf"": bên trong là nội dung Markdown hoàn chỉnh (nếu người dùng yêu cầu xuất nội dung từ tin nhắn trước thì BẮT BUỘC chép lại trọn vẹn 100% nội dung đó vào trong thẻ, tuyệt đối không được viết câu xã giao).
     - Với type=""xlsx"": bên trong là JSON hợp lệ theo cấu trúc:
       {
@@ -560,7 +564,15 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
                 else
                 {
-                    answer = $"Đã chuẩn bị xong tài liệu Word cho bạn:\n\n[ARTIFACT type=\"docx\" title=\"Tài liệu văn bản\"]\n{lastModelText}\n[/ARTIFACT]";
+                    string docxContent = !string.IsNullOrWhiteSpace(lastModelText) ? lastModelText : "";
+                    if (string.IsNullOrWhiteSpace(docxContent))
+                    {
+                        answer = "Bạn muốn đưa nội dung hoặc chủ đề gì vào file Word? Hãy chia sẻ để mình soạn thảo đầy đủ cho bạn nhé!";
+                    }
+                    else
+                    {
+                        answer = $"Đã chuẩn bị xong tài liệu Word cho bạn:\n\n[ARTIFACT type=\"docx\" title=\"Tài liệu văn bản\"]\n{docxContent}\n[/ARTIFACT]";
+                    }
                 }
             }
 
@@ -967,7 +979,8 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string lowerExportQ = trimmedQ;
-            string lastModelAnswer = historyChats.LastOrDefault(c => !string.IsNullOrWhiteSpace(c.Answer))?.Answer?.ToLowerInvariant() ?? "";
+            string rawLastModelAnswer = historyChats.LastOrDefault(c => !string.IsNullOrWhiteSpace(c.Answer))?.Answer ?? "";
+            string lastModelAnswer = rawLastModelAnswer.ToLowerInvariant();
             bool modelOfferedArtifact = lastModelAnswer.Contains("tạo file") || lastModelAnswer.Contains("xuất file") || 
                                         lastModelAnswer.Contains("file excel") || lastModelAnswer.Contains("file word") ||
                                         lastModelAnswer.Contains("file pdf") || lastModelAnswer.Contains("file powerpoint") ||
@@ -1165,7 +1178,15 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
                 else if (streamTargetType == "docx")
                 {
-                    syntheticChunk = $"\n\nĐã chuẩn bị xong tài liệu Word cho bạn:\n\n[ARTIFACT type=\"docx\" title=\"{streamTargetTitle}\"]\n# {streamTargetTitle}\n\nNội dung tài liệu đã được cập nhật thành công.\n[/ARTIFACT]";
+                    string docxContent = !string.IsNullOrWhiteSpace(rawLastModelAnswer) ? rawLastModelAnswer : "";
+                    if (string.IsNullOrWhiteSpace(docxContent))
+                    {
+                        syntheticChunk = "\n\nBạn muốn đưa nội dung hoặc chủ đề gì vào file Word? Hãy chia sẻ để mình soạn thảo đầy đủ cho bạn nhé!";
+                    }
+                    else
+                    {
+                        syntheticChunk = $"\n\nĐã chuẩn bị xong tài liệu Word cho bạn:\n\n[ARTIFACT type=\"docx\" title=\"{streamTargetTitle}\"]\n{docxContent}\n[/ARTIFACT]";
+                    }
                 }
                 else if (streamTargetType == "pdf")
                 {

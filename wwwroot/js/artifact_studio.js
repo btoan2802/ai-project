@@ -48,17 +48,127 @@ function getArtifactBadgeInfo(type) {
     }
 }
 
+// ====== DOCX ARTIFACT CARD (DARK MODERN #1e1e2e, OPENXML DOWNLOAD) ======
+window.docxArtifactRegistry = window.docxArtifactRegistry || {};
+
+function createDocxArtifactCard(art) {
+    const artId = "docx_art_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+    window.docxArtifactRegistry[artId] = art;
+
+    const card = document.createElement("div");
+    card.className = "docx-artifact-card";
+    card.id = artId;
+    card.style.cssText = "background: #1e1e2e; border: 1px solid #3b3b54; border-radius: 12px; padding: 14px 18px; margin: 12px 0; box-shadow: 0 4px 14px rgba(0,0,0,0.35);";
+    
+    const displayTitle = (art.title || "Tài liệu").replace(/\.docx$/i, "");
+
+    card.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3" style="min-width: 0;">
+                <div style="width: 44px; height: 44px; border-radius: 8px; background: rgba(37, 99, 235, 0.18); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="bi bi-file-earmark-word-fill text-primary" style="font-size: 24px;"></i>
+                </div>
+                <div style="min-width: 0;">
+                    <div class="fw-bold text-white fs-6 mb-0 text-truncate" style="max-width: 340px;" title="${escapeHtml(displayTitle)}.docx">${escapeHtml(displayTitle)}.docx</div>
+                    <div class="text-secondary extra-small mt-0.5">Tài liệu Microsoft Word (.docx) · Chuẩn OpenXML</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-light rounded-pill px-3 py-1 extra-small fw-medium d-inline-flex align-items-center gap-1.5" onclick="previewDocxArtifact('${artId}')">
+                    <i class="bi bi-eye"></i> <span>Xem trước</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 py-1 extra-small fw-medium d-inline-flex align-items-center gap-1.5" onclick="downloadDocxViaApi('${artId}', this)">
+                    <i class="bi bi-download"></i> <span>Tải file Word (.docx)</span>
+                </button>
+            </div>
+        </div>
+    `;
+    return card;
+}
+window.createDocxArtifactCard = createDocxArtifactCard;
+
+window.previewDocxArtifact = function(artId) {
+    const art = window.docxArtifactRegistry ? window.docxArtifactRegistry[artId] : null;
+    if (!art) return;
+    if (typeof openArtifactPreview === "function") {
+        openArtifactPreview(art);
+    } else {
+        alert(art.content);
+    }
+};
+
+window.downloadDocxViaApi = async function(artIdOrArt, btnEl) {
+    let art = artIdOrArt;
+    if (typeof artIdOrArt === "string") {
+        art = window.docxArtifactRegistry ? window.docxArtifactRegistry[artIdOrArt] : null;
+    }
+    if (!art) return;
+
+    const origHtml = btnEl ? btnEl.innerHTML : "";
+    if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang tải...';
+    }
+
+    try {
+        const res = await fetch("/api/chat/export-docx", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title: art.title || "Tài liệu",
+                markdownContent: art.content,
+                content: art.content
+            })
+        });
+
+        if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            throw new Error(errJson.error || `HTTP ${res.status}`);
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        const cleanTitle = (art.title || "Tai_lieu").replace(/[\\/:*?"<>|]+/g, '_').replace(/\.docx$/i, '').trim();
+        a.download = `${cleanTitle}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 1000);
+    } catch (e) {
+        alert("Lỗi khi tải file Word: " + e.message);
+    } finally {
+        if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.innerHTML = origHtml;
+        }
+    }
+};
+
 // Render Artifact Cards or Gemini Inline Canvas inside bot message bubble
 function renderArtifactCards(bubble, artifacts) {
     if (!bubble || !artifacts || artifacts.length === 0) return;
 
-    // RULE: Khi AI chỉ xuất 1 tài liệu văn bản (docx hoặc pdf) -> hiển thị trực tiếp Inline Document Canvas Card chuẩn Gemini!
-    if (artifacts.length === 1 && (artifacts[0].type === "docx" || artifacts[0].type === "pdf")) {
-        renderGeminiInlineCanvas(bubble, artifacts[0]);
+    // 1. Render all docx artifacts with the requested dark-themed card
+    const docxArtifacts = artifacts.filter(a => a.type === "docx");
+    const otherArtifacts = artifacts.filter(a => a.type !== "docx");
+
+    docxArtifacts.forEach(art => {
+        bubble.appendChild(createDocxArtifactCard(art));
+    });
+
+    if (otherArtifacts.length === 0) return;
+
+    // 2. For remaining non-docx artifacts:
+    if (otherArtifacts.length === 1 && otherArtifacts[0].type === "pdf") {
+        renderGeminiInlineCanvas(bubble, otherArtifacts[0]);
         return;
     }
 
-    // Khi AI xuất Excel (.xlsx), PowerPoint (.pptx) hoặc từ 2 file trở lên -> hiển thị Artifact Cards + Split-Pane Claude
     let container = bubble.querySelector(".artifact-cards-container");
     if (!container) {
         container = document.createElement("div");
@@ -68,7 +178,7 @@ function renderArtifactCards(bubble, artifacts) {
         container.innerHTML = "";
     }
 
-    artifacts.forEach((art, index) => {
+    otherArtifacts.forEach((art, index) => {
         const info = getArtifactBadgeInfo(art.type);
         const card = document.createElement("div");
         card.className = "artifact-card";

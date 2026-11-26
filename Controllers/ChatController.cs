@@ -315,6 +315,57 @@ namespace BtoanAiNet.Controllers
             }
         }
 
+        // POST /api/chat/export-docx
+        [HttpPost]
+        [Route("api/chat/export-docx")]
+        public async Task<IActionResult> ExportDocx([FromBody] ExportDocxRequestModel model)
+        {
+            if (model == null) return BadRequest(new { error = "Dữ liệu yêu cầu không hợp lệ" });
+
+            string content = !string.IsNullOrWhiteSpace(model.MarkdownContent) ? model.MarkdownContent : (model.Content ?? "");
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return BadRequest(new { error = "Nội dung tài liệu không được để trống" });
+            }
+
+            string rawTitle = !string.IsNullOrWhiteSpace(model.Title) ? model.Title.Trim() : "Tai_lieu";
+            string safeFileName = string.Concat(rawTitle.Split(Path.GetInvalidFileNameChars())).Replace(" ", "_").Trim();
+            if (string.IsNullOrWhiteSpace(safeFileName)) safeFileName = "Tai_lieu";
+            if (safeFileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
+            {
+                safeFileName = safeFileName[..^5];
+            }
+
+            try
+            {
+                string webRootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                var artifactService = HttpContext.RequestServices.GetService<IArtifactGeneratorService>();
+                if (artifactService == null)
+                {
+                    return StatusCode(500, new { error = "Dịch vụ Artifact Generator chưa được cấu hình" });
+                }
+
+                var result = await artifactService.GenerateArtifactAsync("docx", rawTitle, content, webRootPath);
+                if (!result.Success || string.IsNullOrWhiteSpace(result.Filename))
+                {
+                    return StatusCode(500, new { error = result.Error ?? "Không thể tạo file Word (.docx)" });
+                }
+
+                string filePath = Path.Combine(webRootPath, "files", result.Filename);
+                if (!System.IO.File.Exists(filePath))
+                {
+                    return StatusCode(500, new { error = "Tệp Word không tồn tại trên hệ thống" });
+                }
+
+                byte[] fileBytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                return File(fileBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", $"{safeFileName}.docx");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Lỗi xuất tệp Word: " + ex.Message });
+            }
+        }
+
         [HttpPost]
         [Route("api/chat/delete-all")]
         public async Task<IActionResult> DeleteAllConversations()
@@ -695,5 +746,12 @@ namespace BtoanAiNet.Controllers
                 return Json(new List<object>());
             }
         }
+    }
+
+    public class ExportDocxRequestModel
+    {
+        public string? Title { get; set; }
+        public string? MarkdownContent { get; set; }
+        public string? Content { get; set; }
     }
 }

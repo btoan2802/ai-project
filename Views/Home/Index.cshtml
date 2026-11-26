@@ -502,6 +502,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script>
     // Early inline definitions to prevent ReferenceError before app.js is ready
+    window.syncSidebarChatTitle = window.syncSidebarChatTitle || function(arg1, arg2) {
+      if (typeof window.syncSidebarChatTitleImpl === "function") {
+        window.syncSidebarChatTitleImpl(arg1, arg2);
+      }
+    };
     window.toggleTheme = function() {
       const cur = document.documentElement.getAttribute("data-theme") || "light";
       const next = cur === "dark" ? "light" : "dark";
@@ -1200,8 +1205,8 @@
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
-  <script src="js/artifact_studio.js?v=20261125_spreadfix_v6"></script>
-  <script src="js/app.js?v=20261125_titlesync_v7"></script>
+  <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
+  <script src="js/app.js?v=20261127_titlesync_v8"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">
