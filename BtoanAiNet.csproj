@@ -12,6 +12,11 @@
     <EmbeddedResource Remove="App_Data\**" />
     <None Remove="App_Data\**" />
 
+    <Compile Remove="App_Data_Backup\**" />
+    <Content Remove="App_Data_Backup\**" />
+    <EmbeddedResource Remove="App_Data_Backup\**" />
+    <None Remove="App_Data_Backup\**" />
+
     <Compile Remove="WorkspaceTemplates\**" />
     <Content Remove="WorkspaceTemplates\**" />
     <EmbeddedResource Remove="WorkspaceTemplates\**" />

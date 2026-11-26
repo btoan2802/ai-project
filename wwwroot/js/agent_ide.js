@@ -5,7 +5,8 @@
 
 let monacoEditor = null;
 let monacoDiffEditor = null;
-let activeProjectId = "demo";
+let activeProjectId = localStorage.getItem("btoan_active_project") || localStorage.getItem("antigravity_last_project") || null;
+let isTerminalInitialized = false;
 let activeFilePath = null;
 let activeDiffProposal = null;
 
@@ -296,7 +297,10 @@ async function loadUserProjects() {
         refreshFileTree();
         loadGitStatus();
         if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
-            terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
+            if (!isTerminalInitialized) {
+                isTerminalInitialized = true;
+                terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
+            }
         }
     } else {
         const container = document.getElementById("workspaceTreeContainer");
@@ -444,6 +448,7 @@ async function switchActiveProject(projName) {
     await refreshFileTree();
     loadGitStatus();
     loadAgentChatHistory(activeProjectId);
+    isTerminalInitialized = true;
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
         await terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1").catch(console.error);
     }
@@ -1875,7 +1880,8 @@ async function initTerminalSignalR() {
     try {
         await terminalHubConn.start();
         console.log("[Terminal] Connected to TerminalHub successfully.");
-        if (activeProjectId) {
+        if (activeProjectId && !isTerminalInitialized) {
+            isTerminalInitialized = true;
             await terminalHubConn.invoke("InitializeTerminal", activeProjectId, "term-1");
         }
     } catch (err) {

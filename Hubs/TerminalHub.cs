@@ -113,8 +113,11 @@ namespace BtoanAiNet.Hubs
 
         private string ResolveProjectRoot(int userId, string projectName)
         {
-            string cleanProj = Regex.Replace(projectName ?? "my-project", @"[^a-zA-Z0-9_\-\.]", "-").Trim('-');
-            if (string.IsNullOrWhiteSpace(cleanProj)) cleanProj = "my-project";
+            string cleanProj = Regex.Replace(projectName ?? "shop-senior-mvc", @"[^a-zA-Z0-9_\-\.]", "-").Trim('-');
+            if (string.IsNullOrWhiteSpace(cleanProj) || cleanProj == "demo" || cleanProj == "demo-app")
+            {
+                cleanProj = "shop-senior-mvc";
+            }
 
             string userRoot = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", $"user_{userId}");
             if (!Directory.Exists(userRoot))
@@ -126,6 +129,16 @@ namespace BtoanAiNet.Hubs
             string projectPath = Path.Combine(userRoot, cleanProj);
             if (!Directory.Exists(projectPath))
             {
+                // Never create empty demo folder - fallback to existing projects if available
+                var existingDirs = Directory.GetDirectories(userRoot)
+                    .Select(Path.GetFileName)
+                    .Where(n => !string.IsNullOrEmpty(n) && !n.StartsWith(".") && n != "demo" && n != "demo-app")
+                    .ToList();
+                if (existingDirs.Count > 0)
+                {
+                    var fallbackProj = existingDirs.FirstOrDefault(d => d == "shop-senior-mvc") ?? existingDirs.FirstOrDefault() ?? "shop-senior-mvc";
+                    return Path.Combine(userRoot, fallbackProj);
+                }
                 Directory.CreateDirectory(projectPath);
             }
             return projectPath;
