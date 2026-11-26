@@ -145,6 +145,99 @@ namespace BtoanAiNet.Controllers
                 }
             }
             catch { }
+
+            AutoFixSqliteConnectionStrings(projectPath);
+        }
+
+        public static void AutoFixSqliteConnectionStrings(string projectPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
+
+                // Check if project references Sqlite
+                var csprojFiles = Directory.GetFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly);
+                bool usesSqlite = false;
+                foreach (var csproj in csprojFiles)
+                {
+                    string content = System.IO.File.ReadAllText(csproj, Encoding.UTF8);
+                    if (content.Contains("Microsoft.EntityFrameworkCore.Sqlite", StringComparison.OrdinalIgnoreCase))
+                    {
+                        usesSqlite = true;
+                        break;
+                    }
+                }
+
+                if (!usesSqlite)
+                {
+                    var progFile = Path.Combine(projectPath, "Program.cs");
+                    if (System.IO.File.Exists(progFile))
+                    {
+                        string pContent = System.IO.File.ReadAllText(progFile, Encoding.UTF8);
+                        if (pContent.Contains("UseSqlite", StringComparison.OrdinalIgnoreCase))
+                        {
+                            usesSqlite = true;
+                        }
+                    }
+                }
+
+                if (usesSqlite)
+                {
+                    string[] jsonFiles = new[] { "appsettings.json", "appsettings.Development.json" };
+                    foreach (var jf in jsonFiles)
+                    {
+                        string jPath = Path.Combine(projectPath, jf);
+                        if (System.IO.File.Exists(jPath))
+                        {
+                            string jContent = System.IO.File.ReadAllText(jPath, Encoding.UTF8);
+                            if (jContent.Contains("Server=", StringComparison.OrdinalIgnoreCase) ||
+                                jContent.Contains("Trusted_Connection=", StringComparison.OrdinalIgnoreCase) ||
+                                !jContent.Contains("Data Source=", StringComparison.OrdinalIgnoreCase))
+                            {
+                                try
+                                {
+                                    var node = System.Text.Json.Nodes.JsonNode.Parse(jContent);
+                                    if (node != null)
+                                    {
+                                        if (node["ConnectionStrings"] == null)
+                                        {
+                                            node["ConnectionStrings"] = new System.Text.Json.Nodes.JsonObject();
+                                        }
+                                        node["ConnectionStrings"]!["DefaultConnection"] = "Data Source=shop_senior.db";
+                                        System.IO.File.WriteAllText(jPath, node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
+                                    }
+                                }
+                                catch
+                                {
+                                    string replaced = System.Text.RegularExpressions.Regex.Replace(
+                                        jContent,
+                                        @"""DefaultConnection""\s*:\s*""[^""]*""",
+                                        @"""DefaultConnection"": ""Data Source=shop_senior.db"""
+                                    );
+                                    System.IO.File.WriteAllText(jPath, replaced, Encoding.UTF8);
+                                }
+                            }
+                        }
+                    }
+
+                    // Also sanitize Program.cs connection string retrieval if present
+                    var pFile = Path.Combine(projectPath, "Program.cs");
+                    if (System.IO.File.Exists(pFile))
+                    {
+                        string pSrc = System.IO.File.ReadAllText(pFile, Encoding.UTF8);
+                        if (pSrc.Contains("builder.Configuration.GetConnectionString(\"DefaultConnection\")") &&
+                            !pSrc.Contains("rawConn.Contains(\"Server=\")"))
+                        {
+                            pSrc = pSrc.Replace(
+                                "builder.Services.AddDbContext<AppDbContext>(options =>\n    options.UseSqlite(builder.Configuration.GetConnectionString(\"DefaultConnection\") ?? \"Data Source=shop_senior.db\"));",
+                                "string rawConn = builder.Configuration.GetConnectionString(\"DefaultConnection\") ?? \"Data Source=shop_senior.db\";\nif (rawConn.Contains(\"Server=\", StringComparison.OrdinalIgnoreCase) || !rawConn.Contains(\"Data Source=\", StringComparison.OrdinalIgnoreCase))\n{\n    rawConn = \"Data Source=shop_senior.db\";\n}\nbuilder.Services.AddDbContext<AppDbContext>(options =>\n    options.UseSqlite(rawConn));"
+                            );
+                            System.IO.File.WriteAllText(pFile, pSrc, Encoding.UTF8);
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         public static void EnforceWebSeparation(string projectPath, List<string> modifiedFiles)

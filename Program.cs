@@ -277,6 +277,23 @@ using (var scope = app.Services.CreateScope())
                 Console.WriteLine($"[SEED] shop-senior-mvc seed note: {ex.Message}");
             }
 
+            // Auto sanitize SQLite connection strings across existing workspaces
+            try
+            {
+                string userWorkspacesDir = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "UserWorkspaces");
+                if (Directory.Exists(userWorkspacesDir))
+                {
+                    foreach (var uDir in Directory.GetDirectories(userWorkspacesDir))
+                    {
+                        foreach (var pDir in Directory.GetDirectories(uDir))
+                        {
+                            BtoanAiNet.Controllers.IdeController.AutoFixMapStaticAssets(pDir);
+                        }
+                    }
+                }
+            }
+            catch { }
+
             try
             {
                 dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_chat_messages ADD COLUMN thought_text TEXT;");

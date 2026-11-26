@@ -6,8 +6,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+string rawConn = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=shop_senior.db";
+if (rawConn.Contains("Server=", StringComparison.OrdinalIgnoreCase) || !rawConn.Contains("Data Source=", StringComparison.OrdinalIgnoreCase))
+{
+    rawConn = "Data Source=shop_senior.db";
+}
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=shop_senior.db"));
+    options.UseSqlite(rawConn));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
@@ -22,10 +28,17 @@ builder.Services.AddScoped<CartService>();
 var app = builder.Build();
 
 // Seed database on startup
-using (var scope = app.Services.CreateScope())
+try
 {
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    SeedData.Initialize(context);
+    using (var scope = app.Services.CreateScope())
+    {
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        SeedData.Initialize(context);
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[Startup] Database initialization notice: {ex.Message}");
 }
 
 // Configure HTTP pipeline
