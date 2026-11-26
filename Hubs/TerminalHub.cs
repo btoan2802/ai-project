@@ -186,8 +186,7 @@ namespace BtoanAiNet.Hubs
 
             await Clients.Caller.SendAsync("SessionInitialized", true, session.CurrentDirectory, sId);
             await Clients.Caller.SendAsync("TerminalOutput", 
-                $"\x1b[36mBtoan Agent Multi-Environment Interactive Terminal (Node, Angular, Python, Java, .NET)\x1b[0m\r\n" +
-                $"\x1b[90mSession started [{sId}]. Workspace: {Path.GetFileName(rootPath)}\x1b[0m\r\n\r\n" +
+                $"\x1b[90m● Terminal sẵn sàng [{sId}] — Workspace: {Path.GetFileName(rootPath)}\x1b[0m\r\n" +
                 $"PS {session.CurrentDirectory}> ", sId);
         }
 

@@ -18,8 +18,8 @@ async function syncTerminalWorkspace(projName, clearBeforeInit = false) {
     _isStartingTerminal = true;
     try {
         const s1 = terminalSessions[0];
-        if (s1 && s1.xterm && clearBeforeInit) {
-            s1.xterm.clear();
+        if (s1 && s1.xterm) {
+            try { s1.xterm.reset(); } catch (e) { s1.xterm.clear(); }
         }
         await terminalHubConn.invoke("InitializeTerminal", projName, "term-1");
         _currentTerminalWorkspace = projName;
@@ -445,7 +445,7 @@ async function switchActiveProject(projName) {
 
     const activeTerm = (terminalSessions && terminalSessions.find(s => s.id === activeTerminalSessionId)) || (terminalSessions && terminalSessions[0]);
     if (activeTerm && activeTerm.xterm) {
-        activeTerm.xterm.clear();
+        try { activeTerm.xterm.reset(); } catch (e) { activeTerm.xterm.clear(); }
     }
 
     activeProjectId = projName;
@@ -1556,7 +1556,7 @@ function initXtermTerminal() {
 
     // Create initial term-1 session
     const term1Pane = document.getElementById("xtermTerminalContainer");
-    createTerminalSessionInstance("term-1", "powershell 1", term1Pane);
+    createTerminalSessionInstance("term-1", "pwsh 1", term1Pane);
 
     // Connect SignalR
     initTerminalSignalR();
@@ -1564,12 +1564,12 @@ function initXtermTerminal() {
 
 function getTerminalTheme() {
     return {
-        background: '#181818',
+        background: '#141414',
         foreground: '#cccccc',
         cursor: '#ffffff',
-        cursorAccent: '#181818',
+        cursorAccent: '#141414',
         selectionBackground: 'rgba(255, 255, 255, 0.25)',
-        black: '#181818',
+        black: '#141414',
         red: '#f14c4c',
         green: '#4ec9b0',
         yellow: '#dcdcaa',
@@ -1600,15 +1600,16 @@ function createTerminalSessionInstance(sessionId, name, containerEl) {
         containerEl.style.minHeight = "0";
         containerEl.style.minWidth = "0";
         containerEl.style.overflow = "hidden";
+        containerEl.style.background = "#141414";
         containerEl.style.display = "none";
         wrapper.appendChild(containerEl);
     }
 
     const term = new Terminal({
         theme: getTerminalTheme(),
-        fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+        fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
         fontSize: 13,
-        lineHeight: 1.25,
+        lineHeight: 1.45,
         cursorBlink: true,
         cursorStyle: 'block',
         convertEol: true,
@@ -1705,19 +1706,23 @@ function renderTerminalSessionsSidebar() {
 
     const headerTabsEl = document.getElementById("terminalHeaderTabsContainer");
     if (headerTabsEl) {
-        headerTabsEl.innerHTML = terminalSessions.map(s => `
-            <div class="terminal-header-tab ${s.id === activeTerminalSessionId ? 'active' : ''}" onclick="switchTerminalSession('${s.id}')" style="cursor: pointer; padding: 2px 8px; border-radius: 4px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid ${s.id === activeTerminalSessionId ? '#388bfd' : 'transparent'}; background: ${s.id === activeTerminalSessionId ? '#1f2937' : 'transparent'}; color: ${s.id === activeTerminalSessionId ? '#58a6ff' : '#94a3b8'};">
-                <i class="bi bi-terminal" style="font-size: 10px;"></i>
-                <span>${s.name}</span>
-                ${terminalSessions.length > 1 ? `<span onclick="event.stopPropagation(); closeTerminalSession('${s.id}')" style="margin-left: 2px; opacity: 0.7; font-size: 13px; cursor: pointer; line-height: 1;" title="Đóng">&times;</span>` : ''}
-            </div>
-        `).join('');
+        headerTabsEl.innerHTML = terminalSessions.map(s => {
+            const displayName = s.name.startsWith("powershell") ? s.name.replace("powershell", "pwsh") : s.name;
+            return `
+                <div class="terminal-header-pill ${s.id === activeTerminalSessionId ? 'active' : ''}" onclick="switchTerminalSession('${s.id}')" title="${s.name}">
+                    <i class="bi bi-terminal" style="font-size: 10px; color: ${s.id === activeTerminalSessionId ? '#38bdf8' : '#8b949e'};"></i>
+                    <span class="terminal-pill-name">${displayName}</span>
+                    ${terminalSessions.length > 1 ? `<span onclick="event.stopPropagation(); closeTerminalSession('${s.id}')" class="terminal-pill-close" title="Đóng">&times;</span>` : ''}
+                </div>
+            `;
+        }).join('');
     }
 
     const labelEl = document.getElementById("currentActiveSessionLabel");
     if (labelEl) {
         const cur = terminalSessions.find(s => s.id === activeTerminalSessionId);
-        labelEl.innerText = cur ? `>_ ${cur.name}` : `>_ powershell`;
+        const curName = cur ? (cur.name.startsWith("powershell") ? cur.name.replace("powershell", "pwsh") : cur.name) : "pwsh 1";
+        labelEl.innerText = `>_ ${curName}`;
     }
 }
 
@@ -1735,7 +1740,7 @@ function toggleTerminalSidebarList() {
 async function createNewTerminalSession() {
     terminalSessionCounter++;
     const newId = `term-${terminalSessionCounter}`;
-    const newName = `powershell ${terminalSessionCounter}`;
+    const newName = `pwsh ${terminalSessionCounter}`;
 
     const newSession = createTerminalSessionInstance(newId, newName, null);
     if (!newSession) return;
