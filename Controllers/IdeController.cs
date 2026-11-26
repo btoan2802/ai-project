@@ -769,15 +769,24 @@ document.addEventListener(""DOMContentLoaded"", () => {
                 StandardErrorEncoding = Encoding.UTF8
             };
 
+            string actualExe = executable.Trim();
+            string actualArgs = arguments ?? "";
+            int firstSpace = actualExe.IndexOf(' ');
+            if (firstSpace > 0)
+            {
+                actualArgs = $"{actualExe.Substring(firstSpace + 1).Trim()} {actualArgs}".Trim();
+                actualExe = actualExe.Substring(0, firstSpace).Trim();
+            }
+
             if (OperatingSystem.IsWindows())
             {
                 psi.FileName = "cmd.exe";
-                psi.Arguments = $"/c {executable} {arguments}";
+                psi.Arguments = $"/c {actualExe} {actualArgs}";
             }
             else
             {
-                psi.FileName = executable;
-                psi.Arguments = arguments;
+                psi.FileName = actualExe;
+                psi.Arguments = actualArgs;
                 psi.Environment["DOTNET_ROOT"] = "/usr/share/dotnet";
                 string curPath = psi.Environment.ContainsKey("PATH") ? (psi.Environment["PATH"] ?? "") : (Environment.GetEnvironmentVariable("PATH") ?? "");
                 if (!curPath.Contains("/usr/share/dotnet"))
@@ -4921,7 +4930,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             AutoFixMapStaticAssets(projectPath);
 
             // 2. Chạy dotnet build trước tuần tự
-            var buildRes = await RunCliProcessAsync(projectPath, "dotnet build", "--nologo", 60);
+            var buildRes = await RunCliProcessAsync(projectPath, "dotnet", "build --nologo", 60);
             if (!buildRes.ok)
             {
                 return Ok(new
