@@ -2733,18 +2733,22 @@ async function loadAgentChatHistory(projectId) {
                     agentMsg.className = "d-flex flex-column gap-2 extra-small text-light mb-2";
                     let parsedPlan = [];
                     let parsedOps = [];
+                    let parsedFiles = [];
                     try { if (item.planJson) parsedPlan = JSON.parse(item.planJson); } catch (e) { }
                     try { if (item.toolActionsJson) parsedOps = JSON.parse(item.toolActionsJson); } catch (e) { }
+                    try { if (item.filePillsJson) parsedFiles = JSON.parse(item.filePillsJson); } catch (e) { }
                     if (!parsedPlan.length && Array.isArray(item.plan)) parsedPlan = item.plan;
                     if (!parsedOps.length && Array.isArray(item.operations)) parsedOps = item.operations;
+                    if (!parsedFiles.length && Array.isArray(item.modifiedFiles)) parsedFiles = item.modifiedFiles;
 
                     if (item.thoughtText) {
                         const thAccordion = document.createElement("details");
                         thAccordion.className = "agent-thought-accordion";
+                        const thoughtSecs = (item.thoughtSeconds && item.thoughtSeconds > 0) ? ` (${item.thoughtSeconds}s)` : "";
                         thAccordion.innerHTML = `
                             <summary class="agent-thought-summary">
                                 <span class="agent-thought-arrow">›</span>
-                                <span class="agent-thought-title">Thought</span>
+                                <span class="agent-thought-title">Thought${thoughtSecs}</span>
                             </summary>
                             <div class="agent-thought-body">${escapeHtml(item.thoughtText)}</div>
                         `;
@@ -2755,7 +2759,7 @@ async function loadAgentChatHistory(projectId) {
                         explanation: item.content,
                         plan: parsedPlan,
                         operations: parsedOps,
-                        modifiedFiles: item.modifiedFiles || [],
+                        modifiedFiles: parsedFiles,
                         executedCommands: item.executedCommands || []
                     }, agentMsg);
                     container.appendChild(agentMsg);

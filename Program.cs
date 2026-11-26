@@ -296,14 +296,42 @@ using (var scope = app.Services.CreateScope())
 
             try
             {
-                dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_chat_messages ADD COLUMN thought_text TEXT;");
+                dbContext.Database.ExecuteSqlRaw(@"
+CREATE TABLE IF NOT EXISTS AgentChatMessages (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    ProjectName TEXT NOT NULL,
+    Role TEXT NOT NULL,
+    Content TEXT,
+    ThoughtText TEXT,
+    ThoughtSeconds INTEGER DEFAULT 0,
+    PlanJson TEXT,
+    FilePillsJson TEXT,
+    ToolActionsJson TEXT,
+    CheckpointId TEXT,
+    CreatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessages(UserId, ProjectName);
+");
+
+                string[] alterCols = new[]
+                {
+                    "ALTER TABLE AgentChatMessages ADD COLUMN ThoughtText TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN ThoughtSeconds INTEGER DEFAULT 0;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN PlanJson TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN FilePillsJson TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN ToolActionsJson TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN CheckpointId TEXT;"
+                };
+                foreach (var alter in alterCols)
+                {
+                    try { dbContext.Database.ExecuteSqlRaw(alter); } catch { }
+                }
             }
-            catch { }
-            try
+            catch (Exception ex)
             {
-                dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_chat_messages ADD COLUMN checkpoint_id TEXT;");
+                Console.WriteLine($"[AgentChatMessages] Startup ensure warning: {ex.Message}");
             }
-            catch { }
         }
         catch (Exception initEx)
         {
@@ -711,16 +739,36 @@ END
             try
             {
                 dbContext.Database.ExecuteSqlRaw(@"
-CREATE TABLE IF NOT EXISTS agent_chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    project_name TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    plan_json TEXT NULL,
-    tool_actions_json TEXT NULL,
-    created_at TEXT NOT NULL
-);");
+CREATE TABLE IF NOT EXISTS AgentChatMessages (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    ProjectName TEXT NOT NULL,
+    Role TEXT NOT NULL,
+    Content TEXT,
+    ThoughtText TEXT,
+    ThoughtSeconds INTEGER DEFAULT 0,
+    PlanJson TEXT,
+    FilePillsJson TEXT,
+    ToolActionsJson TEXT,
+    CheckpointId TEXT,
+    CreatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessages(UserId, ProjectName);
+");
+
+                string[] alterCols = new[]
+                {
+                    "ALTER TABLE AgentChatMessages ADD COLUMN ThoughtText TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN ThoughtSeconds INTEGER DEFAULT 0;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN PlanJson TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN FilePillsJson TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN ToolActionsJson TEXT;",
+                    "ALTER TABLE AgentChatMessages ADD COLUMN CheckpointId TEXT;"
+                };
+                foreach (var alter in alterCols)
+                {
+                    try { dbContext.Database.ExecuteSqlRaw(alter); } catch { }
+                }
             }
             catch { }
         }

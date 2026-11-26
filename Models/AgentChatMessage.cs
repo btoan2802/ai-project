@@ -4,43 +4,48 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BtoanAiNet.Models
 {
-    [Table("agent_chat_messages")]
+    [Table("AgentChatMessages")]
     public class AgentChatMessage
     {
         [Key]
-        [Column("id")]
+        [Column("Id")]
         public int Id { get; set; }
 
-        [Column("user_id")]
+        [Column("UserId")]
         public int UserId { get; set; }
 
         [Required]
         [MaxLength(100)]
-        [Column("project_name")]
+        [Column("ProjectName")]
         public string ProjectName { get; set; } = string.Empty;
 
         [Required]
         [MaxLength(20)]
-        [Column("role")]
+        [Column("Role")]
         public string Role { get; set; } = "user"; // user, assistant, system
 
-        [Required]
-        [Column("content")]
+        [Column("Content")]
         public string Content { get; set; } = string.Empty;
 
-        [Column("thought_text")]
+        [Column("ThoughtText")]
         public string? ThoughtText { get; set; }
 
-        [Column("checkpoint_id")]
-        public string? CheckpointId { get; set; }
+        [Column("ThoughtSeconds")]
+        public int ThoughtSeconds { get; set; } = 0;
 
-        [Column("plan_json")]
+        [Column("PlanJson")]
         public string? PlanJson { get; set; }
 
-        [Column("tool_actions_json")]
+        [Column("FilePillsJson")]
+        public string? FilePillsJson { get; set; }
+
+        [Column("ToolActionsJson")]
         public string? ToolActionsJson { get; set; }
 
-        [Column("created_at")]
+        [Column("CheckpointId")]
+        public string? CheckpointId { get; set; }
+
+        [Column("CreatedAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

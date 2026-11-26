@@ -3039,8 +3039,10 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                         role = m.Role,
                         content = m.Content,
                         thoughtText = m.ThoughtText,
+                        thoughtSeconds = m.ThoughtSeconds,
                         checkpointId = m.CheckpointId,
                         planJson = m.PlanJson,
+                        filePillsJson = m.FilePillsJson,
                         toolActionsJson = m.ToolActionsJson,
                         createdAt = m.CreatedAt
                     })
@@ -3195,6 +3197,7 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             await SendSseEventAsync("status", new { stage = "init", message = $"Btoan Agent ({selectedModel}) đang phân tích yêu cầu...", project = cleanProj });
 
             string checkpointId = await CreateProjectCheckpointInternalAsync(projectPath);
+            var swAgent = System.Diagnostics.Stopwatch.StartNew();
 
             // 1. Lưu tin nhắn người dùng vào SQLite bền vững
             try
@@ -4019,7 +4022,9 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         Role = "assistant",
                         Content = finalExplanation,
                         ThoughtText = accumulatedThought.Length > 0 ? accumulatedThought.ToString() : (finalExplanation ?? ""),
+                        ThoughtSeconds = (int)Math.Max(1, Math.Round(swAgent.Elapsed.TotalSeconds)),
                         PlanJson = JsonSerializer.Serialize(planSteps),
+                        FilePillsJson = JsonSerializer.Serialize(modifiedFiles),
                         ToolActionsJson = JsonSerializer.Serialize(toolOperations),
                         CheckpointId = checkpointId,
                         CreatedAt = DateTime.UtcNow

@@ -67,6 +67,12 @@ namespace BtoanAiNet.Data
             {
                 entity.HasIndex(e => new { e.ProjectFileId, e.VersionNumber });
             });
+
+            modelBuilder.Entity<AgentChatMessage>(entity =>
+            {
+                entity.ToTable("AgentChatMessages");
+                entity.HasIndex(e => new { e.UserId, e.ProjectName });
+            });
         }
     }
 }
