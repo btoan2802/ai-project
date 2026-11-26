@@ -63,7 +63,7 @@ else
 }
 
 builder.Services.AddHttpClient();
-builder.Services.AddHttpClient("NoRedirectsClient").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("NoRedirectsClient").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
 
 // Register Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();

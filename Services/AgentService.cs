@@ -94,6 +94,8 @@ TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT:
    - KHÔNG đề xuất tạo ảnh thừa thãi. Bắt tay ngay vào tạo toàn bộ các file mã nguồn hoàn chỉnh với giao diện đẹp mắt (CSS Gradient/Glassmorphism, responsive) và logic tính toán chính xác 100% theo quy chuẩn Việt Nam.
 5. HÌNH ẢNH:
    - Nếu làm web bán hàng hoặc landing page, lưu ảnh nội bộ vào wwwroot/images/ hoặc images/ và tham chiếu /images/... để không phụ thuộc link ngoài.
+6. BẢO TOÀN FILE VÀ CẤM TỰ Ý XÓA KHI SỬA LỖI:
+   - Tuyệt đối CẤM đề xuất xóa các file đã tạo khi gặp lỗi biên dịch hoặc build thất bại. Toàn bộ mã nguồn đã sinh BẮT BUỘC phải được bảo toàn 100% trong dự án để người dùng kiểm tra và sử dụng.
 
 BẮT BUỘC TRẢ VỀ DẠNG JSON HỢP LỆ VỚI CẤU TRÚC DƯỚI ĐÂY (KHÔNG VIẾT LỜI DẪN, KHÔNG BỎ TRONG MARKDOWN PRE):
 {

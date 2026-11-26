@@ -3600,7 +3600,7 @@ CÁC CÔNG CỤ THỰC THI (FUNCTION CALLING) BẠN ĐƯỢC CẤP:
 - write_file(path, content): Tạo mới hoặc ghi đè tệp với code hoàn chỉnh 100%. Tham số 'content' BẮT BUỘC chứa toàn bộ mã nguồn, TUYỆT ĐỐI KHÔNG được để trống (0 byte).
 - patch_file(path, target_block, replacement_block): Sửa chính xác một khối code trong tệp mà không cần ghi lại toàn bộ file.
 - edit_file(path, target, replacement): Sửa đoạn code trong tệp.
-- delete_file(path): Xóa tệp không cần thiết.
+- delete_file(path): Xóa tệp khi người dùng yêu cầu tường minh trong tin nhắn. TUYỆT ĐỐI CẤM gọi delete_file để rollback hoặc xóa file vừa tạo khi tự sửa lỗi/biên dịch thất bại.
 - run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build', 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'...) tại thư mục dự án.
 - generate_image(prompt, output_path, aspect_ratio): Tạo hình ảnh AI chất lượng cao lưu thẳng vào thư mục dự án (ví dụ 'wwwroot/images/hero.jpg' cho MVC hoặc 'images/hero.jpg' cho web tĩnh).
 
@@ -3648,9 +3648,11 @@ QUY TRÌNH & TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT BẮT BUỘC:
    - Khởi tạo Collection/List: Dùng 'new List<T>() {{ ... }};' hoặc 'new() {{ ... }};' (MỞ NGOẶC NHỌN '{{' THÌ BẮT BUỘC ĐÓNG BẰNG '}};' - TUYỆT ĐỐI KHÔNG ĐƯỢC ĐÓNG BẰNG '];').
    - Nếu dùng C# 12 collection expressions: '[ ... ];' (mở ngoặc vuông thì đóng ngoặc vuông). TUYỆT ĐỐI KHÔNG nhầm lẫn đóng ngoặc.
 
-6. PHA VERIFY & SELF-HEAL (BẮT BUỘC CHẠY BUILD):
-   - Trước khi kết thúc, BẮT BUỘC chạy 'run_command(""dotnet build"")' (hoặc npm build tương ứng).
-   - Nếu ExitCode != 0 hoặc có lỗi compiler, bạn phải đọc kỹ lỗi, gọi read_file + patch_file sửa lỗi và chạy lại build cho tới khi đạt 0 Error(s).
+6. PHA VERIFY & SELF-HEAL (TỐI ĐA 2 LẦN BUILD - BẢO TOÀN MÃ NGUỒN):
+   - Trước khi kết thúc, chạy 'run_command(""dotnet build"")' (hoặc npm build tương ứng).
+   - Nếu ExitCode == 0 (hoặc 0 Error(s)), coi như THÀNH CÔNG HOÀN TOÀN (bỏ qua Warning), dừng gọi tool ngay và báo cáo kết quả cho người dùng.
+   - Nếu có lỗi compiler, đọc lỗi kỹ và gọi patch_file sửa lỗi tối đa 2 lần.
+   - TUYỆT ĐỐI CẤM gọi delete_file để xóa hoặc rollback file vừa tạo khi build gặp lỗi. Phải giữ nguyên toàn bộ file đã tạo để người dùng tiếp tục thao tác.
 
 NĂNG LỰC THỊ GIÁC (MULTIMODAL VISION):
 - Nếu người dùng có đính kèm ảnh chụp màn hình (screenshot) hoặc ảnh giao diện: Bạn BẮT BUỘC phải quan sát kỹ bức ảnh được gửi kèm trong lượt chat (giao diện, hình ảnh hiển thị, bảng số liệu, màu sắc, bố cục hoặc chi tiết bị sai lệch).
@@ -3965,6 +3967,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
 
             int maxTurns = 25;
             int currentTurn = 0;
+            int buildAttempts = 0;
 
             try
             {
@@ -4088,7 +4091,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             try
                             {
                                 int toolWaitMs = toolName == "run_command" ? 60000 : 30000;
-                                var toolTask = ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot");
+                                var toolTask = ExecuteAgentToolAsync(projectPath, toolName, toolArgs, modifiedFiles, executedCommands, b => buildPassed = b, _imageGenerationService, _env.WebRootPath ?? "wwwroot", model.Prompt ?? "");
                                 if (await Task.WhenAny(toolTask, Task.Delay(toolWaitMs)) == toolTask)
                                 {
                                     toolResult = await toolTask;
@@ -4236,10 +4239,11 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         // Self-healing: If user requested separate static web files (ONLY FOR NON-COMPILED WEB PROJECTS)
                         if (!isDotNetOrAngular)
                         {
-                            bool asksForSeparateWebFiles = model.Prompt.Contains("style.css", StringComparison.OrdinalIgnoreCase) ||
-                                                           model.Prompt.Contains("script.js", StringComparison.OrdinalIgnoreCase) ||
-                                                           model.Prompt.Contains("tách thành 3 tệp", StringComparison.OrdinalIgnoreCase) ||
-                                                           model.Prompt.Contains("tách riêng", StringComparison.OrdinalIgnoreCase);
+                            string pPrompt = model.Prompt ?? "";
+                            bool asksForSeparateWebFiles = pPrompt.Contains("style.css", StringComparison.OrdinalIgnoreCase) ||
+                                                           pPrompt.Contains("script.js", StringComparison.OrdinalIgnoreCase) ||
+                                                           pPrompt.Contains("tách thành 3 tệp", StringComparison.OrdinalIgnoreCase) ||
+                                                           pPrompt.Contains("tách riêng", StringComparison.OrdinalIgnoreCase);
 
                             if (asksForSeparateWebFiles && currentTurn < maxTurns)
                             {
@@ -4275,26 +4279,45 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         // Automated Compiler Verification & Self-Healing for .NET Projects (*.csproj)
                         if (hasCsproj && !buildPassed && currentTurn < maxTurns)
                         {
-                            _logger.LogInformation("Verifying dotnet build automatically for project {Project}...", cleanProj);
-                            await SendSseEventAsync("status", new { stage = "verify", message = "Đang tự động biên dịch kiểm tra mã nguồn (dotnet build)..." });
-                            AutoFixMapStaticAssets(projectPath);
-
-                            var (bOk, bOut) = await RunCliProcessAsync(projectPath, "dotnet", "build --no-restore", 30);
-                            if (!bOk && (bOut.Contains("assets file") || bOut.Contains("project.assets.json") || bOut.Contains("restore")))
+                            buildAttempts++;
+                            if (buildAttempts > 2)
                             {
-                                (bOk, bOut) = await RunCliProcessAsync(projectPath, "dotnet", "build", 45);
+                                _logger.LogWarning("Reached max build self-heal attempts (2) for {Project}. Stopping loop and retaining all files.", cleanProj);
+                                await SendSseEventAsync("status", new { stage = "verify_stop", message = "⚠️ Đã kiểm tra biên dịch tối đa 2 lần. Giữ nguyên toàn bộ mã nguồn." });
+                                finalExplanation = $"[THÔNG BÁO BIÊN DỊCH]: Toàn bộ tệp mã nguồn đã được tạo/cập nhật thành công và được bảo toàn 100% trong dự án.";
+                                break;
                             }
 
-                            if (bOk)
+                            _logger.LogInformation("Verifying dotnet build automatically for project {Project} (Attempt {Attempt}/2)...", cleanProj, buildAttempts);
+                            await SendSseEventAsync("status", new { stage = "verify", message = $"Đang tự động biên dịch kiểm tra mã nguồn (dotnet build - Lần {buildAttempts}/2)..." });
+                            AutoFixMapStaticAssets(projectPath);
+
+                            bool hasAssets = System.IO.File.Exists(Path.Combine(projectPath, "obj", "project.assets.json"));
+                            string buildArgs = hasAssets ? "build --no-restore -p:UseSharedCompilation=false" : "build -p:UseSharedCompilation=false";
+                            var (bOk, bOut) = await RunCliProcessAsync(projectPath, "dotnet", buildArgs, 25);
+                            if (!bOk && (bOut.Contains("assets file") || bOut.Contains("project.assets.json") || bOut.Contains("restore")))
+                            {
+                                (bOk, bOut) = await RunCliProcessAsync(projectPath, "dotnet", "build -p:UseSharedCompilation=false", 35);
+                            }
+
+                            bool zeroErrors = bOk || bOut.Contains("0 Error(s)");
+                            if (zeroErrors)
                             {
                                 buildPassed = true;
                                 _logger.LogInformation("Automated dotnet build PASSED with 0 errors for {Project}!", cleanProj);
-                                await SendSseEventAsync("status", new { stage = "verify_done", message = "✅ Biên dịch thành công 100% (0 Error, 0 Warning)!" });
+                                await SendSseEventAsync("status", new { stage = "verify_done", message = "✅ Biên dịch thành công 100% (0 Error, Warning được bỏ qua)!" });
                             }
                             else
                             {
+                                if (buildAttempts >= 2)
+                                {
+                                    _logger.LogWarning("Self-heal attempt limit reached after build error. Stopping loop and retaining files.");
+                                    finalExplanation = $"[THÔNG BÁO BIÊN DỊCH]: Toàn bộ file đã được tạo và lưu thành công. Phát hiện lỗi compiler khi build:\n```\n{bOut}\n```\nMã nguồn được giữ nguyên 100% để bạn kiểm tra.";
+                                    break;
+                                }
+
                                 _logger.LogWarning("Automated dotnet build FAILED with errors:\n{Output}", bOut);
-                                await SendSseEventAsync("status", new { stage = "self_heal", message = "Phát hiện lỗi compiler! Btoan Agent đang tự động sửa lỗi cú pháp..." });
+                                await SendSseEventAsync("status", new { stage = "self_heal", message = $"Phát hiện lỗi compiler! Btoan Agent đang tự động sửa lỗi cú pháp (Lần {buildAttempts}/2)..." });
                                 messages.Add(candidate.DeepClone());
                                 messages.Add(new JsonObject
                                 {
@@ -4303,7 +4326,7 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                                     {
                                         new JsonObject
                                         {
-                                            ["text"] = $"[LỖI BIÊN DỊCH COMPILER 'dotnet build' THẤT BẠI]:\n{bOut}\n\nYÊU CẦU TỰ ĐỘNG SỬA LỖI (SELF-HEAL):\n1. Đọc file bị lỗi bằng 'read_file' ở đúng số dòng báo lỗi (ví dụ: CS1003, CS1513, CS0246).\n2. Gọi 'patch_file' hoặc 'write_file' để sửa triệt để các lỗi cú pháp (chú ý: ngoặc nhọn, dấu chấm phẩy, kiểu dữ liệu).\n3. Bạn bắt buộc phải gọi tool sửa xong tất cả các lỗi compiler trên trước khi kết thúc!"
+                                            ["text"] = $"[LỖI BIÊN DỊCH COMPILER 'dotnet build' THẤT BẠI - LẦN {buildAttempts}/2]:\n{bOut}\n\nYÊU CẦU TỰ ĐỘNG SỬA LỖI (SELF-HEAL):\n1. Đọc file bị lỗi bằng 'read_file' ở đúng số dòng báo lỗi (ví dụ: CS1003, CS1513, CS0246).\n2. Gọi 'patch_file' hoặc 'write_file' để sửa triệt để các lỗi cú pháp.\n3. TUYỆT ĐỐI CẤM gọi 'delete_file' hoặc xóa bất kỳ file nào vừa tạo!\n4. Bạn bắt buộc phải giữ nguyên toàn bộ file mã nguồn trong dự án."
                                         }
                                     }
                                 });
@@ -4483,7 +4506,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             List<string> executedCommands, 
             Action<bool> setBuildPassed,
             IImageGenerationService? imageGenService = null,
-            string? webRootPath = null)
+            string? webRootPath = null,
+            string userPrompt = "")
         {
             try
             {
@@ -4839,6 +4863,19 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     {
                         string path = ExtractStringArg(args, "path", "file_path", "filepath", "file", "filename");
                         if (string.IsNullOrWhiteSpace(path)) return "ERROR: Tham số 'path' không được để trống.";
+
+                        // Check if user explicitly asked for deletion in prompt
+                        bool explicitDelete = !string.IsNullOrWhiteSpace(userPrompt) && 
+                            (userPrompt.Contains("xóa", StringComparison.OrdinalIgnoreCase) || 
+                             userPrompt.Contains("xoa", StringComparison.OrdinalIgnoreCase) || 
+                             userPrompt.Contains("delete", StringComparison.OrdinalIgnoreCase) || 
+                             userPrompt.Contains("remove", StringComparison.OrdinalIgnoreCase));
+
+                        if (!explicitDelete)
+                        {
+                            return $"ERROR: Tuyệt đối CẤM tự ý xóa file '{path}' khi tự sửa lỗi hoặc biên dịch thất bại! Bạn BẮT BUỘC phải giữ nguyên toàn bộ file đã tạo/sửa và chỉ dùng read_file, patch_file để khắc phục lỗi cú pháp.";
+                        }
+
                         string projName = Path.GetFileName(projectPath);
                         path = NormalizeWorkspaceRelativePath(path, projName);
                         string fullPath = Path.GetFullPath(Path.Combine(projectPath, path));
@@ -4884,7 +4921,12 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         }
                         else if (lowerCmd.Contains("dotnet build"))
                         {
-                            timeoutSec = Math.Min(timeoutSec, 35);
+                            timeoutSec = Math.Min(timeoutSec, 25);
+                            bool hasAssets = System.IO.File.Exists(Path.Combine(projectPath, "obj", "project.assets.json"));
+                            if (hasAssets && !command.Contains("--no-restore", StringComparison.OrdinalIgnoreCase))
+                            {
+                                command += " --no-restore";
+                            }
                             if (!command.Contains("UseSharedCompilation", StringComparison.OrdinalIgnoreCase))
                             {
                                 command += " --nologo --disable-build-servers -nodeReuse:false -p:UseSharedCompilation=false -maxCpuCount:1";
@@ -4892,10 +4934,14 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                         }
 
                         var (ok, output) = await RunCliProcessAsync(projectPath, command, "", timeoutSec);
-                        if (command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase) && ok)
+                        if (command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase))
                         {
-                            setBuildPassed(true);
-                            return $"ExitCode: 0\nOutput:\n{output}\n\n[SYSTEM NOTICE: dotnet build SUCCEEDED with 0 Errors! All requested files and build verification are complete. DO NOT call any more tools. Provide your final explanation in natural Vietnamese now.]";
+                            bool zeroErrors = ok || output.Contains("0 Error(s)");
+                            if (zeroErrors)
+                            {
+                                setBuildPassed(true);
+                                return $"ExitCode: 0\nOutput:\n{output}\n\n[SYSTEM NOTICE: dotnet build SUCCEEDED with 0 Errors (Warnings are ignored)! All requested files and build verification are complete. DO NOT call any more tools. Provide your final explanation in natural Vietnamese now.]";
+                            }
                         }
                         return $"ExitCode: {(ok ? 0 : 1)}\nOutput:\n{output}";
                     }

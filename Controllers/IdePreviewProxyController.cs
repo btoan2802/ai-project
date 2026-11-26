@@ -122,13 +122,13 @@ namespace BtoanAiNet.Controllers
             var client = _httpClientFactory.CreateClient("NoRedirectsClient");
             if (client == null)
             {
-                var handler = new HttpClientHandler { AllowAutoRedirect = false };
+                var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false };
                 client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
             }
 
             var requestMessage = new HttpRequestMessage(new HttpMethod(Request.Method), targetUrl);
 
-            // Copy request headers
+            // Copy request headers (forward Cookie, Host, X-Forwarded-*, etc.)
             foreach (var header in Request.Headers)
             {
                 if (header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase))
@@ -136,15 +136,25 @@ namespace BtoanAiNet.Controllers
                     requestMessage.Headers.TryAddWithoutValidation("Host", $"127.0.0.1:{port}");
                     continue;
                 }
-                if (header.Key.StartsWith(":") || header.Key.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
+                if (header.Key.StartsWith(":") || 
+                    header.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase) ||
+                    header.Key.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
                 if (!requestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray()))
                 {
-                    // Content headers
+                    // Content headers handled below
                 }
+            }
+
+            // Ensure Forwarded headers are present
+            requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Proto", Request.IsHttps ? "https" : "http");
+            requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Host", Request.Host.Value);
+            if (Request.HttpContext.Connection.RemoteIpAddress != null)
+            {
+                requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-For", Request.HttpContext.Connection.RemoteIpAddress.ToString());
             }
 
             // Copy body for write methods
@@ -191,9 +201,20 @@ namespace BtoanAiNet.Controllers
                 foreach (var header in responseMessage.Headers)
                 {
                     if (header.Key.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase) ||
-                        header.Key.Equals("Location", StringComparison.OrdinalIgnoreCase))
+                        header.Key.Equals("Location", StringComparison.OrdinalIgnoreCase) ||
+                        header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
                         continue;
                     Response.Headers[header.Key] = header.Value.ToArray();
+                }
+
+                // Handle Set-Cookie: Rewrite Path to /ide-preview/{port} and strip internal Domain
+                if (responseMessage.Headers.TryGetValues("Set-Cookie", out var setCookies))
+                {
+                    foreach (var cookie in setCookies)
+                    {
+                        string rewrittenCookie = RewriteSetCookiePath(cookie, port);
+                        Response.Headers.Append("Set-Cookie", rewrittenCookie);
+                    }
                 }
 
                 foreach (var header in responseMessage.Content.Headers)
@@ -248,6 +269,38 @@ namespace BtoanAiNet.Controllers
                 _logger.LogError(ex, "Reverse proxy internal error on port {Port}", port);
                 return StatusCode(StatusCodes.Status502BadGateway, $"Proxy Error: {ex.Message}");
             }
+        }
+        private static string RewriteSetCookiePath(string cookie, int port)
+        {
+            if (string.IsNullOrWhiteSpace(cookie)) return cookie;
+            string prefix = $"/ide-preview/{port}";
+
+            // Remove Domain attribute (Domain=localhost, Domain=127.0.0.1, etc.)
+            string res = Regex.Replace(cookie, @";\s*Domain=[^;]+", "", RegexOptions.IgnoreCase);
+
+            // Rewrite Path attribute
+            if (Regex.IsMatch(res, @";\s*Path=[^;]*", RegexOptions.IgnoreCase))
+            {
+                res = Regex.Replace(res, @";\s*Path=([^;]*)", m =>
+                {
+                    string p = m.Groups[1].Value.Trim();
+                    if (string.IsNullOrEmpty(p) || p == "/")
+                    {
+                        return $"; Path={prefix}";
+                    }
+                    if (p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return $"; Path={p}";
+                    }
+                    return $"; Path={prefix}/{p.TrimStart('/')}";
+                }, RegexOptions.IgnoreCase);
+            }
+            else
+            {
+                res += $"; Path={prefix}";
+            }
+
+            return res;
         }
     }
 }

@@ -160,6 +160,16 @@ namespace BtoanAiNet.Hubs
 
             string rootPath = ResolveProjectRoot(userId, project);
             Controllers.IdeController.AutoFixMapStaticAssets(rootPath);
+
+            // Chống in lặp banner: Nếu connection đã có session đang sống tại đúng thư mục này thì tái sử dụng luôn
+            if (Sessions.TryGetValue(key, out var existingSession) && 
+                existingSession.UserId == userId && 
+                string.Equals(existingSession.ProjectRootPath, rootPath, StringComparison.OrdinalIgnoreCase))
+            {
+                await Clients.Caller.SendAsync("SessionInitialized", true, existingSession.CurrentDirectory, sId);
+                return;
+            }
+
             var session = new TerminalInteractiveSession
             {
                 ConnectionId = Context.ConnectionId,
