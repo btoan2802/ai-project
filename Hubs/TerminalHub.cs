@@ -211,6 +211,13 @@ namespace BtoanAiNet.Hubs
                 return;
             }
 
+            // If a previous process is still actively running in this session, terminate it cleanly before starting new command
+            if (session.ActiveProcess != null && !session.ActiveProcess.HasExited)
+            {
+                _logger.LogInformation("[TerminalHub] Cleaning up active process before executing new command in session {SessionId}", sId);
+                KillSessionProcess(session);
+            }
+
             // 1. Internal cls / clear
             if (string.Equals(trimmedCmd, "cls", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(trimmedCmd, "clear", StringComparison.OrdinalIgnoreCase))
@@ -351,6 +358,8 @@ namespace BtoanAiNet.Hubs
             psi.Environment["CI"] = "false";
             psi.Environment["FORCE_COLOR"] = "1";
             psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+            psi.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:5200";
+            psi.Environment["PORT"] = "5200";
             psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
             psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
             psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";

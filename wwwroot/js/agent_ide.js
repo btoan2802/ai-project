@@ -1793,8 +1793,12 @@ async function initTerminalSignalR() {
     const uid = localStorage.getItem("user_id") || "1";
     terminalHubConn = new signalR.HubConnectionBuilder()
         .withUrl(`/hubs/terminal?user_id=${encodeURIComponent(uid)}`)
-        .withAutomaticReconnect([0, 2000, 5000, 10000])
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 20000])
         .build();
+
+    // Prevent client timeout during long-running builds or continuous server runs
+    terminalHubConn.serverTimeoutInMilliseconds = 1000 * 60 * 60; // 60 minutes
+    terminalHubConn.keepAliveIntervalInMilliseconds = 1000 * 5;   // 5 seconds
 
     terminalHubConn.on("TerminalOutput", (chunk, sId) => {
         const target = terminalSessions.find(s => s.id === (sId || activeTerminalSessionId)) || terminalSessions[0];
@@ -1991,7 +1995,7 @@ async function sendTerminalCommandInSession(session, cmd) {
             return;
         }
     }
-    await runCustomTerminalCmd(cmd);
+    await runCustomTerminalCmd(cmd, session);
 }
 
 function pasteIntoActiveTerminal() {
@@ -2128,15 +2132,19 @@ function switchBottomTab(tabName) {
     triggerEditorLayout();
 }
 
-async function runCustomTerminalCmd(cmd) {
+async function runCustomTerminalCmd(cmd, session = null) {
     switchBottomTab('terminal');
-    if (xtermInstance) {
-        xtermInstance.writeln(`\r\n\x1b[36m> ${cmd}\x1b[0m`);
+    const targetSession = session || terminalSessions.find(s => s.id === activeTerminalSessionId) || terminalSessions[0];
+    const targetXterm = (targetSession && targetSession.xterm) ? targetSession.xterm : xtermInstance;
+    const prompt = (targetSession && targetSession.prompt) ? targetSession.prompt : terminalPrompt;
+
+    if (targetXterm) {
+        targetXterm.writeln(`\r\n\x1b[36m> ${cmd}\x1b[0m`);
     }
 
     if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
         try {
-            await terminalHubConn.invoke("ExecuteCommand", activeProjectId || "my-project", cmd);
+            await terminalHubConn.invoke("ExecuteCommandInSession", activeProjectId || "my-project", cmd, targetSession ? targetSession.id : "term-1");
             return;
         } catch (e) {
             console.warn("[Terminal] SignalR execute failed, fallback to REST:", e);
@@ -2156,22 +2164,22 @@ async function runCustomTerminalCmd(cmd) {
         });
         const data = await res.json();
         if (data && (data.exitCode === 0 || data.ok)) {
-            if (xtermInstance) {
+            if (targetXterm) {
                 const outText = data.output || data.message || "(Command completed)";
-                xtermInstance.writeln(outText.replace(/\r?\n/g, '\r\n'));
-                xtermInstance.write(`\r\n${terminalPrompt}`);
+                targetXterm.writeln(outText.replace(/\r?\n/g, '\r\n'));
+                targetXterm.write(`\r\n${prompt}`);
             }
         } else {
-            if (xtermInstance) {
+            if (targetXterm) {
                 const errText = data.error || data.message || "Lỗi thực thi lệnh";
-                xtermInstance.writeln(`\x1b[31m${errText.replace(/\r?\n/g, '\r\n')}\x1b[0m`);
-                xtermInstance.write(`\r\n${terminalPrompt}`);
+                targetXterm.writeln(`\x1b[31m${errText.replace(/\r?\n/g, '\r\n')}\x1b[0m`);
+                targetXterm.write(`\r\n${prompt}`);
             }
         }
     } catch (err) {
-        if (xtermInstance) {
-            xtermInstance.writeln(`\x1b[31mError: ${err.message}\x1b[0m`);
-            xtermInstance.write(`\r\n${terminalPrompt}`);
+        if (targetXterm) {
+            targetXterm.writeln(`\x1b[31mError: ${err.message}\x1b[0m`);
+            targetXterm.write(`\r\n${prompt}`);
         }
     }
 }

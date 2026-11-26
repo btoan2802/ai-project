@@ -180,7 +180,13 @@ builder.Services.AddScoped<IWorkspaceTools, WorkspaceTools>();
 builder.Services.AddScoped<IFunctionCallingDispatcher, FunctionCallingDispatcher>();
 builder.Services.AddScoped<IAgentToolLoopOrchestrator, AgentToolLoopOrchestrator>();
 
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(120);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+});
 
 // Authentication & Session
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

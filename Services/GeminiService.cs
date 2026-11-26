@@ -124,14 +124,13 @@ namespace BtoanAiNet.Services
 
             // High Availability Fallback Chain:
             // Priority 1: gemini-2.5-flash (Standard workhorse, fast & Senior reasoning)
-            // Priority 2: gemini-flash-latest (Latest stable flash release)
-            // Priority 3: gemini-3.5-flash-lite (Ultra-fast, high quota limits, official replacement for 2.5-flash-lite)
-            // Priority 4: gemini-flash-lite-latest (Latest lite release)
+            // Priority 2: gemini-3.5-flash-lite (Ultra-fast, high quota limits, official replacement for 2.5-flash-lite)
+            // Priority 3: gemini-flash-lite-latest (Latest lite release)
             if (cleanModel.Contains("pro") || isThinkingMode)
             {
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-flash-latest");
                 candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
             else if (cleanModel.Contains("lite"))
             {
@@ -142,8 +141,8 @@ namespace BtoanAiNet.Services
             else
             {
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-flash-latest");
                 candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
@@ -303,8 +302,8 @@ namespace BtoanAiNet.Services
             if (cleanModel.Contains("pro") || isThinkingMode)
             {
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-flash-latest");
                 candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
             else if (cleanModel.Contains("lite"))
             {
@@ -315,8 +314,8 @@ namespace BtoanAiNet.Services
             else
             {
                 candidateModels.Add("gemini-2.5-flash");
-                candidateModels.Add("gemini-flash-latest");
                 candidateModels.Add("gemini-3.5-flash-lite");
+                candidateModels.Add("gemini-flash-lite-latest");
             }
             candidateModels = candidateModels.Distinct().ToList();
 
