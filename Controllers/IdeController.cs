@@ -3605,6 +3605,14 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             var sbContext = new StringBuilder();
             AutoFixMapStaticAssets(projectPath);
 
+            bool hasCsproj = false;
+            try
+            {
+                var csprojFiles = Directory.GetFiles(projectPath, "*.csproj", SearchOption.AllDirectories);
+                hasCsproj = csprojFiles.Length > 0;
+            }
+            catch { }
+
             // Pre-populate project file tree so AI knows structure immediately without wasting turns on list_files
             try
             {
@@ -3618,6 +3626,15 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 sbContext.AppendLine(string.Join("\n", allEntries));
             }
             catch { }
+
+            if (hasCsproj)
+            {
+                sbContext.AppendLine("[PROJECT ENVIRONMENT]: Dự án C# / ASP.NET Core (đã phát hiện tệp .csproj). Áp dụng tiêu chuẩn .NET 10 (net10.0), EF Core SQLite, chia tách Controllers/Models/Views.");
+            }
+            else
+            {
+                sbContext.AppendLine("[PROJECT ENVIRONMENT]: Thư mục hiện tại KHÔNG CÓ tệp .csproj. Nếu yêu cầu là làm trang web (web bệnh viện, bán hàng, đặt lịch, giới thiệu, blog, landing page, dashboard...) mà người dùng không yêu cầu rõ .NET hay C#, bạn BẮT BUỘC tạo dự án Web Tĩnh hoàn chỉnh (index.html, styles.css, app.js với dữ liệu mẫu và lưu vào localStorage) để người dùng xem trực tiếp trên Live Preview ngay lập tức; TUYỆT ĐỐI KHÔNG tự tiện chạy 'dotnet new' hay biến thành dự án .NET nặng!");
+            }
 
             if (!string.IsNullOrWhiteSpace(model.OpenFilePath) || !string.IsNullOrWhiteSpace(model.ActiveFile))
             {
@@ -3679,6 +3696,25 @@ CÁC CÔNG CỤ THỰC THI (FUNCTION CALLING) BẠN ĐƯỢC CẤP:
 - run_command(command): Chạy lệnh shell (ví dụ: 'dotnet build', 'dotnet add package Microsoft.EntityFrameworkCore.Sqlite'...) tại thư mục dự án.
 - generate_image(prompt, output_path, aspect_ratio): Tạo hình ảnh AI chất lượng cao lưu thẳng vào thư mục dự án (ví dụ 'wwwroot/images/hero.jpg' cho MVC hoặc 'images/hero.jpg' cho web tĩnh).
 
+QUY TẮC NHẬN DIỆN CÔNG NGHỆ & LỰA CHỌN FRAMEWORK (QUAN TRỌNG HÀNG ĐẦU):
+1. ƯU TIÊN WEB TĨNH (HTML5 / CSS3 / JAVASCRIPT THUẦN) CHO MỌI YÊU CẦU WEB THÔNG THƯỜNG:
+   - KÍCH HOẠT KHI: Người dùng yêu cầu làm web (ví dụ: ""tạo web bệnh viện"", ""làm web bán hàng"", ""tạo web đặt lịch"", ""làm landing page"", ""web giới thiệu"", ""portfolio"", ""dashboard""...) MÀ KHÔNG ĐỀ CẬP RÕ ""C#"", "".NET"", ""ASP.NET"", ""MVC"" VÀ trong thư mục hiện tại CHƯA CÓ tệp *.csproj.
+   - NGUYÊN TẮC: TUYỆT ĐỐI CẤM tự ý chạy 'dotnet new' hay cài đặt gói NuGet!
+   - CẤU TRÚC: Tạo trực tiếp các tệp web chuẩn:
+     + index.html: Giao diện hoàn chỉnh, hiện đại (sử dụng Bootstrap 5 hoặc Tailwind CSS qua CDN, FontAwesome, Google Fonts).
+     + styles.css: Bố cục đẹp mắt, responsive đa thiết bị, animation mượt mà.
+     + app.js: Xử lý toàn bộ logic tương tác (form đặt lịch, validation, giỏ hàng, tìm kiếm, lọc danh mục, modal).
+     + LƯU TRỮ LOCALSTORAGE: Với các tính năng cần lưu trữ dữ liệu (đặt lịch khám bệnh, danh sách đơn hàng, quản lý), BẮT BUỘC dùng localStorage để lưu bền vững dữ liệu mẫu và dữ liệu người dùng nhập, để khi F5 trang vẫn giữ nguyên.
+   - LỢI ÍCH: Người dùng chỉ cần bấm nút ""Live Preview ▶"" trên IDE là trang web hiển thị ngay lập tức trên cổng preview mà KHÔNG CẦN biên dịch hay chờ 'dotnet build'!
+
+2. CHỈ DÙNG ASP.NET CORE MVC (.NET 10) KHI:
+   - Thư mục hiện tại ĐÃ CÓ tệp *.csproj (ví dụ shop-senior-mvc), HOẶC
+   - Người dùng yêu cầu cụ thể: ""C#"", "".NET"", ""ASP.NET"", ""MVC"", ""Web API"", ""Blazor"".
+   - KHI ĐÓ: Mới áp dụng tiêu chuẩn Senior Architect net10.0, EF Core SQLite, chia tách Controllers/Models/Views/Data, và chạy 'dotnet build'.
+
+3. DỰ ÁN NODE.JS / REACT / ANGULAR / PYTHON:
+   - Kích hoạt khi thư mục đã có package.json, requirements.txt hoặc người dùng yêu cầu rõ ràng.
+
 QUY TRÌNH & TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT BẮT BUỘC:
 
 0. BẮT BUỘC TARGET FRAMEWORK net10.0 CHO DỰ ÁN C# / .NET (CẤM DÙNG net8.0):
@@ -3724,7 +3760,8 @@ QUY TRÌNH & TIÊU CHUẨN KIẾN TRÚC SENIOR ARCHITECT BẮT BUỘC:
    - Nếu dùng C# 12 collection expressions: '[ ... ];' (mở ngoặc vuông thì đóng ngoặc vuông). TUYỆT ĐỐI KHÔNG nhầm lẫn đóng ngoặc.
 
 6. PHA VERIFY & SELF-HEAL (TỐI ĐA 2 LẦN BUILD - BẢO TOÀN MÃ NGUỒN):
-   - Trước khi kết thúc, chạy 'run_command(""dotnet build"")' (hoặc npm build tương ứng).
+   - Với dự án C# / .NET (có tệp *.csproj): Trước khi kết thúc, chạy 'run_command("dotnet build -p:UseSharedCompilation=false")'.
+   - Với dự án Web Tĩnh (HTML/CSS/JS): TUYỆT ĐỐI KHÔNG CHẠY LỆNH 'dotnet build' HAY BẤT KỲ LỆNH DOTNET NÀO! Khi đã tạo xong index.html, styles.css, app.js là hoàn tất nhiệm vụ.
    - Nếu ExitCode == 0 (hoặc 0 Error(s)), coi như THÀNH CÔNG HOÀN TOÀN (bỏ qua Warning), dừng gọi tool ngay và báo cáo kết quả cho người dùng.
    - Nếu có lỗi compiler, đọc lỗi kỹ và gọi patch_file sửa lỗi tối đa 2 lần.
    - TUYỆT ĐỐI CẤM gọi delete_file để xóa hoặc rollback file vừa tạo khi build gặp lỗi. Phải giữ nguyên toàn bộ file đã tạo để người dùng tiếp tục thao tác.
