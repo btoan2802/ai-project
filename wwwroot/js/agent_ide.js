@@ -2896,6 +2896,14 @@ async function loadAgentChatHistory(projectId) {
                     if (!parsedOps.length && Array.isArray(item.operations)) parsedOps = item.operations;
                     if (!parsedFiles.length && Array.isArray(item.modifiedFiles)) parsedFiles = item.modifiedFiles;
 
+                    renderAgentResponse({
+                        explanation: item.content,
+                        plan: parsedPlan,
+                        operations: parsedOps,
+                        modifiedFiles: parsedFiles,
+                        executedCommands: item.executedCommands || []
+                    }, agentMsg);
+
                     if (item.thoughtText) {
                         const thAccordion = document.createElement("details");
                         thAccordion.className = "agent-thought-accordion";
@@ -2907,16 +2915,8 @@ async function loadAgentChatHistory(projectId) {
                             </summary>
                             <div class="agent-thought-body">${escapeHtml(item.thoughtText)}</div>
                         `;
-                        agentMsg.appendChild(thAccordion);
+                        agentMsg.prepend(thAccordion);
                     }
-
-                    renderAgentResponse({
-                        explanation: item.content,
-                        plan: parsedPlan,
-                        operations: parsedOps,
-                        modifiedFiles: parsedFiles,
-                        executedCommands: item.executedCommands || []
-                    }, agentMsg);
                     container.appendChild(agentMsg);
                 }
             });
@@ -3231,6 +3231,9 @@ async function sendAgentTask() {
     isAgentBusy = true;
     let isStreamCompleted = false;
     let isAbort = false;
+    let finalData = null;
+    let finalExplanation = "";
+    let accumulatedThought = "";
 
     // Hide splash, show messages
     document.getElementById("chatSplashArea").style.display = "none";
@@ -3393,7 +3396,7 @@ async function sendAgentTask() {
             const reader = res.body.getReader();
             const decoder = new TextDecoder("utf-8");
             let buffer = "";
-            let finalData = null;
+            finalData = null;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -3694,18 +3697,18 @@ async function sendAgentTask() {
                 if (thoughtTitle) thoughtTitle.innerHTML = `Thought for ${elapsedSec}s`;
             }
 
-            const hasPills = agentMsg.querySelector(".agent-action-pill, .agent-task-step-item, .agent-response-card, pre, code");
-            const hasExplanation = (finalExplanation && finalExplanation.trim().length > 0) || (explanationEl && explanationEl.innerText.trim().length > 0);
+            const hasPills = Boolean(agentMsg.querySelector(".agent-action-pill, .agent-task-step-item, .agent-response-card, pre, code"));
+            const hasExplanation = Boolean((typeof finalExplanation === "string" && finalExplanation.trim().length > 0) || (agentMsg.innerText && agentMsg.innerText.trim().length > 10));
 
-            if (hasPills || hasExplanation) {
+            if (hasPills || hasExplanation || finalData) {
                 console.log("[BtoanAgent] Partial content found. Preserving DOM output without clearing.");
                 try {
                     const localKey = "btoan_chat_history_" + (activeProjectId || "project-1");
                     const cached = JSON.parse(localStorage.getItem(localKey) || "[]");
                     cached.push({
                         role: "assistant",
-                        content: (explanationEl && explanationEl.innerText.trim()) || (finalData && (finalData.explanation || finalData.message)) || "Nhiệm vụ đã được thực thi một phần trên workspace.",
-                        thoughtText: (thoughtBody ? thoughtBody.innerText : ""),
+                        content: (finalData && (finalData.explanation || finalData.message)) || finalExplanation || agentMsg.innerText.trim() || "Nhiệm vụ đã được thực thi trên workspace.",
+                        thoughtText: (thoughtBody ? thoughtBody.innerText : "") || accumulatedThought,
                         thoughtSeconds: elapsedSec,
                         planJson: JSON.stringify((finalData && finalData.plan) || []),
                         filePillsJson: JSON.stringify((finalData && finalData.modifiedFiles) || []),
