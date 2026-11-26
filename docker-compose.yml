@@ -13,8 +13,3 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - ./App_Data:/app/App_Data
-      - btoan_app_data:/app/App_Data
-
-volumes:
-  btoan_app_data:
-    driver: local

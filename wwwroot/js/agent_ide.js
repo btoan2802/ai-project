@@ -225,18 +225,37 @@ async function loadUserProjects() {
                 opt.innerText = p.name;
                 select.appendChild(opt);
             });
-            const savedLastProj = localStorage.getItem("antigravity_last_project");
-            const matchedProj = savedLastProj && data.projects.some(p => p.id === savedLastProj);
-            activeProjectId = matchedProj ? savedLastProj : data.projects[0].id;
+
+            // Priority:
+            // 1. Project matching localStorage ('btoan_active_project' or 'antigravity_last_project') if present on server
+            const savedLastProj = localStorage.getItem("btoan_active_project") || localStorage.getItem("antigravity_last_project");
+            const matchedProj = savedLastProj && data.projects.find(p => p.id === savedLastProj);
+
+            if (matchedProj) {
+                activeProjectId = matchedProj.id;
+            } else {
+                // 2. Automatically select most recently modified project on server (or shop-senior-mvc if available)
+                const seniorShop = data.projects.find(p => p.id === "shop-senior-mvc");
+                if (seniorShop) {
+                    activeProjectId = seniorShop.id;
+                } else {
+                    const sorted = [...data.projects].sort((a, b) => new Date(b.lastModified || 0) - new Date(a.lastModified || 0));
+                    activeProjectId = sorted[0].id;
+                }
+            }
+
             select.value = activeProjectId;
+            localStorage.setItem("btoan_active_project", activeProjectId);
             localStorage.setItem("antigravity_last_project", activeProjectId);
             hideEmptyWorkspaceState();
             loadAgentChatHistory(activeProjectId);
         } else {
-            select.innerHTML = `<option value="project-1">project-1</option>`;
-            activeProjectId = "project-1";
-            select.value = "project-1";
-            localStorage.setItem("antigravity_last_project", "project-1");
+            // ONLY when disk is truly empty (projects.length === 0)
+            select.innerHTML = `<option value="demo-app">demo-app</option>`;
+            activeProjectId = "demo-app";
+            select.value = "demo-app";
+            localStorage.setItem("btoan_active_project", "demo-app");
+            localStorage.setItem("antigravity_last_project", "demo-app");
             hideEmptyWorkspaceState();
         }
 
@@ -310,9 +329,16 @@ function updateTopUserBadge(isAdmin, username) {
     const uname = username || localStorage.getItem("username") || (isAdmin ? "admin" : null);
     if (uname) {
         badgeContainer.innerHTML = `
-            <div class="top-user-pill">
-                <i class="bi bi-person-check-fill text-success me-1.5"></i>
-                <span class="fw-semibold">${uname}</span>
+            <div class="dropdown">
+                <button class="btn btn-xs btn-outline-secondary extra-small py-0.5 px-2 dropdown-toggle text-light d-flex align-items-center" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-person-check-fill text-success me-1.5"></i>
+                    <span class="fw-semibold">${uname}</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow extra-small border-secondary py-1" style="z-index: 1050;">
+                    <li><span class="dropdown-item-text text-secondary extra-small">Tài khoản: <strong class="text-light">${uname}</strong></span></li>
+                    <li><hr class="dropdown-divider border-secondary my-1"></li>
+                    <li><a class="dropdown-item text-danger extra-small cursor-pointer py-1" onclick="logoutFromIde()"><i class="bi bi-box-arrow-right me-1.5"></i>Đăng xuất</a></li>
+                </ul>
             </div>
         `;
     } else {
@@ -324,6 +350,19 @@ function updateTopUserBadge(isAdmin, username) {
     }
 }
 
+window.logoutFromIde = async function () {
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("username");
+    localStorage.removeItem("full_name");
+    localStorage.removeItem("email");
+    localStorage.removeItem("avatar");
+    localStorage.removeItem("role");
+    try {
+        await fetch('/Account/Logout', { method: 'POST' });
+    } catch { }
+    location.href = '/?logged_out=1';
+};
+
 function updateTerminalPrompt() {
     terminalPrompt = activeProjectId ? `PS D:\\UserWorkspaces\\${activeProjectId}> ` : `PS D:\\UserWorkspaces> `;
 }
@@ -332,6 +371,7 @@ function onProjectChanged() {
     const select = document.getElementById("projectSelect");
     if (!select) return;
     activeProjectId = select.value;
+    localStorage.setItem("btoan_active_project", activeProjectId);
     localStorage.setItem("antigravity_last_project", activeProjectId);
 
     if (activeProjectId) {
@@ -371,6 +411,7 @@ async function switchActiveProject(projName) {
     renderTabBar();
 
     activeProjectId = projName;
+    localStorage.setItem("btoan_active_project", activeProjectId);
     localStorage.setItem("antigravity_last_project", activeProjectId);
     const select = document.getElementById("projectSelect");
     if (select) {

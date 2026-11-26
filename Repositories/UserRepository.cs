@@ -25,7 +25,11 @@ namespace BtoanAiNet.Repositories
 
         public async Task<User?> GetByEmailAsync(string email)
         {
-            return await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (string.IsNullOrWhiteSpace(email)) return null;
+            string clean = email.Trim().ToLower();
+            return await _context.Users.FirstOrDefaultAsync(u => 
+                (u.Email != null && u.Email.ToLower() == clean) || 
+                (u.Username != null && u.Username.ToLower() == clean));
         }
 
         public async Task<User?> GetByGoogleIdAsync(string googleId)

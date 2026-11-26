@@ -42,20 +42,26 @@ namespace BtoanAiNet.Services
 
                 if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(googleId)) return null;
 
-                // 1. Find by google_id
-                var user = await _userRepository.GetByGoogleIdAsync(googleId);
+                // 1. MUST find by email first to reuse exact User.Id
+                var user = await _userRepository.GetByEmailAsync(email);
                 if (user != null)
                 {
+                    if (string.IsNullOrEmpty(user.GoogleId) && !string.IsNullOrEmpty(googleId))
+                    {
+                        user.GoogleId = googleId;
+                    }
+                    if (!string.IsNullOrEmpty(name) && string.IsNullOrEmpty(user.FullName))
+                    {
+                        user.FullName = name;
+                    }
+                    await _userRepository.UpdateAsync(user);
                     return user;
                 }
 
-                // 2. Find by email
-                user = await _userRepository.GetByEmailAsync(email);
+                // 2. Then find by google_id
+                user = await _userRepository.GetByGoogleIdAsync(googleId);
                 if (user != null)
                 {
-                    user.GoogleId = googleId;
-                    if (!string.IsNullOrEmpty(name)) user.FullName = name;
-                    await _userRepository.UpdateAsync(user);
                     return user;
                 }
 

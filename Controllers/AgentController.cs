@@ -46,9 +46,7 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
-                var claimId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (int.TryParse(claimId, out int uid)) return uid;
-                return HttpContext.Session.GetInt32("user_id");
+                return BtoanAiNet.Helpers.AuthUserHelper.GetCurrentUserId(HttpContext);
             }
         }
 

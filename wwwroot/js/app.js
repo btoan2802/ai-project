@@ -1975,10 +1975,16 @@ async function register() {
 
 // ====== LOGOUT ======
 function logout() {
-
-    localStorage.clear();
-    location.reload();
-
+    // Only remove user identity, DO NOT clear workspace configuration, active project or tabs
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("username");
+    localStorage.removeItem("full_name");
+    localStorage.removeItem("email");
+    localStorage.removeItem("avatar");
+    localStorage.removeItem("role");
+    fetch('/Account/Logout', { method: 'POST' }).finally(() => {
+        location.reload();
+    });
 }
 
 // ====== WELCOME SCREEN ======

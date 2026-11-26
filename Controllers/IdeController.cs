@@ -57,40 +57,7 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
-                var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (int.TryParse(claimId, out int uid) && uid > 0) return uid;
-
-                var sessionUid = HttpContext.Session.GetInt32("user_id");
-                if (sessionUid.HasValue && sessionUid.Value > 0) return sessionUid.Value;
-
-                // Support X-User-Id header from client (Web IDE / Frontend API headers)
-                if (Request.Headers.TryGetValue("X-User-Id", out var headerUid)
-                    && int.TryParse(headerUid, out int hUid) && hUid > 0)
-                {
-                    return hUid;
-                }
-
-                // Support query parameter user_id
-                if (Request.Query.TryGetValue("user_id", out var qUid)
-                    && int.TryParse(qUid, out int parsedQUid) && parsedQUid > 0)
-                {
-                    return parsedQUid;
-                }
-
-                // Support cookie user_id
-                if (Request.Cookies.TryGetValue("user_id", out var cookieUid)
-                    && int.TryParse(cookieUid, out int cUid) && cUid > 0)
-                {
-                    return cUid;
-                }
-
-                if (User?.Identity?.IsAuthenticated == true)
-                {
-                    return 1;
-                }
-
-                // In Web IDE context, default to user 1 (primary workspace) to allow seamless project creation and execution
-                return 1;
+                return BtoanAiNet.Helpers.AuthUserHelper.GetCurrentUserId(HttpContext);
             }
         }
 
@@ -408,7 +375,31 @@ namespace BtoanAiNet.Controllers
                 });
             }
 
-            string userRoot = GetUserRootPath();
+            int effectiveUserId = CurrentUserId > 0 ? CurrentUserId : 1;
+            string userRoot = GetUserRootPath(effectiveUserId);
+
+            // Auto-merge / seed from user_1 if effectiveUserId > 1 and userRoot has no projects or is missing shop-senior-mvc
+            if (effectiveUserId > 1)
+            {
+                string user1Root = GetUserRootPath(1);
+                if (Directory.Exists(user1Root))
+                {
+                    var user1Dirs = new DirectoryInfo(user1Root).GetDirectories();
+                    foreach (var d in user1Dirs)
+                    {
+                        string targetProjPath = Path.Combine(userRoot, d.Name);
+                        if (!Directory.Exists(targetProjPath))
+                        {
+                            try
+                            {
+                                CopyDirectoryRecursively(d.FullName, targetProjPath);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+
             var projectsList = new List<object>();
 
             if (Directory.Exists(userRoot))
@@ -437,25 +428,31 @@ namespace BtoanAiNet.Controllers
                 }
             }
 
-            // Always ensure at least default project exists so workspace is ready immediately
+            // If user still has no projects, seed shop-senior-mvc from WorkspaceTemplates if available
             if (projectsList.Count == 0)
             {
-                string defaultProj = "project-1";
-                string defaultPath = Path.Combine(userRoot, defaultProj);
-                if (!Directory.Exists(defaultPath))
+                string templatePath = Path.Combine(_env.ContentRootPath, "WorkspaceTemplates", "shop-senior-mvc");
+                if (Directory.Exists(templatePath))
                 {
-                    try { Directory.CreateDirectory(defaultPath); } catch { }
+                    string targetShop = Path.Combine(userRoot, "shop-senior-mvc");
+                    try
+                    {
+                        CopyDirectoryRecursively(templatePath, targetShop);
+                        var d = new DirectoryInfo(targetShop);
+                        int fileCount = d.GetFiles("*", SearchOption.AllDirectories).Count();
+                        projectsList.Add(new
+                        {
+                            id = d.Name,
+                            name = d.Name,
+                            path = d.Name,
+                            fileCount = fileCount,
+                            createdAt = d.CreationTimeUtc,
+                            lastModified = d.LastWriteTimeUtc,
+                            hasIndexHtml = System.IO.File.Exists(Path.Combine(d.FullName, "index.html"))
+                        });
+                    }
+                    catch { }
                 }
-                projectsList.Add(new
-                {
-                    id = defaultProj,
-                    name = defaultProj,
-                    path = defaultProj,
-                    fileCount = 0,
-                    createdAt = DateTime.UtcNow,
-                    lastModified = DateTime.UtcNow,
-                    hasIndexHtml = false
-                });
             }
 
             return Ok(new
@@ -2922,8 +2919,9 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         // 5. BTOAN AGENT FULL-PROJECT CHAT & RUN
         // ==========================================
 
-        // GET /api/ide/agent/history?project=...
+        // GET /api/ide/agent/history?project=... and /api/agent/history?project=...
         [HttpGet("agent/history")]
+        [HttpGet("/api/agent/history")]
         public async Task<IActionResult> GetAgentHistory([FromQuery] string? project)
         {
             int userId = CurrentUserId > 0 ? CurrentUserId : 1;
@@ -2931,8 +2929,16 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
 
             try
             {
-                var messages = await _dbContext.AgentChatMessages
-                    .Where(m => m.UserId == userId && m.ProjectName == cleanProj)
+                var query = _dbContext.AgentChatMessages
+                    .Where(m => m.UserId == userId && m.ProjectName == cleanProj);
+
+                if (userId > 1 && !await query.AnyAsync())
+                {
+                    query = _dbContext.AgentChatMessages
+                        .Where(m => m.UserId == 1 && m.ProjectName == cleanProj);
+                }
+
+                var messages = await query
                     .OrderBy(m => m.CreatedAt)
                     .Select(m => new
                     {

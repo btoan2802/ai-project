@@ -36,9 +36,7 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
-                var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (int.TryParse(claimId, out int uid)) return uid;
-                return HttpContext.Session.GetInt32("user_id");
+                return BtoanAiNet.Helpers.AuthUserHelper.GetCurrentUserId(HttpContext);
             }
         }
 
@@ -56,7 +54,7 @@ namespace BtoanAiNet.Controllers
             var authProps = new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(7)
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
             };
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProps);
         }
