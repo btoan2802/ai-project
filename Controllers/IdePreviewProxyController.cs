@@ -128,12 +128,24 @@ namespace BtoanAiNet.Controllers
 
             var requestMessage = new HttpRequestMessage(new HttpMethod(Request.Method), targetUrl);
 
-            // Copy request headers (forward Cookie, Host, X-Forwarded-*, etc.)
+            // Copy request headers (forward Cookie, Host, rewrite Referer & Origin to inner host to satisfy Antiforgery)
             foreach (var header in Request.Headers)
             {
                 if (header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase))
                 {
                     requestMessage.Headers.TryAddWithoutValidation("Host", $"127.0.0.1:{port}");
+                    continue;
+                }
+                if (header.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase))
+                {
+                    string refVal = header.Value.ToString();
+                    refVal = Regex.Replace(refVal, @"https?://[^/]+/ide-preview/" + port, $"http://127.0.0.1:{port}", RegexOptions.IgnoreCase);
+                    requestMessage.Headers.TryAddWithoutValidation("Referer", refVal);
+                    continue;
+                }
+                if (header.Key.Equals("Origin", StringComparison.OrdinalIgnoreCase))
+                {
+                    requestMessage.Headers.TryAddWithoutValidation("Origin", $"http://127.0.0.1:{port}");
                     continue;
                 }
                 if (header.Key.StartsWith(":") || 
@@ -149,8 +161,7 @@ namespace BtoanAiNet.Controllers
                 }
             }
 
-            // Ensure Forwarded headers are present
-            requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Proto", Request.IsHttps ? "https" : "http");
+            // Forwarded headers for inner Kestrel
             requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Host", Request.Host.Value);
             if (Request.HttpContext.Connection.RemoteIpAddress != null)
             {
