@@ -3209,6 +3209,31 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                     })
                     .ToListAsync();
 
+                if (messages.Count == 0)
+                {
+                    string userRoot = GetUserRootPath(userId);
+                    string projectPath = Path.Combine(userRoot, cleanProj);
+                    string chatFile = Path.Combine(projectPath, ".btoan_chat.json");
+                    if (!System.IO.File.Exists(chatFile) && userId > 1)
+                    {
+                        string user1Root = GetUserRootPath(1);
+                        chatFile = Path.Combine(user1Root, cleanProj, ".btoan_chat.json");
+                    }
+                    if (System.IO.File.Exists(chatFile))
+                    {
+                        try
+                        {
+                            string json = await System.IO.File.ReadAllTextAsync(chatFile, Encoding.UTF8);
+                            var diskMsgs = JsonSerializer.Deserialize<List<object>>(json);
+                            if (diskMsgs != null && diskMsgs.Count > 0)
+                            {
+                                return Ok(new { ok = true, project = cleanProj, messages = diskMsgs });
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
                 return Ok(new { ok = true, project = cleanProj, messages });
             }
             catch (Exception ex)
@@ -3216,6 +3241,30 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 _logger.LogWarning(ex, "Failed to load agent history for {Project}", cleanProj);
                 return Ok(new { ok = true, project = cleanProj, messages = Array.Empty<object>() });
             }
+        }
+
+        private static void AppendProjectChatJson(string projectPath, object msg)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return;
+                string chatFile = Path.Combine(projectPath, ".btoan_chat.json");
+                var list = new List<object>();
+                if (System.IO.File.Exists(chatFile))
+                {
+                    try
+                    {
+                        string existing = System.IO.File.ReadAllText(chatFile, Encoding.UTF8);
+                        var parsed = JsonSerializer.Deserialize<List<object>>(existing);
+                        if (parsed != null) list = parsed;
+                    }
+                    catch { }
+                }
+                list.Add(msg);
+                string json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+                System.IO.File.WriteAllText(chatFile, json, Encoding.UTF8);
+            }
+            catch { }
         }
 
         // DELETE /api/ide/agent/history?project=... or POST /api/ide/agent/clear-history
@@ -3237,6 +3286,14 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 {
                     _dbContext.AgentChatMessages.RemoveRange(oldMsgs);
                     await _dbContext.SaveChangesAsync();
+                }
+
+                string userRoot = GetUserRootPath(userId);
+                string projectPath = Path.Combine(userRoot, cleanProj);
+                string chatFile = Path.Combine(projectPath, ".btoan_chat.json");
+                if (System.IO.File.Exists(chatFile))
+                {
+                    try { System.IO.File.Delete(chatFile); } catch { }
                 }
             }
             catch (Exception ex)
@@ -3374,6 +3431,14 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 };
                 _dbContext.AgentChatMessages.Add(userChatMsg);
                 await _dbContext.SaveChangesAsync();
+                AppendProjectChatJson(projectPath, new
+                {
+                    id = userChatMsg.Id,
+                    role = "user",
+                    content = userChatMsg.Content,
+                    checkpointId = userChatMsg.CheckpointId,
+                    createdAt = userChatMsg.CreatedAt
+                });
             }
             catch (Exception ex)
             {
@@ -4192,6 +4257,19 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     };
                     _dbContext.AgentChatMessages.Add(assistantChatMsg);
                     await _dbContext.SaveChangesAsync();
+                    AppendProjectChatJson(projectPath, new
+                    {
+                        id = assistantChatMsg.Id,
+                        role = "assistant",
+                        content = assistantChatMsg.Content,
+                        thoughtText = assistantChatMsg.ThoughtText,
+                        thoughtSeconds = assistantChatMsg.ThoughtSeconds,
+                        planJson = assistantChatMsg.PlanJson,
+                        filePillsJson = assistantChatMsg.FilePillsJson,
+                        toolActionsJson = assistantChatMsg.ToolActionsJson,
+                        checkpointId = assistantChatMsg.CheckpointId,
+                        createdAt = assistantChatMsg.CreatedAt
+                    });
                 }
                 catch (Exception ex)
                 {

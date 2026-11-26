@@ -280,7 +280,7 @@ async function loadUserProjects() {
             };
         }
         collapsedRootProjects.delete(activeProjectId);
-    applyRootProjectCollapseState(activeProjectId);
+        applyRootProjectCollapseState(activeProjectId);
 
         // Update Terminal Prompt
         updateTerminalPrompt();
@@ -2767,6 +2767,7 @@ function quickAgentPrompt(text) {
 async function resetAgentChat() {
     if (activeProjectId) {
         try {
+            localStorage.removeItem("btoan_chat_history_" + activeProjectId);
             await fetch(`/api/ide/agent/history?project=${encodeURIComponent(activeProjectId)}`, {
                 method: 'DELETE',
                 headers: getApiHeaders()
@@ -2790,15 +2791,38 @@ async function loadAgentChatHistory(projectId) {
     if (!container) return;
 
     try {
-        const res = await fetch(`/api/ide/agent/history?project=${encodeURIComponent(projectId)}`, {
-            headers: getApiHeaders()
-        });
-        const data = await res.json();
-        const list = (data.messages || data.history || []);
-        if (data.ok && Array.isArray(list) && list.length > 0) {
-            if (splash) splash.style.display = "none";
-            container.style.display = "flex";
-            container.innerHTML = "";
+        let list = [];
+        try {
+            const res = await fetch(`/api/ide/agent/history?project=${encodeURIComponent(projectId)}`, {
+                headers: getApiHeaders()
+            });
+            if (res.ok) {
+                const data = await res.json();
+                list = (data.messages || data.history || []);
+            }
+        } catch (e) { }
+
+    const localKey = "btoan_chat_history_" + projectId;
+    if (!Array.isArray(list) || list.length === 0) {
+        try {
+            const cached = localStorage.getItem(localKey);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    list = parsed;
+                }
+            }
+        } catch (e) { }
+    } else {
+        try {
+            localStorage.setItem(localKey, JSON.stringify(list));
+        } catch (e) { }
+    }
+
+    if (Array.isArray(list) && list.length > 0) {
+        if (splash) splash.style.display = "none";
+        container.style.display = "flex";
+        container.innerHTML = "";
 
             list.forEach(item => {
                 if (item.role === "user") {
@@ -3060,7 +3084,7 @@ function removeContextChip() {
 let currentAttachedImageBase64 = null;
 let currentAttachedImageMimeType = null;
 
-window.openFileMentionPicker = function() {
+window.openFileMentionPicker = function () {
     const input = document.getElementById("agentTaskInput");
     if (input) {
         if (!input.value.endsWith("@") && !input.value.endsWith("@ ")) {
@@ -3071,19 +3095,19 @@ window.openFileMentionPicker = function() {
     }
 };
 
-window.triggerAgentImageUpload = function() {
+window.triggerAgentImageUpload = function () {
     const fileInput = document.getElementById("agentImageFileInput");
     if (fileInput) fileInput.click();
 };
 
-window.onAgentImageFileSelected = function(event) {
+window.onAgentImageFileSelected = function (event) {
     const file = event.target.files && event.target.files[0];
     if (file) {
         window.attachAgentImageFile(file);
     }
 };
 
-window.attachAgentImageFile = function(file) {
+window.attachAgentImageFile = function (file) {
     if (!file || !file.type.startsWith("image/")) {
         if (typeof showToastNotification === 'function') showToastNotification("⚠️ Chỉ hỗ trợ đính kèm tệp hình ảnh (PNG, JPG, WebP)!");
         return;
@@ -3108,7 +3132,7 @@ window.attachAgentImageFile = function(file) {
     reader.readAsDataURL(file);
 };
 
-window.removeAttachedImage = function() {
+window.removeAttachedImage = function () {
     currentAttachedImageBase64 = null;
     currentAttachedImageMimeType = null;
     const chip = document.getElementById("agentImageChip");
@@ -3153,6 +3177,18 @@ async function sendAgentTask() {
     }
     userMsgWrapper.appendChild(userMsg);
     container.appendChild(userMsgWrapper);
+
+    // Cache user prompt locally
+    try {
+        const localKey = "btoan_chat_history_" + (activeProjectId || "project-1");
+        const cached = JSON.parse(localStorage.getItem(localKey) || "[]");
+        cached.push({
+            role: "user",
+            content: task,
+            createdAt: new Date().toISOString()
+        });
+        localStorage.setItem(localKey, JSON.stringify(cached));
+    } catch (e) { }
 
     // Append Agent Loading Indicator (Antigravity Thought Accordion & Live Task Card)
     const thoughtId = `thought_${Date.now()}`;
@@ -3439,6 +3475,24 @@ async function sendAgentTask() {
                         }
                         finalData = eventData;
                         renderAgentResponse(finalData, agentMsg);
+
+                        // Cache assistant message locally
+                        try {
+                            const localKey = "btoan_chat_history_" + (activeProjectId || "project-1");
+                            const cached = JSON.parse(localStorage.getItem(localKey) || "[]");
+                            cached.push({
+                                role: "assistant",
+                                content: finalData.explanation || finalExplanation,
+                                thoughtText: accumulatedThought.toString(),
+                                thoughtSeconds: agentDurationSecs,
+                                planJson: JSON.stringify(finalData.plan || planSteps),
+                                filePillsJson: JSON.stringify(finalData.modifiedFiles || modifiedFiles),
+                                toolActionsJson: JSON.stringify(finalData.operations || toolOperations),
+                                checkpointId: finalData.checkpointId || null,
+                                createdAt: new Date().toISOString()
+                            });
+                            localStorage.setItem(localKey, JSON.stringify(cached));
+                        } catch (e) { }
 
                         // Attach Checkpoint restore button to user message if checkpoint created
                         if (finalData.checkpointId && userMsgWrapper) {
@@ -5589,7 +5643,7 @@ window.addEventListener('DOMContentLoaded', () => {
         // Don't intercept if user is typing in Monaco editor or an active text input other than agentTaskInput
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
         const isEditingOtherInput = (activeTag === "input" && document.activeElement.id !== "agentTaskInput") ||
-                                    (monacoEditor && monacoEditor.hasTextFocus && monacoEditor.hasTextFocus());
+            (monacoEditor && monacoEditor.hasTextFocus && monacoEditor.hasTextFocus());
         if (isEditingOtherInput) return;
 
         const imgFile = extractImageFileFromClipboard(e);
