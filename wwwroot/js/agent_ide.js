@@ -2859,18 +2859,30 @@ function askAgentToFixTerminalError() {
 
     // 2. Đọc 30–50 dòng log gần nhất từ buffer của xterm.js (hoặc biến lưu output lệnh gần nhất)
     let terminalLogs = "";
-    if (xtermInstance && xtermInstance.buffer && xtermInstance.buffer.active) {
-        const buffer = xtermInstance.buffer.active;
-        const lines = [];
-        const total = buffer.length;
-        const start = Math.max(0, total - 50);
-        for (let i = start; i < total; i++) {
-            const line = buffer.getLine(i);
-            if (line) {
-                lines.push(line.translateToString(true));
+    try {
+        const session = (Array.isArray(terminalSessions) && terminalSessions.length > 0)
+            ? (terminalSessions.find(s => s.id === activeTerminalSessionId) || terminalSessions[0])
+            : null;
+        const targetXterm = (session && session.xterm) ? session.xterm : xtermInstance;
+
+        if (targetXterm && targetXterm.buffer && targetXterm.buffer.active) {
+            const buffer = targetXterm.buffer.active;
+            const lines = [];
+            const total = buffer.length;
+            const start = Math.max(0, total - 50);
+            for (let i = start; i < total; i++) {
+                const line = buffer.getLine(i);
+                if (line) {
+                    const str = line.translateToString(true);
+                    if (str && str.trim()) {
+                        lines.push(str);
+                    }
+                }
             }
+            terminalLogs = lines.join('\n');
         }
-        terminalLogs = lines.join('\n');
+    } catch (e) {
+        console.warn("[askAgentToFixTerminalError] Could not read terminal buffer:", e);
     }
 
     if (!terminalLogs || terminalLogs.trim().length === 0) {
@@ -2880,7 +2892,10 @@ function askAgentToFixTerminalError() {
     }
 
     // Lọc bỏ toàn bộ mã màu điều khiển ANSI (\x1b\[[0-9;]*[a-zA-Z]) để lấy văn bản sạch
-    terminalLogs = (terminalLogs || "").replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+    terminalLogs = (terminalLogs || "")
+        .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
+        .trim();
 
     const input = document.getElementById("agentTaskInput");
     if (!terminalLogs) {
@@ -2895,6 +2910,8 @@ function askAgentToFixTerminalError() {
     const promptText = `Hãy kiểm tra và sửa lỗi sau trong Terminal của dự án:\n\`\`\`\n${terminalLogs}\n\`\`\``;
     if (input) {
         input.value = promptText;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
         // Tự động kích hoạt gửi tới Btoan Agent
         if (typeof sendAgentTask === "function") {
             sendAgentTask();
