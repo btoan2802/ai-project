@@ -20,6 +20,7 @@
     <Compile Remove="WorkspaceTemplates\**" />
     <Content Remove="WorkspaceTemplates\**" />
     <EmbeddedResource Remove="WorkspaceTemplates\**" />
+    <ScopedCss Remove="WorkspaceTemplates\**" />
     <None Include="WorkspaceTemplates\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
