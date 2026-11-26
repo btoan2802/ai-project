@@ -430,6 +430,24 @@ async function switchActiveProject(projName) {
     activeFilePath = null;
     renderTabBar();
 
+    if (typeof monacoEditor !== "undefined" && monacoEditor) {
+        monacoEditor.setValue("// Select a file from Explorer to begin coding.\n");
+    }
+    const activeChip = document.getElementById("activeFileChip");
+    if (activeChip) activeChip.style.display = "none";
+    if (typeof removeAttachedImage === "function") {
+        removeAttachedImage();
+    }
+    const bEl = document.getElementById("breadcrumbPath");
+    if (bEl) bEl.innerText = projName;
+    const topTitleEl = document.getElementById("topBarTitle");
+    if (topTitleEl) topTitleEl.innerText = `${projName} — Antigravity IDE`;
+
+    const activeTerm = (terminalSessions && terminalSessions.find(s => s.id === activeTerminalSessionId)) || (terminalSessions && terminalSessions[0]);
+    if (activeTerm && activeTerm.xterm) {
+        activeTerm.xterm.clear();
+    }
+
     activeProjectId = projName;
     localStorage.setItem("btoan_active_project", activeProjectId);
     localStorage.setItem("antigravity_last_project", activeProjectId);
@@ -1918,6 +1936,15 @@ async function initTerminalSignalR() {
         console.log("[Terminal] Connected to TerminalHub successfully.");
         if (activeProjectId) {
             await syncTerminalWorkspace(activeProjectId, false);
+        }
+
+        // Start ping interval to keep WebSocket connection alive (prevent 1006 idle disconnects)
+        if (!window._terminalPingInterval) {
+            window._terminalPingInterval = setInterval(() => {
+                if (terminalHubConn && terminalHubConn.state === signalR.HubConnectionState.Connected) {
+                    terminalHubConn.invoke("Ping").catch(() => {});
+                }
+            }, 25000);
         }
     } catch (err) {
         console.warn("[Terminal] Could not connect to TerminalHub:", err);
@@ -3656,15 +3683,39 @@ async function sendAgentTask() {
             sendBtn.onclick = sendAgentTask;
         }
 
-        // 3. Nếu stream bị đóng đột ngột trước khi nhận sự kiện 'done', tự động gọi loadAgentChatHistory sau 1 giây
+        // 3. Nếu stream bị đóng trước khi nhận sự kiện 'done': bảo toàn nội dung đã render, tuyệt đối không xóa bằng loadAgentChatHistory
         if (!isStreamCompleted && !isAbort) {
-            const curProj = activeProjectId || "shop-senior-mvc";
-            console.log(`[BtoanAgent] Stream ended before 'done' event, resyncing chat history for ${curProj}...`);
-            setTimeout(() => {
-                if (typeof loadAgentChatHistory === "function") {
-                    loadAgentChatHistory(curProj);
-                }
-            }, 1000);
+            console.log(`[BtoanAgent] Stream ended before 'done' event, checking partial content to preserve...`);
+            if (thoughtEl && !isThinkingDone) {
+                isThinkingDone = true;
+                thoughtEl.removeAttribute("open");
+                if (thoughtTitle) thoughtTitle.innerHTML = `Thought for ${elapsedSec}s`;
+            }
+
+            const hasPills = agentMsg.querySelector(".agent-action-pill, .agent-task-step-item, .agent-response-card, pre, code");
+            const hasExplanation = (finalExplanation && finalExplanation.trim().length > 0) || (explanationEl && explanationEl.innerText.trim().length > 0);
+
+            if (hasPills || hasExplanation) {
+                console.log("[BtoanAgent] Partial content found. Preserving DOM output without clearing.");
+                try {
+                    const localKey = "btoan_chat_history_" + (activeProjectId || "project-1");
+                    const cached = JSON.parse(localStorage.getItem(localKey) || "[]");
+                    cached.push({
+                        role: "assistant",
+                        content: (explanationEl && explanationEl.innerText.trim()) || finalExplanation || "Nhiệm vụ đã được thực thi một phần trên workspace.",
+                        thoughtText: accumulatedThought.toString(),
+                        thoughtSeconds: agentDurationSecs,
+                        planJson: JSON.stringify(planSteps),
+                        filePillsJson: JSON.stringify(modifiedFiles),
+                        toolActionsJson: JSON.stringify(toolOperations),
+                        createdAt: new Date().toISOString()
+                    });
+                    localStorage.setItem(localKey, JSON.stringify(cached));
+                } catch (e) { }
+            } else {
+                console.log("[BtoanAgent] No partial content received. Showing graceful disconnect message.");
+                agentMsg.innerHTML = `<div class="text-danger extra-small p-2 bg-dark rounded border border-danger mt-1">❌ Kết nối máy chủ bị ngắt trước khi phản hồi (Stream ended unexpectedly). Vui lòng thử lại.</div>`;
+            }
         }
     }
 }

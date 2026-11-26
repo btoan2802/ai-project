@@ -3363,7 +3363,9 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
 
         // DELETE /api/ide/agent/history?project=... or POST /api/ide/agent/clear-history
         [HttpDelete("agent/history")]
+        [HttpDelete("/api/agent/history")]
         [HttpPost("agent/clear-history")]
+        [HttpPost("/api/agent/clear-history")]
         public async Task<IActionResult> ClearAgentHistory([FromQuery] string? project, [FromBody] JsonObject? body)
         {
             int userId = CurrentUserId > 0 ? CurrentUserId : 1;
@@ -3408,6 +3410,10 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         // POST /api/ide/agent-chat and /api/ide/agent-run
         [HttpPost("agent-chat")]
         [HttpPost("agent-run")]
+        [HttpPost("/api/agent/run")]
+        [HttpPost("/api/agent/chat")]
+        [HttpPost("/api/agent/agent-run")]
+        [HttpPost("/api/agent/agent-chat")]
         public async Task AgentChat([FromBody] AgentChatRequestModel model)
         {
             if (model == null || string.IsNullOrWhiteSpace(model.Prompt))
@@ -3627,6 +3633,27 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                         sbContext.AppendLine("--- END FILE ---");
                     }
                     catch { }
+                }
+            }
+
+            if (model.ContextFiles != null && model.ContextFiles.Count > 0)
+            {
+                foreach (var cf in model.ContextFiles)
+                {
+                    if (string.IsNullOrWhiteSpace(cf.Path)) continue;
+                    string cPath = Path.Combine(projectPath, cf.Path.TrimStart('/', '\\'));
+                    if (System.IO.File.Exists(cPath))
+                    {
+                        try
+                        {
+                            string cContent = !string.IsNullOrEmpty(cf.Content) ? cf.Content : await System.IO.File.ReadAllTextAsync(cPath, Encoding.UTF8);
+                            if (cContent.Length > 6000) cContent = cContent.Substring(0, 6000) + "\n...[truncated]";
+                            sbContext.AppendLine($"--- CONTEXT FILE: {cf.Path} ---");
+                            sbContext.AppendLine(cContent);
+                            sbContext.AppendLine("--- END FILE ---");
+                        }
+                        catch { }
+                    }
                 }
             }
 
@@ -4504,14 +4531,44 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Agent chat execution error");
+                string errorMsg = $"Lỗi xử lý Agent: {ex.Message}";
                 if (isStream)
                 {
-                    await SendSseEventAsync("error", new { ok = false, error = ex.Message });
+                    await SendSseEventAsync("error", new { ok = false, type = "error", message = errorMsg, error = errorMsg });
                 }
                 else
                 {
                     Response.StatusCode = 500;
-                    await Response.WriteAsJsonAsync(new { ok = false, error = ex.Message });
+                    await Response.WriteAsJsonAsync(new { ok = false, error = errorMsg });
+                }
+
+                // Lưu bản ghi Role = assistant chứa thông báo lỗi vào SQLite AgentChatMessages
+                try
+                {
+                    var errorChatMsg = new Models.AgentChatMessage
+                    {
+                        UserId = userId,
+                        ProjectName = cleanProj,
+                        Role = "assistant",
+                        Content = $"❌ {errorMsg}",
+                        CheckpointId = checkpointId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.AgentChatMessages.Add(errorChatMsg);
+                    await _dbContext.SaveChangesAsync();
+
+                    AppendProjectChatJson(projectPath, new
+                    {
+                        id = errorChatMsg.Id,
+                        role = "assistant",
+                        content = errorChatMsg.Content,
+                        checkpointId = errorChatMsg.CheckpointId,
+                        createdAt = errorChatMsg.CreatedAt
+                    });
+                }
+                catch (Exception dbEx)
+                {
+                    _logger.LogWarning(dbEx, "Failed to persist error assistant chat message");
                 }
             }
             finally

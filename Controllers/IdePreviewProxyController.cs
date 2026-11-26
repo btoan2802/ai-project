@@ -162,45 +162,28 @@ namespace BtoanAiNet.Controllers
             }
 
             // Forwarded headers for inner Kestrel
-            requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "https");
             requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-Host", Request.Host.Value);
             if (Request.HttpContext.Connection.RemoteIpAddress != null)
             {
                 requestMessage.Headers.TryAddWithoutValidation("X-Forwarded-For", Request.HttpContext.Connection.RemoteIpAddress.ToString());
             }
 
-            // Copy body for write methods: If form submission, reconstruct FormUrlEncodedContent from Request.Form; otherwise copy Request.Body
+            // Copy body for write methods (buffering into ByteArrayContent to ensure Content-Length is sent and avoid chunked transfer for forms)
             if (HttpMethods.IsPost(Request.Method) || HttpMethods.IsPut(Request.Method) || HttpMethods.IsPatch(Request.Method))
             {
-                if (Request.HasFormContentType && Request.Form != null && Request.Form.Count > 0)
+                using var ms = new MemoryStream();
+                if (Request.Body != null)
                 {
-                    var formList = new List<KeyValuePair<string, string>>();
-                    foreach (var field in Request.Form)
-                    {
-                        foreach (var val in field.Value)
-                        {
-                            formList.Add(new KeyValuePair<string, string>(field.Key, val ?? ""));
-                        }
-                    }
-                    requestMessage.Content = new FormUrlEncodedContent(formList);
+                    await Request.Body.CopyToAsync(ms);
                 }
-                else
+                byte[] bodyBytes = ms.ToArray();
+                var byteContent = new ByteArrayContent(bodyBytes);
+                if (!string.IsNullOrEmpty(Request.ContentType))
                 {
-                    if (Request.Body.CanSeek) Request.Body.Position = 0;
-                    using var ms = new MemoryStream();
-                    if (Request.Body != null)
-                    {
-                        await Request.Body.CopyToAsync(ms);
-                    }
-                    byte[] bodyBytes = ms.ToArray();
-                    var byteContent = new ByteArrayContent(bodyBytes);
-                    if (!string.IsNullOrEmpty(Request.ContentType))
-                    {
-                        byteContent.Headers.TryAddWithoutValidation("Content-Type", Request.ContentType);
-                    }
-                    byteContent.Headers.ContentLength = bodyBytes.Length;
-                    requestMessage.Content = byteContent;
+                    byteContent.Headers.TryAddWithoutValidation("Content-Type", Request.ContentType);
                 }
+                byteContent.Headers.ContentLength = bodyBytes.Length;
+                requestMessage.Content = byteContent;
             }
 
             try

@@ -144,6 +144,8 @@ namespace BtoanAiNet.Hubs
             return projectPath;
         }
 
+        public Task Ping() => Task.CompletedTask;
+
         public async Task InitializeTerminal(string project, string sessionId)
         {
             string sId = string.IsNullOrWhiteSpace(sessionId) ? "term-1" : sessionId.Trim();

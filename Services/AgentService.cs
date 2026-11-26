@@ -51,10 +51,21 @@ namespace BtoanAiNet.Services
                 var fileContexts = new List<string>();
                 foreach (var relFile in relevantFiles)
                 {
-                    string fullPath = Path.Combine(targetDir, relFile);
-                    string content = await _fileService.ReadFileAsync(fullPath);
-                    if (content.Length > 4000) content = content.Substring(0, 4000) + "\n...[truncated]";
-                    fileContexts.Add($"=== FILE: {relFile} ===\n{content}\n");
+                    if (string.IsNullOrWhiteSpace(relFile)) continue;
+                    string fullPath = Path.Combine(targetDir, relFile.TrimStart('/', '\\'));
+                    if (System.IO.File.Exists(fullPath))
+                    {
+                        try
+                        {
+                            string content = await _fileService.ReadFileAsync(fullPath);
+                            if (content.Length > 4000) content = content.Substring(0, 4000) + "\n...[truncated]";
+                            fileContexts.Add($"=== FILE: {relFile} ===\n{content}\n");
+                        }
+                        catch
+                        {
+                            // Ignore missing or unreadable files gracefully
+                        }
+                    }
                 }
 
                 // Step 2 & 3: Prompt Gemini to propose code changes
