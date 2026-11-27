@@ -676,8 +676,8 @@ body.agent-ide-body {
 
 .editor-viewport {
     background-color: var(--ide-bg-editor);
-    min-height: 180px !important;
-    flex: 1 1 auto;
+    min-height: 120px !important;
+    flex: 1 1 0px !important;
     overflow: hidden;
 }
 
@@ -698,7 +698,7 @@ body.agent-ide-body {
     flex-direction: column;
     overflow: hidden;
     min-height: 35px;
-    max-height: calc(100% - 200px) !important;
+    max-height: 48% !important;
     flex-shrink: 0;
 }
 
@@ -1032,7 +1032,6 @@ body.agent-ide-body {
 .agent-chat-body {
     flex: 1 1 0px !important;
     min-height: 0 !important;
-    height: 0 !important;
     max-height: none !important;
     width: 100% !important;
     overflow-y: auto !important;

@@ -1392,15 +1392,15 @@ function toggleBottomPanelHeight() {
     if (!panel) return;
     const btnIcon = panel.querySelector(".bi-chevron-up, .bi-chevron-down");
     if (isBottomPanelMaximized) {
-        panel.style.height = "220px";
+        panel.style.height = "200px";
         isBottomPanelMaximized = false;
         if (btnIcon) {
             btnIcon.classList.remove('bi-chevron-down');
             btnIcon.classList.add('bi-chevron-up');
         }
     } else {
-        const maxH = Math.min(Math.floor(window.innerHeight * 0.45), Math.max(160, window.innerHeight - 280));
-        panel.style.height = `${Math.max(160, maxH)}px`;
+        const maxH = Math.min(Math.floor(window.innerHeight * 0.42), Math.max(140, window.innerHeight - 260));
+        panel.style.height = `${Math.max(140, maxH)}px`;
         isBottomPanelMaximized = true;
         if (btnIcon) {
             btnIcon.classList.remove('bi-chevron-up');
@@ -4451,16 +4451,18 @@ function initDraggableSplitters() {
     const bottomPanel = document.getElementById("bottomPanel");
     if (resizerTerminal && bottomPanel) {
         const savedH = localStorage.getItem("antigravity_terminal_h");
-        let defaultH = 220;
+        let defaultH = 200;
+        const maxAllowedInit = Math.floor(window.innerHeight * 0.40);
         if (savedH) {
             const parsed = parseInt(savedH, 10);
-            const maxAllowed = Math.floor(window.innerHeight * 0.45);
-            if (!isNaN(parsed) && parsed >= 100 && parsed <= maxAllowed) {
+            if (!isNaN(parsed) && parsed >= 80 && parsed <= maxAllowedInit) {
                 defaultH = parsed;
             } else {
-                defaultH = 220;
-                localStorage.setItem("antigravity_terminal_h", "220px");
+                defaultH = Math.min(200, Math.max(120, maxAllowedInit));
+                localStorage.setItem("antigravity_terminal_h", `${defaultH}px`);
             }
+        } else {
+            defaultH = Math.min(200, Math.max(120, maxAllowedInit));
         }
         bottomPanel.style.height = `${defaultH}px`;
 
@@ -4471,17 +4473,18 @@ function initDraggableSplitters() {
             document.body.style.userSelect = "none";
         });
 
-        // Double click resizer resets to 220px
+        // Double click resizer resets to 200px
         resizerTerminal.addEventListener("dblclick", () => {
-            bottomPanel.style.height = "220px";
-            localStorage.setItem("antigravity_terminal_h", "220px");
+            const resetH = Math.min(200, Math.floor(window.innerHeight * 0.40));
+            bottomPanel.style.height = `${resetH}px`;
+            localStorage.setItem("antigravity_terminal_h", `${resetH}px`);
             triggerEditorLayout();
             setTimeout(() => { try { fitAddon?.fit(); } catch (e) {} }, 50);
         });
 
         window.addEventListener("mousemove", (e) => {
             if (!isDragging) return;
-            const maxAllowed = Math.min(Math.floor(window.innerHeight * 0.45), Math.max(160, window.innerHeight - 260));
+            const maxAllowed = Math.min(Math.floor(window.innerHeight * 0.45), Math.max(140, window.innerHeight - 240));
             const minAllowed = 80;
             const targetH = window.innerHeight - e.clientY - 24;
             const newH = Math.max(minAllowed, Math.min(maxAllowed, targetH));
