@@ -699,6 +699,65 @@ BEGIN
         [created_at] DATETIME2 NOT NULL
     );
 END
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserPreferences]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[UserPreferences] (
+        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+        [UserId] INT NOT NULL,
+        [CustomInstructions] NVARCHAR(MAX) NULL,
+        [SavedMemories] NVARCHAR(MAX) NULL,
+        [Theme] NVARCHAR(50) NOT NULL DEFAULT 'dark',
+        [DefaultLocation] NVARCHAR(200) NOT NULL DEFAULT N'TP. Hồ Chí Minh, Việt Nam',
+        [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        [UpdatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserGems]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[UserGems] (
+        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+        [UserId] INT NOT NULL,
+        [Name] NVARCHAR(100) NOT NULL,
+        [Icon] NVARCHAR(20) NOT NULL DEFAULT N'💎',
+        [Description] NVARCHAR(MAX) NULL,
+        [SystemPrompt] NVARCHAR(MAX) NOT NULL,
+        [DefaultDocId] INT NOT NULL DEFAULT 0,
+        [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+
+    INSERT INTO [dbo].[UserGems] ([UserId], [Name], [Icon], [Description], [SystemPrompt], [CreatedAt])
+    VALUES 
+    (1, N'Gia sư Bách Khoa', N'🎓', N'Gia sư gợi mở (Socratic) hướng dẫn giải bài từng bước', N'Bạn là Gia sư Bách Khoa kiên nhẫn. Đặt câu hỏi gợi mở, không đưa đáp án ngay.', GETUTCDATE()),
+    (1, N'Chuyên gia C# / .NET', N'💻', N'Senior .NET Architect tối ưu mã nguồn và clean architecture', N'Bạn là Senior .NET Architect tư vấn code C# hiện đại, clean architecture.', GETUTCDATE()),
+    (1, N'Luyện thi IELTS 8.0', N'🗣️', N'Huấn luyện viên sửa lỗi từ vựng và ngữ pháp IELTS cao cấp', N'You are an elite IELTS Examiner and Coach for band 8.0+.', GETUTCDATE());
+END
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserFeedbacks]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[UserFeedbacks] (
+        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+        [UserId] INT NULL,
+        [Category] NVARCHAR(100) NULL,
+        [Message] NVARCHAR(MAX) NOT NULL,
+        [Rating] INT NOT NULL DEFAULT 5,
+        [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[SharedLinks]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[SharedLinks] (
+        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+        [UserId] INT NOT NULL,
+        [ConversationId] INT NOT NULL,
+        [ShareToken] NVARCHAR(100) NOT NULL,
+        [Title] NVARCHAR(200) NULL,
+        [IsRevoked] BIT NOT NULL DEFAULT 0,
+        [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
 ";
         if (dbContext.Database.IsSqlServer())
         {
@@ -771,60 +830,56 @@ CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessage
                 }
 
                 // Ensure Gemini-style settings tables for SQLite
-                dbContext.Database.ExecuteSqlRaw(@"
-CREATE TABLE IF NOT EXISTS UserPreferences (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserId INTEGER NOT NULL UNIQUE,
-    CustomInstructions TEXT,
-    SavedMemories TEXT,
-    Theme TEXT DEFAULT 'dark',
-    DefaultLocation TEXT DEFAULT 'TP. Hồ Chí Minh, Việt Nam',
-    CreatedAt TEXT,
-    UpdatedAt TEXT
-);
-CREATE TABLE IF NOT EXISTS UserGems (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserId INTEGER NOT NULL,
-    Name TEXT NOT NULL,
-    Icon TEXT DEFAULT '💎',
-    Description TEXT,
-    SystemPrompt TEXT NOT NULL,
-    DefaultDocId INTEGER DEFAULT 0,
-    CreatedAt TEXT
-);
-CREATE TABLE IF NOT EXISTS UserFeedbacks (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserId INTEGER,
-    Category TEXT,
-    Message TEXT NOT NULL,
-    Rating INTEGER DEFAULT 5,
-    CreatedAt TEXT
-);
-CREATE TABLE IF NOT EXISTS SharedLinks (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserId INTEGER NOT NULL,
-    ConversationId INTEGER NOT NULL,
-    ShareToken TEXT NOT NULL UNIQUE,
-    Title TEXT,
-    IsRevoked INTEGER DEFAULT 0,
-    CreatedAt TEXT
-);
-CREATE INDEX IF NOT EXISTS IX_UserGems_UserId ON UserGems(UserId);
-CREATE INDEX IF NOT EXISTS IX_SharedLinks_Token ON SharedLinks(ShareToken);
-");
-
-                // Seed starter gems if none exist
-                try
+                string[] settingsSqlite = new[]
                 {
-                    dbContext.Database.ExecuteSqlRaw(@"
-INSERT OR IGNORE INTO UserGems (UserId, Name, Icon, Description, SystemPrompt, CreatedAt)
-VALUES 
-(1, 'Gia sư Bách Khoa', '🎓', 'Gia sư phương pháp gợi mở (Socratic), hướng dẫn giải toán và khoa học từng bước', 'Bạn là Gia sư Bách Khoa tài năng, kiên nhẫn. Không đưa trực tiếp đáp án cuối cùng mà chia nhỏ vấn đề, đặt câu hỏi gợi mở cho học viên suy nghĩ.', datetime('now')),
-(1, 'Chuyên gia C# / .NET', '💻', 'Senior .NET Architect tối ưu mã nguồn, clean architecture và clean code', 'Bạn là Senior .NET Software Architect với hơn 15 năm kinh nghiệm. Tư vấn kiến trúc chuẩn mực, viết code C# hiện đại, tối ưu performance.', datetime('now')),
-(1, 'Luyện thi IELTS 8.0', '🗣️', 'Huấn luyện viên IELTS Speaking và Writing sửa lỗi từ vựng ngữ pháp cao cấp', 'You are an elite IELTS Examiner and Coach. Help the user improve vocabulary, lexical resource, and grammatical accuracy for band 8.0+.', datetime('now'));
-");
+                    @"CREATE TABLE IF NOT EXISTS UserPreferences (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId INTEGER NOT NULL UNIQUE,
+                        CustomInstructions TEXT,
+                        SavedMemories TEXT,
+                        Theme TEXT DEFAULT 'dark',
+                        DefaultLocation TEXT DEFAULT 'TP. Hồ Chí Minh, Việt Nam',
+                        CreatedAt TEXT,
+                        UpdatedAt TEXT
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS UserGems (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId INTEGER NOT NULL,
+                        Name TEXT NOT NULL,
+                        Icon TEXT DEFAULT '💎',
+                        Description TEXT,
+                        SystemPrompt TEXT NOT NULL,
+                        DefaultDocId INTEGER DEFAULT 0,
+                        CreatedAt TEXT
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS UserFeedbacks (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId INTEGER,
+                        Category TEXT,
+                        Message TEXT NOT NULL,
+                        Rating INTEGER DEFAULT 5,
+                        CreatedAt TEXT
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS SharedLinks (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId INTEGER NOT NULL,
+                        ConversationId INTEGER NOT NULL,
+                        ShareToken TEXT NOT NULL UNIQUE,
+                        Title TEXT,
+                        IsRevoked INTEGER DEFAULT 0,
+                        CreatedAt TEXT
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS IX_UserGems_UserId ON UserGems(UserId);",
+                    @"CREATE INDEX IF NOT EXISTS IX_SharedLinks_Token ON SharedLinks(ShareToken);",
+                    @"INSERT OR IGNORE INTO UserGems (Id, UserId, Name, Icon, Description, SystemPrompt, CreatedAt) VALUES 
+                    (1, 1, 'Gia sư Bách Khoa', '🎓', 'Gia sư gợi mở (Socratic) hướng dẫn giải bài từng bước', 'Bạn là Gia sư Bách Khoa kiên nhẫn. Đặt câu hỏi gợi mở, không đưa đáp án ngay.', datetime('now')),
+                    (2, 1, 'Chuyên gia C# / .NET', '💻', 'Senior .NET Architect tối ưu mã nguồn và clean architecture', 'Bạn là Senior .NET Architect tư vấn code C# hiện đại, clean architecture.', datetime('now')),
+                    (3, 1, 'Luyện thi IELTS 8.0', '🗣️', 'Huấn luyện viên sửa lỗi từ vựng và ngữ pháp IELTS cao cấp', 'You are an elite IELTS Examiner and Coach for band 8.0+.', datetime('now'));"
+                };
+                foreach (var sqlStmt in settingsSqlite)
+                {
+                    try { dbContext.Database.ExecuteSqlRaw(sqlStmt); } catch { }
                 }
-                catch { }
             }
             catch { }
         }
@@ -859,17 +914,60 @@ VALUES
 
             try
             {
-                dbContext.Database.ExecuteSqlRaw(@"
-CREATE TABLE IF NOT EXISTS `agent_chat_messages` (
-    `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `user_id` INT NOT NULL,
-    `project_name` VARCHAR(100) NOT NULL,
-    `role` VARCHAR(20) NOT NULL,
-    `content` LONGTEXT NOT NULL,
-    `plan_json` LONGTEXT NULL,
-    `tool_actions_json` LONGTEXT NULL,
-    `created_at` DATETIME NOT NULL
-);");
+                string[] settingsMySql = new[]
+                {
+                    @"CREATE TABLE IF NOT EXISTS `agent_chat_messages` (
+                        `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `user_id` INT NOT NULL,
+                        `project_name` VARCHAR(100) NOT NULL,
+                        `role` VARCHAR(20) NOT NULL,
+                        `content` LONGTEXT NOT NULL,
+                        `plan_json` LONGTEXT NULL,
+                        `tool_actions_json` LONGTEXT NULL,
+                        `created_at` DATETIME NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS `UserPreferences` (
+                        `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `UserId` INT NOT NULL UNIQUE,
+                        `CustomInstructions` LONGTEXT NULL,
+                        `SavedMemories` LONGTEXT NULL,
+                        `Theme` VARCHAR(50) NOT NULL DEFAULT 'dark',
+                        `DefaultLocation` VARCHAR(200) NOT NULL DEFAULT 'TP. Hồ Chí Minh, Việt Nam',
+                        `CreatedAt` DATETIME NOT NULL,
+                        `UpdatedAt` DATETIME NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS `UserGems` (
+                        `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `UserId` INT NOT NULL,
+                        `Name` VARCHAR(100) NOT NULL,
+                        `Icon` VARCHAR(20) NOT NULL DEFAULT '💎',
+                        `Description` LONGTEXT NULL,
+                        `SystemPrompt` LONGTEXT NOT NULL,
+                        `DefaultDocId` INT NOT NULL DEFAULT 0,
+                        `CreatedAt` DATETIME NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS `UserFeedbacks` (
+                        `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `UserId` INT NULL,
+                        `Category` VARCHAR(100) NULL,
+                        `Message` LONGTEXT NOT NULL,
+                        `Rating` INT NOT NULL DEFAULT 5,
+                        `CreatedAt` DATETIME NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS `SharedLinks` (
+                        `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `UserId` INT NOT NULL,
+                        `ConversationId` INT NOT NULL,
+                        `ShareToken` VARCHAR(100) NOT NULL UNIQUE,
+                        `Title` VARCHAR(200) NULL,
+                        `IsRevoked` TINYINT NOT NULL DEFAULT 0,
+                        `CreatedAt` DATETIME NOT NULL
+                    );"
+                };
+                foreach (var sqlStmt in settingsMySql)
+                {
+                    try { dbContext.Database.ExecuteSqlRaw(sqlStmt); } catch { }
+                }
             }
             catch { }
         }
