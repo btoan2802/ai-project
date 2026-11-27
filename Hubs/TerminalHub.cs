@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BtoanAiNet.Controllers;
 using BtoanAiNet.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
@@ -29,6 +30,7 @@ namespace BtoanAiNet.Hubs
         public CancellationTokenSource? Cts { get; set; }
     }
 
+    [Authorize]
     public class TerminalHub : Hub
     {
         private static readonly ConcurrentDictionary<string, TerminalInteractiveSession> Sessions = new();
@@ -102,13 +104,7 @@ namespace BtoanAiNet.Hubs
                 return parsedHUid;
             }
 
-            if (Context.User?.Identity?.IsAuthenticated == true)
-            {
-                return 1; // Default to admin for authenticated users
-            }
-
-            // Default to admin user (1) for interactive Web IDE terminal session
-            return 1;
+            return 0; // Strictly 0 if unauthenticated (no fallback to user_1)
         }
 
         private string ResolveProjectRoot(int userId, string projectName)

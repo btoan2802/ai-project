@@ -33,7 +33,7 @@ namespace BtoanAiNet.Helpers
                 return cUid;
             }
 
-            return 1;
+            return 0; // Strictly 0 if unauthenticated (no fallback to user_1)
         }
     }
 }

@@ -7,12 +7,14 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using BtoanAiNet.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
 namespace BtoanAiNet.Controllers
 {
+    [Authorize]
     [ApiController]
     public class IdePreviewProxyController : ControllerBase
     {

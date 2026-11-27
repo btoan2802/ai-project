@@ -1471,7 +1471,7 @@ async function send() {
 
         if (!reply || reply.trim() === "") {
             if (liveBotRow && liveBotRow.parentNode) liveBotRow.remove();
-            const errDetail = geminiRes?.error || "Server không trả về nội dung (vui lòng kiểm tra Gemini API Key).";
+            const errDetail = geminiRes?.error || "Server không trả về nội dung (vui lòng kiểm tra kết nối mạng hoặc thử lại).";
             addBotBubble(errDetail.startsWith("❌") || errDetail.startsWith("⚠️") ? errDetail : "❌ " + errDetail);
             isSending = false;
             return;
@@ -2073,14 +2073,17 @@ function showWelcomeScreen(show) {
     const welcomeEl = document.getElementById("welcome-screen");
     const hubEl = document.getElementById("learning-hub-screen");
     const chatEl = document.getElementById("chat");
-    if (hubEl && !window._isViewingLearningHub) hubEl.style.display = "none";
     if (!welcomeEl) return;
     if (show) {
-        welcomeEl.style.display = "flex";
-        if (chatEl) chatEl.style.display = "none";
-        updateWelcomeGreeting();
+        if (!window._isViewingLearningHub) {
+            welcomeEl.style.display = "flex";
+            if (hubEl) hubEl.style.display = "none";
+            if (chatEl) chatEl.style.display = "none";
+            updateWelcomeGreeting();
+        }
     } else {
         welcomeEl.style.display = "none";
+        if (hubEl) hubEl.style.display = "none";
         if (chatEl) chatEl.style.display = "block";
     }
 }
@@ -2230,6 +2233,14 @@ async function deleteChat(id) {
 async function loadConversation(id, updateUrl = true) {
     console.log(performance.now(), "[LOAD CONVERSATION START]", id);
 
+    window.isLoadingConversation = true;
+    window._isViewingLearningHub = false;
+    const hubEl = document.getElementById("learning-hub-screen");
+    if (hubEl) hubEl.style.display = "none";
+    const welcomeEl = document.getElementById("welcome-screen");
+    if (welcomeEl) welcomeEl.style.display = "none";
+    if (chatEl) chatEl.style.display = "block";
+
     if (window.innerWidth <= 768) {
         const sb = document.getElementById("sidebar");
         if (sb && sb.classList.contains("open")) {
@@ -2244,6 +2255,7 @@ async function loadConversation(id, updateUrl = true) {
 
     if (conversation_id === id && chatEl.innerHTML !== "" && !updateUrl && !chatEl.querySelector(".spinner-border")) {
         console.log(performance.now(), "[LOAD CONVERSATION SKIPPED - ALREADY LOADED]", id);
+        window.isLoadingConversation = false;
         return;
     }
 
@@ -2268,20 +2280,33 @@ async function loadConversation(id, updateUrl = true) {
     lastExportContent = "";
 
     try {
-        const res = await fetch("/ai/api/get_messages.php?conversation_id=" + id);
-        const data = await res.json();
-        console.log(performance.now(), "[LOAD CONVERSATION FETCH DONE]", data.length, "messages");
+        let data = [];
+        try {
+            const res = await fetch(`/api/chat/conversation/${id}`);
+            if (res.ok) {
+                data = await res.json();
+            } else {
+                const fbRes = await fetch("/ai/api/get_messages.php?conversation_id=" + id);
+                data = await fbRes.json();
+            }
+        } catch (fetchErr) {
+            const fbRes = await fetch("/ai/api/get_messages.php?conversation_id=" + id);
+            data = await fbRes.json();
+        }
+
+        const msgList = Array.isArray(data) ? data : (data?.messages || data?.data || []);
+        console.log(performance.now(), "[LOAD CONVERSATION FETCH DONE]", msgList.length, "messages");
 
         chatEl.innerHTML = ""; // Clear loader
 
-        if (!data || data.length === 0) {
+        if (!msgList || msgList.length === 0) {
             showWelcomeScreen(true);
             return;
         }
 
         showWelcomeScreen(false);
 
-        data.forEach(m => {
+        msgList.forEach(m => {
             if (m.role === "user") {
                 addUserBubble(m.text, m.images || [])
                 chatHistoryBuffer.push({
@@ -2407,6 +2432,7 @@ async function loadConversation(id, updateUrl = true) {
         chatEl.innerHTML = '<div class="p-4 text-center text-danger">⚠️ Không thể tải cuộc trò chuyện.</div>'
     } finally {
         window._loadingConversationId = null;
+        window.isLoadingConversation = false;
     }
 }
 
@@ -2730,6 +2756,11 @@ document.getElementById("fileDoc")?.addEventListener("change", (e) => {
 function newChat(updateUrl = true) {
     autoRenamed = false
     lastAIAnswer = ""
+
+    window._isViewingLearningHub = false;
+    const hub = document.getElementById("learning-hub-screen");
+    if (hub) hub.style.display = "none";
+    document.querySelectorAll(".sidebar-menu-nav .nav-item").forEach(el => el.classList.remove("active"));
 
     conversation_id = null
     if (updateUrl) {
@@ -4514,6 +4545,10 @@ function switchSettingsGroup(group) {
     const btn = document.getElementById(`setTabBtn-${group}`);
     if (pane) pane.style.display = "block";
     if (btn) btn.classList.add("active");
+
+    if (group === "admin") {
+        loadAdminData();
+    }
 }
 
 async function loadSettingsUsage() {
@@ -4758,17 +4793,275 @@ async function submitUserFeedback() {
         const res = await fetch("/api/settings/feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ category, rating, comment })
+            body: JSON.stringify({ category, rating, comment, message: comment })
         });
         const data = await res.json();
-        if (data.ok) {
+        if (data.ok || data.success) {
             alert("🙏 Cảm ơn bạn rất nhiều! Ý kiến đóng góp của bạn đã được ghi nhận.");
             const cEl = document.getElementById("feedbackComment");
             if (cEl) cEl.value = "";
+        } else {
+            alert("Lỗi gửi phản hồi: " + (data.error || "Không thể gửi"));
         }
     } catch (e) {
         alert("Lỗi gửi phản hồi: " + e.message);
     }
+}
+
+// ==========================================
+// 🛡️ ADMIN MANAGEMENT JAVASCRIPT CONTROLLERS
+// ==========================================
+function loadAdminData() {
+    loadAdminFeedbacks();
+    loadAdminUsers();
+    loadAdminStats();
+}
+
+async function loadAdminFeedbacks() {
+    const container = document.getElementById("adminFeedbackList");
+    if (!container) return;
+    container.innerHTML = '<div class="text-secondary extra-small text-center py-2"><div class="spinner-border spinner-border-sm me-1"></div> Đang tải danh sách phản hồi...</div>';
+
+    try {
+        const res = await fetch("/api/admin/feedbacks");
+        if (!res.ok) {
+            container.innerHTML = '<div class="text-danger extra-small text-center py-2">Bạn không có quyền quản trị hoặc chưa đăng nhập Admin.</div>';
+            return;
+        }
+        const data = await res.json();
+        const fbs = data.feedbacks || [];
+        if (fbs.length === 0) {
+            container.innerHTML = '<div class="text-secondary extra-small text-center py-3">Chưa có phản hồi nào từ người dùng.</div>';
+            return;
+        }
+
+        container.innerHTML = "";
+        fbs.forEach(fb => {
+            const stars = "⭐".repeat(Math.min(5, Math.max(1, fb.rating || 5)));
+            const dateStr = fb.createdAt ? new Date(fb.createdAt).toLocaleString("vi-VN") : "";
+            const isResolved = fb.isResolved;
+
+            const item = document.createElement("div");
+            item.className = "p-2.5 rounded-3 border";
+            item.style.background = isResolved ? "#18191a" : "#1e1f20";
+            item.style.borderColor = isResolved ? "#2c3035" : "#45494e";
+
+            item.innerHTML = `
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge ${isResolved ? 'bg-secondary' : 'bg-warning text-dark'} extra-small">${isResolved ? '✓ Đã xử lý' : 'Chờ xử lý'}</span>
+                        <span class="fw-semibold small text-white">${escapeHtml(fb.userName || 'Ẩn danh')}</span>
+                        <span class="extra-small text-secondary">(${escapeHtml(fb.userEmail || 'Chưa có email')})</span>
+                    </div>
+                    <span class="extra-small">${stars}</span>
+                </div>
+                <div class="small text-light mb-1.5" style="white-space: pre-wrap; font-size: 0.82rem;">${escapeHtml(fb.message || '')}</div>
+                <div class="d-flex align-items-center justify-content-between extra-small text-secondary pt-1 border-top border-secondary">
+                    <span><i class="bi bi-tag me-1"></i>${escapeHtml(fb.category || 'Góp ý')} • ${dateStr}</span>
+                    <div class="d-flex gap-1">
+                        ${!isResolved ? `<button type="button" class="btn btn-outline-success btn-sm extra-small py-0.5 px-2 rounded-pill" onclick="resolveAdminFeedback(${fb.id})"><i class="bi bi-check-lg me-1"></i>Đã xử lý</button>` : ''}
+                        <button type="button" class="btn btn-outline-danger btn-sm extra-small py-0.5 px-2 rounded-pill" onclick="deleteAdminFeedback(${fb.id})"><i class="bi bi-trash"></i></button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    } catch (e) {
+        container.innerHTML = `<div class="text-danger extra-small text-center py-2">Lỗi tải danh sách phản hồi: ${e.message}</div>`;
+    }
+}
+
+async function resolveAdminFeedback(id) {
+    try {
+        const res = await fetch("/api/admin/feedback/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            loadAdminFeedbacks();
+            loadAdminStats();
+        } else {
+            alert(data.error || "Không thể xử lý phản hồi");
+        }
+    } catch (e) {
+        alert("Lỗi: " + e.message);
+    }
+}
+
+async function deleteAdminFeedback(id) {
+    if (!confirm("Bạn có chắc chắn muốn xóa phản hồi này?")) return;
+    try {
+        const res = await fetch(`/api/admin/feedback/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) {
+            loadAdminFeedbacks();
+            loadAdminStats();
+        } else {
+            alert(data.error || "Không thể xóa phản hồi");
+        }
+    } catch (e) {
+        alert("Lỗi: " + e.message);
+    }
+}
+
+async function loadAdminUsers() {
+    const tbody = document.getElementById("adminUserTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-3"><div class="spinner-border spinner-border-sm me-1"></div> Đang nạp danh sách tài khoản...</td></tr>';
+
+    try {
+        const res = await fetch("/api/admin/users");
+        if (!res.ok) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Bạn không có quyền quản trị người dùng.</td></tr>';
+            return;
+        }
+        const data = await res.json();
+        const users = data.users || [];
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-3">Chưa có người dùng nào.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = "";
+        users.forEach(u => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><code>#${u.id}</code></td>
+                <td>
+                    <div class="fw-semibold text-white">${escapeHtml(u.username)}</div>
+                    <div class="text-secondary extra-small">${escapeHtml(u.fullName || '')}</div>
+                </td>
+                <td><span class="text-secondary">${escapeHtml(u.email || '—')}</span></td>
+                <td>
+                    <span class="badge ${u.isPro ? 'bg-indigo text-white' : 'bg-secondary'} extra-small">
+                        ${u.isPro ? '⚡ PRO' : 'FREE'}
+                    </span>
+                    ${u.isLocked ? '<span class="badge bg-danger extra-small ms-1">Khóa</span>' : ''}
+                </td>
+                <td class="text-center fw-semibold text-info">${u.conversationCount || 0}</td>
+                <td class="text-center fw-semibold text-success">${u.projectCount || 0}</td>
+                <td class="text-end">
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-${u.isPro ? 'warning' : 'primary'} extra-small py-0 px-2" onclick="toggleAdminUserPro(${u.id})" title="${u.isPro ? 'Chuyển về Free' : 'Nâng cấp Pro'}">
+                            ${u.isPro ? 'Hạ Free' : 'Lên Pro'}
+                        </button>
+                        <button type="button" class="btn btn-outline-${u.isLocked ? 'success' : 'danger'} extra-small py-0 px-2" onclick="toggleAdminUserLock(${u.id})" title="${u.isLocked ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}">
+                            ${u.isLocked ? 'Mở' : 'Khóa'}
+                        </button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">Lỗi tải người dùng: ${e.message}</td></tr>`;
+    }
+}
+
+async function toggleAdminUserPro(userId) {
+    try {
+        const res = await fetch("/api/admin/user/toggle-pro", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            loadAdminUsers();
+        } else {
+            alert(data.error || "Không thể cập nhật gói");
+        }
+    } catch (e) {
+        alert("Lỗi: " + e.message);
+    }
+}
+
+async function toggleAdminUserLock(userId) {
+    try {
+        const res = await fetch("/api/admin/user/toggle-lock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            loadAdminUsers();
+        } else {
+            alert(data.error || "Không thể khóa/mở khóa");
+        }
+    } catch (e) {
+        alert("Lỗi: " + e.message);
+    }
+}
+
+async function loadAdminStats() {
+    try {
+        const res = await fetch("/api/admin/stats");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const uEl = document.getElementById("statTotalUsers");
+        const cEl = document.getElementById("statChatsToday");
+        const fEl = document.getElementById("statPendingFeedbacks");
+        const pList = document.getElementById("adminActivePortsList");
+
+        if (uEl) uEl.innerText = data.totalUsers || 0;
+        if (cEl) cEl.innerText = data.chatsToday || 0;
+        if (fEl) fEl.innerText = data.pendingFeedbacks || 0;
+
+        if (pList) {
+            const ports = data.activePorts || [];
+            if (ports.length === 0) {
+                pList.innerHTML = '<span class="text-secondary extra-small">Hiện không có cổng Live Preview nào đang chạy.</span>';
+            } else {
+                pList.innerHTML = "";
+                ports.forEach(p => {
+                    const span = document.createElement("span");
+                    span.className = "badge bg-dark border border-secondary text-light d-inline-flex align-items-center gap-1.5 p-1.5 extra-small";
+                    span.innerHTML = `
+                        <span class="spinner-grow spinner-grow-sm text-success" style="width: 7px; height: 7px;"></span>
+                        <span>Cổng :${p.port} (${p.status})</span>
+                        <button type="button" class="btn btn-link text-danger p-0 ms-1" style="font-size: 11px; text-decoration: none;" onclick="killAdminPort(${p.port})" title="Dừng tiến trình cổng này">✖</button>
+                    `;
+                    pList.appendChild(span);
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Lỗi nạp admin stats:", e);
+    }
+}
+
+async function killAdminPort(port) {
+    if (!confirm(`Bạn có chắc muốn dừng tiến trình trên cổng ${port}?`)) return;
+    try {
+        const res = await fetch("/api/admin/kill-port", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ port })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert(`Đã gửi lệnh dừng tiến trình tại cổng ${port}`);
+            loadAdminStats();
+        } else {
+            alert(data.error || "Không thể dừng tiến trình");
+        }
+    } catch (e) {
+        alert("Lỗi: " + e.message);
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 function openKnowledgeModal() {

@@ -196,7 +196,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Cookie.HttpOnly = true;
-        options.LoginPath = "/";
+        options.LoginPath = "/Account/Login";
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
         options.SlidingExpiration = true;
     });
@@ -739,11 +739,23 @@ BEGIN
     CREATE TABLE [dbo].[UserFeedbacks] (
         [Id] INT IDENTITY(1,1) PRIMARY KEY,
         [UserId] INT NULL,
+        [UserName] NVARCHAR(200) NULL,
+        [UserEmail] NVARCHAR(200) NULL,
         [Category] NVARCHAR(100) NULL,
         [Message] NVARCHAR(MAX) NOT NULL,
         [Rating] INT NOT NULL DEFAULT 5,
+        [IsResolved] BIT NOT NULL DEFAULT 0,
         [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
     );
+END
+ELSE
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[UserFeedbacks]') AND name = 'UserName')
+        ALTER TABLE [dbo].[UserFeedbacks] ADD [UserName] NVARCHAR(200) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[UserFeedbacks]') AND name = 'UserEmail')
+        ALTER TABLE [dbo].[UserFeedbacks] ADD [UserEmail] NVARCHAR(200) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[UserFeedbacks]') AND name = 'IsResolved')
+        ALTER TABLE [dbo].[UserFeedbacks] ADD [IsResolved] BIT NOT NULL DEFAULT 0;
 END
 
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[SharedLinks]') AND type in (N'U'))
@@ -829,7 +841,7 @@ CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessage
                     try { dbContext.Database.ExecuteSqlRaw(alter); } catch { }
                 }
 
-                // Ensure Gemini-style settings tables for SQLite
+                // Ensure Btoan AI settings tables for SQLite
                 string[] settingsSqlite = new[]
                 {
                     @"CREATE TABLE IF NOT EXISTS UserPreferences (
@@ -855,9 +867,12 @@ CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessage
                     @"CREATE TABLE IF NOT EXISTS UserFeedbacks (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
                         UserId INTEGER,
+                        UserName TEXT,
+                        UserEmail TEXT,
                         Category TEXT,
                         Message TEXT NOT NULL,
                         Rating INTEGER DEFAULT 5,
+                        IsResolved INTEGER DEFAULT 0,
                         CreatedAt TEXT
                     );",
                     @"CREATE TABLE IF NOT EXISTS SharedLinks (

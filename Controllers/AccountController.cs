@@ -60,6 +60,14 @@ namespace BtoanAiNet.Controllers
         }
 
 
+        // GET /Account/Login -> Redirects to Home with Login modal open and ReturnUrl preserved
+        [HttpGet]
+        [Route("Account/Login")]
+        public IActionResult Login([FromQuery] string? ReturnUrl)
+        {
+            return Redirect("/?login=1&ReturnUrl=" + Uri.EscapeDataString(ReturnUrl ?? "/agent"));
+        }
+
         // POST /ai/api/login.php
         [HttpPost]
         [Route("ai/api/login.php")]

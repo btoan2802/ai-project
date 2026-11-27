@@ -1716,10 +1716,11 @@ mjx-container svg[viewBox*="NaN"] {
 .learning-hub-title {
   font-size: 2rem;
   letter-spacing: -0.02em;
+  color: #f8fafc !important;
 }
 
-[data-theme="dark"] .learning-hub-title {
-  color: #f8fafc;
+.learning-hub-subtitle {
+  color: #9ca3af !important;
 }
 
 /* CAROUSEL WRAPPER */

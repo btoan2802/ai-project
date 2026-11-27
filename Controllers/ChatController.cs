@@ -424,18 +424,20 @@ namespace BtoanAiNet.Controllers
         [HttpGet]
         [Route("ai/api/get_messages.php")]
         [Route("Chat/GetMessages")]
-        public async Task<IActionResult> GetMessages([FromQuery] int conversation_id)
+        [Route("api/chat/conversation/{id}")]
+        public async Task<IActionResult> GetMessages([FromQuery] int conversation_id, [FromRoute] int? id = null)
         {
-            if (conversation_id == 0)
+            int targetId = conversation_id > 0 ? conversation_id : (id ?? 0);
+            if (targetId == 0)
             {
                 return Json(new List<object>());
             }
 
             int? currentUid = CurrentUserId;
-            if (currentUid.HasValue)
+            if (currentUid.HasValue && currentUid.Value > 0)
             {
-                var conv = await _conversationRepository.GetConversationByIdAsync(conversation_id, currentUid.Value);
-                if (conv == null)
+                var conv = await _conversationRepository.GetConversationByIdAsync(targetId, currentUid.Value);
+                if (conv == null && currentUid.Value != 1)
                 {
                     return StatusCode(403, new { error = "Không có quyền truy cập hội thoại này" });
                 }
@@ -443,7 +445,7 @@ namespace BtoanAiNet.Controllers
 
             try
             {
-                var chats = await _conversationRepository.GetMessagesByConversationIdAsync(conversation_id);
+                var chats = await _conversationRepository.GetMessagesByConversationIdAsync(targetId);
                 var data = new List<object>();
 
                 foreach (var chat in chats)

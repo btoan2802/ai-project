@@ -217,21 +217,38 @@ namespace BtoanAiNet.Controllers
 
         // 3. User Feedback
         [HttpPost("api/settings/feedback")]
-        public async Task<IActionResult> SubmitFeedback([FromBody] UserFeedback model)
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SubmitFeedback([FromBody] FeedbackRequestDto model)
         {
-            if (model == null || string.IsNullOrWhiteSpace(model.Message))
+            string msg = model?.Comment ?? model?.Message ?? model?.Content ?? "";
+            if (string.IsNullOrWhiteSpace(msg))
                 return BadRequest(new { ok = false, error = "Vui lòng nhập nội dung ý kiến đóng góp" });
 
-            int uid = 1;
+            int uid = CurrentUserId;
+            string? userName = User?.Identity?.Name;
+            string? userEmail = null;
+
             try
             {
-                uid = CurrentUserId;
+                if (uid > 0)
+                {
+                    var u = await _context.Users.FindAsync(uid);
+                    if (u != null)
+                    {
+                        userName = !string.IsNullOrWhiteSpace(u.FullName) ? u.FullName : u.Username;
+                        userEmail = u.Email;
+                    }
+                }
+
                 var fb = new UserFeedback
                 {
-                    UserId = uid,
-                    Category = model.Category ?? "Góp ý chung",
-                    Message = model.Message,
-                    Rating = model.Rating > 0 ? model.Rating : 5,
+                    UserId = uid > 0 ? uid : (int?)null,
+                    UserName = userName,
+                    UserEmail = userEmail,
+                    Category = !string.IsNullOrWhiteSpace(model?.Category) ? model.Category : "Góp ý chung",
+                    Message = msg.Trim(),
+                    Rating = (model != null && model.Rating > 0) ? model.Rating : 5,
+                    IsResolved = false,
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.UserFeedbacks.Add(fb);
@@ -241,7 +258,7 @@ namespace BtoanAiNet.Controllers
             {
                 Console.WriteLine($"[Settings] Feedback DB fallback: {ex.Message}");
             }
-            return Ok(new { ok = true, message = "Cảm ơn bạn đã gửi ý kiến đóng góp cho Btoan AI!" });
+            return Ok(new { ok = true, success = true, message = "Cảm ơn bạn đã gửi ý kiến đóng góp cho Btoan AI!" });
         }
 
         // 4. Usage Quota & Account Info
@@ -336,7 +353,7 @@ namespace BtoanAiNet.Controllers
             return Ok(new { ok = true, message = "Đã thu hồi liên kết công khai thành công" });
         }
 
-        // 6. Import Memory (ChatGPT / Gemini export)
+        // 6. Import Memory (ChatGPT / Btoan AI export)
         [HttpPost("api/settings/import-memory")]
         public async Task<IActionResult> ImportMemory([FromBody] JsonElement payload)
         {
@@ -376,6 +393,267 @@ namespace BtoanAiNet.Controllers
             }
 
             return Ok(new { ok = true, message = "Đã nhập và đồng bộ bộ nhớ thành công!" });
+        }
+
+        // ==========================================
+        // 🛡️ ADMIN MANAGEMENT ENDPOINTS
+        // ==========================================
+        private bool IsAdminUser
+        {
+            get
+            {
+                var claimId = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (claimId == "1") return true;
+                if (User?.IsInRole("Admin") == true) return true;
+                return CurrentUserId == 1;
+            }
+        }
+
+        // 1. Feedback Inbox
+        [HttpGet("api/admin/feedbacks")]
+        public async Task<IActionResult> GetAdminFeedbacks()
+        {
+            if (!IsAdminUser) return Forbid();
+            try
+            {
+                var fbs = await _context.UserFeedbacks.AsNoTracking().OrderByDescending(f => f.CreatedAt).ToListAsync();
+                return Ok(new { ok = true, feedbacks = fbs });
+            }
+            catch
+            {
+                return Ok(new { ok = true, feedbacks = new List<object>() });
+            }
+        }
+
+        [HttpPost("api/admin/feedback/resolve")]
+        public async Task<IActionResult> ResolveFeedback([FromBody] JsonElement payload)
+        {
+            if (!IsAdminUser) return Forbid();
+            int id = payload.TryGetProperty("id", out var idProp) && idProp.TryGetInt32(out int parsedId) ? parsedId : 0;
+            if (id <= 0) return BadRequest(new { ok = false, error = "Invalid feedback id" });
+
+            var fb = await _context.UserFeedbacks.FindAsync(id);
+            if (fb != null)
+            {
+                fb.IsResolved = true;
+                await _context.SaveChangesAsync();
+                return Ok(new { ok = true, message = "Đã đánh dấu đã xử lý phản hồi" });
+            }
+            return NotFound(new { ok = false, error = "Không tìm thấy phản hồi" });
+        }
+
+        [HttpDelete("api/admin/feedback/{id}")]
+        public async Task<IActionResult> DeleteFeedback(int id)
+        {
+            if (!IsAdminUser) return Forbid();
+            var fb = await _context.UserFeedbacks.FindAsync(id);
+            if (fb != null)
+            {
+                _context.UserFeedbacks.Remove(fb);
+                await _context.SaveChangesAsync();
+                return Ok(new { ok = true, message = "Đã xóa phản hồi" });
+            }
+            return NotFound(new { ok = false, error = "Không tìm thấy phản hồi" });
+        }
+
+        // 2. User Management
+        [HttpGet("api/admin/users")]
+        public async Task<IActionResult> GetAdminUsers()
+        {
+            if (!IsAdminUser) return Forbid();
+            try
+            {
+                var users = await _context.Users.AsNoTracking().OrderBy(u => u.Id).ToListAsync();
+                string wsRoot = Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "UserWorkspaces");
+
+                var list = new List<object>();
+                foreach (var u in users)
+                {
+                    int convCount = 0;
+                    try { convCount = await _context.Conversations.CountAsync(c => c.UserId == u.Id); } catch { }
+
+                    int projCount = 0;
+                    try
+                    {
+                        string uWs = Path.Combine(wsRoot, $"user_{u.Id}");
+                        if (Directory.Exists(uWs))
+                        {
+                            projCount = Directory.GetDirectories(uWs).Length;
+                        }
+                    }
+                    catch { }
+
+                    string roleStr = u.Id == 1 ? "Admin" : "User";
+                    bool isPro = u.Id == 1 || (u.Bio != null && u.Bio.Contains("[PRO]"));
+                    bool isLocked = (u.Bio != null && u.Bio.Contains("[LOCKED]"));
+
+                    list.Add(new
+                    {
+                        id = u.Id,
+                        username = u.Username,
+                        fullName = !string.IsNullOrWhiteSpace(u.FullName) ? u.FullName : u.Username,
+                        email = u.Email,
+                        role = roleStr,
+                        isPro = isPro,
+                        isLocked = isLocked,
+                        conversationCount = convCount,
+                        projectCount = projCount,
+                        createdAt = u.CreatedAt
+                    });
+                }
+                return Ok(new { ok = true, users = list });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
+
+        [HttpPost("api/admin/user/toggle-pro")]
+        public async Task<IActionResult> ToggleUserPro([FromBody] JsonElement payload)
+        {
+            if (!IsAdminUser) return Forbid();
+            int userId = payload.TryGetProperty("userId", out var uProp) && uProp.TryGetInt32(out int parsedUid) ? parsedUid : 0;
+            if (userId <= 0) return BadRequest(new { ok = false, error = "Invalid userId" });
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound(new { ok = false, error = "User not found" });
+
+            string bio = user.Bio ?? "";
+            bool nowPro = false;
+            if (bio.Contains("[PRO]"))
+            {
+                bio = bio.Replace("[PRO]", "").Trim();
+                nowPro = false;
+            }
+            else
+            {
+                bio = (bio + " [PRO]").Trim();
+                nowPro = true;
+            }
+            user.Bio = bio;
+            await _context.SaveChangesAsync();
+            return Ok(new { ok = true, isPro = nowPro, message = nowPro ? "Đã nâng cấp lên gói Pro" : "Đã chuyển về gói Free" });
+        }
+
+        [HttpPost("api/admin/user/toggle-lock")]
+        public async Task<IActionResult> ToggleUserLock([FromBody] JsonElement payload)
+        {
+            if (!IsAdminUser) return Forbid();
+            int userId = payload.TryGetProperty("userId", out var uProp) && uProp.TryGetInt32(out int parsedUid) ? parsedUid : 0;
+            if (userId <= 0) return BadRequest(new { ok = false, error = "Invalid userId" });
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound(new { ok = false, error = "User not found" });
+
+            string bio = user.Bio ?? "";
+            bool nowLocked = false;
+            if (bio.Contains("[LOCKED]"))
+            {
+                bio = bio.Replace("[LOCKED]", "").Trim();
+                nowLocked = false;
+            }
+            else
+            {
+                bio = (bio + " [LOCKED]").Trim();
+                nowLocked = true;
+            }
+            user.Bio = bio;
+            await _context.SaveChangesAsync();
+            return Ok(new { ok = true, isLocked = nowLocked, message = nowLocked ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
+        }
+
+        // 3. System Monitoring
+        [HttpGet("api/admin/stats")]
+        public async Task<IActionResult> GetAdminStats()
+        {
+            if (!IsAdminUser) return Forbid();
+            try
+            {
+                int totalUsers = await _context.Users.CountAsync();
+                var today = DateTime.UtcNow.Date;
+                int chatsToday = 0;
+                try { chatsToday = await _context.Chats.CountAsync(c => c.CreatedAt >= today); } catch { }
+                int pendingFeedbacks = 0;
+                try { pendingFeedbacks = await _context.UserFeedbacks.CountAsync(f => !f.IsResolved); } catch { }
+
+                // Scan active ports (from 5000 to 5200) or check running dotnet processes
+                var activePorts = new List<object>();
+                try
+                {
+                    // Check known preview ports
+                    for (int p = 5001; p <= 5030; p++)
+                    {
+                        try
+                        {
+                            using var tcpClient = new System.Net.Sockets.TcpClient();
+                            var connectTask = tcpClient.ConnectAsync("127.0.0.1", p);
+                            if (Task.WhenAny(connectTask, Task.Delay(40)).Result == connectTask && tcpClient.Connected)
+                            {
+                                activePorts.Add(new { port = p, status = "Running", protocol = "HTTP / Web" });
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+
+                return Ok(new
+                {
+                    ok = true,
+                    totalUsers,
+                    chatsToday,
+                    pendingFeedbacks,
+                    activePorts
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
+
+        [HttpPost("api/admin/kill-port")]
+        public async Task<IActionResult> KillPort([FromBody] JsonElement payload)
+        {
+            if (!IsAdminUser) return Forbid();
+            int port = payload.TryGetProperty("port", out var pProp) && pProp.TryGetInt32(out int parsedPort) ? parsedPort : 0;
+            if (port <= 0) return BadRequest(new { ok = false, error = "Invalid port" });
+
+            try
+            {
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c for /f \"tokens=5\" %a in ('netstat -aon ^| find \":{port}\"') do taskkill /f /pid %a",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var proc = System.Diagnostics.Process.Start(psi);
+                    await proc!.WaitForExitAsync();
+                }
+                else
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "fuser",
+                        Arguments = $"-k {port}/tcp",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var proc = System.Diagnostics.Process.Start(psi);
+                    await proc!.WaitForExitAsync();
+                }
+                return Ok(new { ok = true, message = $"Đã dừng tiến trình tại cổng {port}" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
         }
     }
 }

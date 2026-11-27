@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using BtoanAiNet.Data;
 using BtoanAiNet.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Data.Sqlite;
@@ -15,6 +16,7 @@ using SkiaSharp;
 
 namespace BtoanAiNet.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/ide")]
     public class IdeController : ControllerBase
@@ -612,23 +614,6 @@ namespace {cleanNamespace}.Helpers
 
             if (!Directory.Exists(projectPath))
             {
-                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
-                if (Directory.Exists(user1Path))
-                {
-                    return user1Path;
-                }
-
-                string workspacesRoot = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces");
-                if (Directory.Exists(workspacesRoot))
-                {
-                    try
-                    {
-                        var matchingDir = Directory.GetDirectories(workspacesRoot, cleanProj, SearchOption.AllDirectories).FirstOrDefault();
-                        if (matchingDir != null) return matchingDir;
-                    }
-                    catch { }
-                }
-
                 Directory.CreateDirectory(projectPath);
             }
 
@@ -672,7 +657,7 @@ namespace {cleanNamespace}.Helpers
         [HttpGet("projects")]
         public IActionResult GetProjects()
         {
-            if (!IsAuthenticated)
+            if (!IsAuthenticated || CurrentUserId <= 0)
             {
                 return Ok(new
                 {
@@ -684,30 +669,8 @@ namespace {cleanNamespace}.Helpers
                 });
             }
 
-            int effectiveUserId = CurrentUserId > 0 ? CurrentUserId : 1;
+            int effectiveUserId = CurrentUserId;
             string userRoot = GetUserRootPath(effectiveUserId);
-
-            // Auto-merge / seed from user_1 if effectiveUserId > 1 and userRoot has no projects or is missing shop-senior-mvc
-            if (effectiveUserId > 1)
-            {
-                string user1Root = GetUserRootPath(1);
-                if (Directory.Exists(user1Root))
-                {
-                    var user1Dirs = new DirectoryInfo(user1Root).GetDirectories();
-                    foreach (var d in user1Dirs)
-                    {
-                        string targetProjPath = Path.Combine(userRoot, d.Name);
-                        if (!Directory.Exists(targetProjPath))
-                        {
-                            try
-                            {
-                                CopyDirectoryRecursively(d.FullName, targetProjPath);
-                            }
-                            catch { }
-                        }
-                    }
-                }
-            }
 
             var projectsList = new List<object>();
 
@@ -1560,26 +1523,10 @@ export class AppComponent {{
 
             if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath))
             {
-                // Fallback to user_1 if project exists in default workspace
-                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
-                if (Directory.Exists(user1Path))
+                projectPath = Path.Combine(GetUserRootPath(userId), cleanProj);
+                if (!Directory.Exists(projectPath))
                 {
-                    projectPath = user1Path;
-                }
-                else
-                {
-                    // Search if there is any folder matching or starting with cleanProj in user_1 or any user workspace
-                    string workspacesRoot = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces");
-                    if (Directory.Exists(workspacesRoot))
-                    {
-                        var matchingDir = Directory.GetDirectories(workspacesRoot, "*", SearchOption.AllDirectories)
-                            .FirstOrDefault(d => string.Equals(Path.GetFileName(d), cleanProj, StringComparison.OrdinalIgnoreCase)
-                                              || Path.GetFileName(d).StartsWith(cleanProj + "-", StringComparison.OrdinalIgnoreCase));
-                        if (matchingDir != null)
-                        {
-                            projectPath = matchingDir;
-                        }
-                    }
+                    try { Directory.CreateDirectory(projectPath); } catch { }
                 }
             }
 
@@ -1691,11 +1638,6 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
             }
             string root = ResolveWorkspacePath(cleanProj);
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-            {
-                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
-                if (Directory.Exists(user1Path)) root = user1Path;
-            }
 
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
@@ -2469,11 +2411,6 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
             }
             string root = ResolveWorkspacePath(cleanProj);
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-            {
-                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
-                if (Directory.Exists(user1Path)) root = user1Path;
-            }
 
             string safeRelPath = NormalizeWorkspaceRelativePath(targetPath, cleanProj);
 
@@ -2530,11 +2467,6 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return Ok(new { ok = true, project = "", files = Array.Empty<object>() });
             }
             string root = ResolveWorkspacePath(cleanProj);
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-            {
-                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
-                if (Directory.Exists(user1Path)) root = user1Path;
-            }
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             {
                 return NotFound("Project not found");
@@ -3626,14 +3558,9 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 return;
             }
 
-            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            int userId = CurrentUserId;
             string cleanProj = SanitizeProjectName(model.Project);
             string projectPath = ResolveWorkspacePath(cleanProj);
-            if (!Directory.Exists(projectPath))
-            {
-                string user1Path = Path.Combine(_env.ContentRootPath, "App_Data", "UserWorkspaces", "user_1", cleanProj);
-                if (Directory.Exists(user1Path)) projectPath = user1Path;
-            }
             if (!Directory.Exists(projectPath))
             {
                 try { Directory.CreateDirectory(projectPath); } catch { }

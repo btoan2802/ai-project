@@ -1,10 +1,12 @@
 using BtoanAiNet.Data;
 using BtoanAiNet.Services;
 using BtoanAiNet.ViewModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BtoanAiNet.Controllers
 {
+    [Authorize]
     public class AgentController : Controller
     {
         private readonly IAgentService _agentService;
@@ -46,15 +48,19 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
-                return BtoanAiNet.Helpers.AuthUserHelper.GetCurrentUserId(HttpContext);
+                int uid = BtoanAiNet.Helpers.AuthUserHelper.GetCurrentUserId(HttpContext);
+                return uid > 0 ? uid : (int?)null;
             }
         }
-
 
         // GET /agent
         [HttpGet("agent")]
         public IActionResult Index()
         {
+            if (User?.Identity?.IsAuthenticated != true && (!CurrentUserId.HasValue || CurrentUserId.Value <= 0))
+            {
+                return Redirect("/Account/Login?ReturnUrl=/agent");
+            }
             return View();
         }
 

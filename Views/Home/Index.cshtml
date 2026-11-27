@@ -1,5 +1,7 @@
 @{
     Layout = null;
+    var uidClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    bool isAdmin = uidClaim == "1" || User?.IsInRole("Admin") == true;
 }
 <!doctype html>
 <html lang="vi">
@@ -44,9 +46,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
 
   <!-- 4. CSS Local -->
-  <link rel="stylesheet" href="css/style.css?v=20261127_learning_hub_v1">
-  <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261127_learning_hub_v1">
-  <link rel="stylesheet" href="css/main_style.css?v=20261127_learning_hub_v1">
+  <link rel="stylesheet" href="css/style.css?v=20261127_admin_auth_v2">
+  <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261127_admin_auth_v2">
+  <link rel="stylesheet" href="css/main_style.css?v=20261127_admin_auth_v2">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -626,7 +628,7 @@
             <span>+ Chat mới</span>
           </button>
 
-          <!-- NAV MENU (STUDIO IDE, LEARNING HUB, IMAGE, KNOWLEDGE) -->
+          <!-- NAV MENU (STUDIO IDE, LEARNING HUB, KNOWLEDGE) -->
           <div class="sidebar-menu-nav d-flex flex-column gap-1 mb-2">
             <!-- 1. BTOAN STUDIO IDE -->
             <a href="/agent" class="nav-item d-flex align-items-center justify-content-between px-3 py-2 rounded-3 text-decoration-none">
@@ -646,13 +648,7 @@
               <span class="badge bg-success text-white extra-small px-2 py-0.5 rounded-pill">NEW</span>
             </a>
 
-            <!-- 3. IMAGE CREATOR -->
-            <a href="javascript:void(0)" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none" onclick="quickPrompt('Tạo ảnh AI từ mô tả: ')">
-              <i class="bi bi-palette text-indigo fs-5"></i>
-              <span class="fw-semibold small sidebar-item-title">🎨 Tạo ảnh AI</span>
-            </a>
-
-            <!-- 4. KNOWLEDGE BASE -->
+            <!-- 3. KNOWLEDGE BASE -->
             <a href="javascript:void(0)" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none" onclick="openKnowledgeModal()">
               <i class="bi bi-journal-text text-indigo fs-5"></i>
               <span class="fw-semibold small sidebar-item-title">📄 Kho tri thức &amp; Tài liệu</span>
@@ -1373,7 +1369,7 @@
         <button type="button" class="btn-close btn-close-white" onclick="closeSettingsModal()" title="Đóng"></button>
       </div>
 
-      <!-- 3 Groups Nav -->
+      <!-- 4 Groups Nav -->
       <div class="px-4 pt-2 border-bottom d-flex gap-2 overflow-x-auto flex-shrink-0" style="background: #18191a; border-color: #333537 !important;">
         <button type="button" id="setTabBtn-account" class="settings-group-pill active btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5" onclick="switchSettingsGroup('account')">
           <i class="bi bi-person-circle"></i>
@@ -1387,6 +1383,13 @@
           <i class="bi bi-shield-check"></i>
           <span>Dữ liệu &amp; Quyền riêng tư</span>
         </button>
+        @if (isAdmin)
+        {
+          <button type="button" id="setTabBtn-admin" class="settings-group-pill btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5 text-warning" onclick="switchSettingsGroup('admin')">
+            <i class="bi bi-shield-lock-fill"></i>
+            <span>🛡️ Quản trị viên</span>
+          </button>
+        }
       </div>
 
       <!-- Modal Body (Scrollable) -->
@@ -1439,7 +1442,7 @@
               <span class="badge bg-success-subtle text-success extra-small">Chỉ từ 99K/tháng</span>
             </div>
             <p class="extra-small text-secondary mb-3">
-              Mở khóa không giới hạn mô hình Gemini 2.5 Pro suy luận sâu, Btoan Studio IDE đa tiến trình, xuất Word chuẩn hóa không giới hạn và kho lưu trữ RAG 10GB.
+              Mở khóa không giới hạn mô hình Btoan 3.5 Pro suy luận sâu, Btoan Studio IDE đa tiến trình, xuất Word chuẩn hóa không giới hạn và kho lưu trữ RAG 10GB.
             </p>
             <div class="row g-2 mb-3">
               <div class="col-6">
@@ -1607,6 +1610,92 @@
           </div>
         </div>
 
+        @if (isAdmin)
+        {
+          <!-- GROUP 4: 🛡️ QUẢN TRỊ VIÊN (ADMIN) -->
+          <div id="setGroup-admin" class="settings-group-pane" style="display:none;">
+            <!-- 1. Hộp thư Phản hồi (Feedback Inbox) -->
+            <div class="card p-3 rounded-4 mb-3" style="background: #282a2c; border: 1px solid #3c4043;">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-bold small text-white"><i class="bi bi-inbox-fill text-warning me-2"></i>Hộp thư Phản hồi &amp; Báo lỗi từ người dùng</div>
+                <button type="button" class="btn btn-outline-warning btn-sm rounded-pill extra-small px-2.5" onclick="loadAdminFeedbacks()">
+                  <i class="bi bi-arrow-clockwise me-1"></i>Làm mới
+                </button>
+              </div>
+              <p class="extra-small text-secondary mb-2">Quản lý các phản hồi, báo lỗi và đánh giá sao từ người dùng gửi về.</p>
+              <div id="adminFeedbackList" class="d-flex flex-column gap-2" style="max-height: 240px; overflow-y: auto;">
+                <div class="text-secondary extra-small text-center py-3">Đang tải danh sách phản hồi...</div>
+              </div>
+            </div>
+
+            <!-- 2. Quản lý Người dùng -->
+            <div class="card p-3 rounded-4 mb-3" style="background: #282a2c; border: 1px solid #3c4043;">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-bold small text-white"><i class="bi bi-people-fill text-primary me-2"></i>Quản lý Danh sách Người dùng</div>
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill extra-small px-2.5" onclick="loadAdminUsers()">
+                  <i class="bi bi-arrow-clockwise me-1"></i>Làm mới
+                </button>
+              </div>
+              <p class="extra-small text-secondary mb-2">Xem danh sách tài khoản, số hội thoại, số dự án IDE và chuyển đổi gói Pro / Free.</p>
+              <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                <table class="table table-dark table-sm table-hover extra-small mb-0 align-middle" style="background: #1e1f20;">
+                  <thead class="text-secondary" style="border-bottom: 1px solid #3c4043;">
+                    <tr>
+                      <th style="width: 40px;">ID</th>
+                      <th>Tài khoản</th>
+                      <th>Email</th>
+                      <th>Gói</th>
+                      <th class="text-center">Hội thoại</th>
+                      <th class="text-center">Dự án</th>
+                      <th class="text-end">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminUserTableBody">
+                    <tr><td colspan="7" class="text-center text-secondary py-3">Đang tải danh sách tài khoản...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 3. Giám sát Hệ thống -->
+            <div class="card p-3 rounded-4" style="background: #282a2c; border: 1px solid #3c4043;">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-bold small text-white"><i class="bi bi-activity text-success me-2"></i>Giám sát Hệ thống &amp; Live Preview</div>
+                <button type="button" class="btn btn-outline-success btn-sm rounded-pill extra-small px-2.5" onclick="loadAdminStats()">
+                  <i class="bi bi-arrow-clockwise me-1"></i>Làm mới
+                </button>
+              </div>
+              
+              <!-- Stats Row -->
+              <div class="row g-2 mb-3">
+                <div class="col-4">
+                  <div class="p-2.5 rounded-3 text-center" style="background: #1e1f20; border: 1px solid #3c4043;">
+                    <div class="extra-small text-secondary">Tổng người dùng</div>
+                    <div id="statTotalUsers" class="fw-bold fs-5 text-white">0</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="p-2.5 rounded-3 text-center" style="background: #1e1f20; border: 1px solid #3c4043;">
+                    <div class="extra-small text-secondary">Lượt chat hôm nay</div>
+                    <div id="statChatsToday" class="fw-bold fs-5 text-indigo">0</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="p-2.5 rounded-3 text-center" style="background: #1e1f20; border: 1px solid #3c4043;">
+                    <div class="extra-small text-secondary">Góp ý chưa xử lý</div>
+                    <div id="statPendingFeedbacks" class="fw-bold fs-5 text-warning">0</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="fw-semibold extra-small text-secondary mb-1">Cổng Live Preview đang lắng nghe:</div>
+              <div id="adminActivePortsList" class="d-flex flex-wrap gap-2">
+                <span class="text-secondary extra-small">Đang quét các cổng Preview...</span>
+              </div>
+            </div>
+          </div>
+        }
+
       </div>
 
       <!-- Modal Footer -->
@@ -1632,7 +1721,7 @@
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
   <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
-  <script src="js/app.js?v=20261127_learning_hub_v1"></script>
+  <script src="js/app.js?v=20261127_admin_auth_v2"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">

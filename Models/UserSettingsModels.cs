@@ -37,10 +37,22 @@ namespace BtoanAiNet.Models
         [Key]
         public int Id { get; set; }
         public int? UserId { get; set; }
+        public string? UserName { get; set; }
+        public string? UserEmail { get; set; }
         public string? Category { get; set; }
         public string Message { get; set; } = "";
         public int Rating { get; set; } = 5;
+        public bool IsResolved { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class FeedbackRequestDto
+    {
+        public string? Category { get; set; }
+        public int Rating { get; set; } = 5;
+        public string? Comment { get; set; }
+        public string? Message { get; set; }
+        public string? Content { get; set; }
     }
 
     [Table("SharedLinks")]
