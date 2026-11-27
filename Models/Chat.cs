@@ -29,13 +29,13 @@ namespace BtoanAiNet.Models
         [Column("images")]
         public string? Images { get; set; }
 
-        [Column("model_used")]
+        [NotMapped]
         public string? ModelUsed { get; set; }
 
-        [Column("attachments_json")]
+        [NotMapped]
         public string? AttachmentsJson { get; set; }
 
-        [Column("artifacts_json")]
+        [NotMapped]
         public string? ArtifactsJson { get; set; }
     }
 }
