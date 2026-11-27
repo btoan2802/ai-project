@@ -4250,8 +4250,8 @@ function cleanQuizJsonString(rawStr) {
     // Sửa các ký tự điều khiển ASCII sinh ra do \f (form feed) và \b (backspace) trong JSON spec
     clean = clean.replace(/\u000c/g, "\\\\f").replace(/\u0008/g, "\\\\b");
 
-    // Nhân đôi các backslash không thuộc escape sequence JSON chuẩn
-    clean = clean.replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
+    // Chỉ nhân đôi backslash đơn độc lập (chưa được escape), KHÔNG chạm vào các backslash đã nhân đôi (\\\\):
+    clean = clean.replace(/(?<!\\)((?:\\\\)*)\\(?!["\\\/bfnrtu])/g, "$1\\\\");
 
     return clean;
 }
@@ -4438,7 +4438,7 @@ function renderThptqgQuizWidget(qid, data) {
         let stmtsHtml = "";
 
         statements.forEach((stmt, sIdx) => {
-            const sKey = (stmt.key || String.fromCharCode(97 + sIdx)).toLowerCase();
+            const sKey = (stmt.key || stmt.label || stmt.letter || String.fromCharCode(97 + sIdx)).toLowerCase();
             stmtsHtml += `
                 <div class="thptqg-statement-row d-flex align-items-center justify-content-between p-2.5 rounded-3 mb-2" id="thptqg_p2_stmt_${qid}_${idx}_${sKey}">
                     <div class="thptqg-statement-text pe-3">
@@ -4648,9 +4648,9 @@ function gradeThptqgQuiz(qid) {
         let correctStmtCount = 0;
 
         statements.forEach((stmt, sIdx) => {
-            const sKey = (stmt.key || String.fromCharCode(97 + sIdx)).toLowerCase();
+            const sKey = (stmt.key || stmt.label || stmt.letter || String.fromCharCode(97 + sIdx)).toLowerCase();
             const userVal = data.p2Answers[`${idx}_${sKey}`];
-            const correctVal = Boolean(stmt.answer);
+            const correctVal = Boolean(stmt.answer !== undefined ? stmt.answer : (stmt.result !== undefined ? stmt.result : stmt.correct));
 
             const row = document.getElementById(`thptqg_p2_stmt_${qid}_${idx}_${sKey}`);
             const btnTrue = document.getElementById(`btn_tf_${qid}_${idx}_${sKey}_true`);
