@@ -235,30 +235,27 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             swIntent.Stop();
             t_intent = swIntent.ElapsedMilliseconds;
 
-            // 2. Profiling t_db: load conversation & history (0 ms for short chat)
+            // 2. Profiling t_db: load conversation & history
             var swDb = System.Diagnostics.Stopwatch.StartNew();
             bool isNewConv = false;
             var historyChats = new List<Chat>();
-            if (!isShortChat)
+            try
             {
-                try
+                if (userId > 0 && conversationId == 0)
                 {
-                    if (userId > 0 && conversationId == 0)
-                    {
-                        var conv = await _conversationRepository.CreateConversationAsync(userId, "Chat mới");
-                        conversationId = conv.Id;
-                        isNewConv = true;
-                    }
+                    var conv = await _conversationRepository.CreateConversationAsync(userId, "Chat mới");
+                    conversationId = conv.Id;
+                    isNewConv = true;
+                }
 
-                    if (userId > 0 && conversationId > 0)
-                    {
-                        historyChats = await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 12);
-                    }
-                }
-                catch (Exception dbEx)
+                if (userId > 0 && conversationId > 0)
                 {
-                    Console.WriteLine($"[DB Non-fatal Warning] {dbEx.Message}");
+                    historyChats = await _conversationRepository.GetChatHistoryAsync(conversationId, userId, 12);
                 }
+            }
+            catch (Exception dbEx)
+            {
+                Console.WriteLine($"[DB Non-fatal Warning] {dbEx.Message}");
             }
             swDb.Stop();
             t_db = swDb.ElapsedMilliseconds;
@@ -646,9 +643,9 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
 
             string? generatedTitle = null;
             int savedChatId = 0;
-            // Save Chat to DB (only if logged in and not a throwaway short chat)
+            // Save Chat to DB (100% saved for logged in users)
             var swSave = System.Diagnostics.Stopwatch.StartNew();
-            if (!isShortChat && userId > 0)
+            if (userId > 0)
             {
                 try
                 {

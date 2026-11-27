@@ -53,7 +53,7 @@
   <!-- 4. CSS Local -->
   <link rel="stylesheet" href="css/style.css?v=20261127_saas_v3">
   <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261127_saas_v3">
-  <link rel="stylesheet" href="css/main_style.css?v=20261127_saas_v4">
+  <link rel="stylesheet" href="css/main_style.css?v=20261127_saas_v5">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -508,6 +508,7 @@
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script>
+    window.SERVER_CONVERSATION_ID = '@(ViewBag.ConversationId ?? "")';
     // Early inline definitions to prevent ReferenceError before app.js is ready
     window.syncSidebarChatTitle = window.syncSidebarChatTitle || function(arg1, arg2) {
       if (typeof window.syncSidebarChatTitleImpl === "function") {
@@ -802,12 +803,12 @@
                 </div>
               </div>
               <div class="col-6 col-md-6">
-                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="quickPrompt('Vẽ một thành phố tương lai cyberpunk rực rỡ dưới mưa ban đêm', true)">
+                <div class="welcome-card p-3 rounded-4 border bg-white shadow-sm text-start hover-card cursor-pointer" onclick="openLearningHub()">
                   <div class="card-icon-wrapper mb-2 rounded-3 bg-indigo-50 text-indigo d-inline-flex align-items-center justify-content-center p-2">
-                    <i class="bi bi-palette-fill fs-4"></i>
+                    <i class="bi bi-mortarboard-fill fs-4 text-primary"></i>
                   </div>
-                  <div class="fw-bold small mb-1 card-title">🎨 Sáng tạo hình ảnh AI</div>
-                  <div class="text-muted extra-small card-desc">Vẽ một thành phố tương lai cyberpunk rực rỡ dưới mưa ban đêm</div>
+                  <div class="fw-bold small mb-1 card-title">🎓 Học tập &amp; Luyện đề AI</div>
+                  <div class="text-muted extra-small card-desc">Tạo đề trắc nghiệm chấm điểm, giải bài tập từng bước mọi môn học từ Lớp 1 đến Đại học</div>
                 </div>
               </div>
               <div class="col-6 col-md-6">
@@ -1766,7 +1767,7 @@
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
   <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
-  <script src="js/app.js?v=20261127_saas_v4"></script>
+  <script src="js/app.js?v=20261127_saas_v5"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">

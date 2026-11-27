@@ -1025,6 +1025,16 @@ async function streamGeminiChat(userText, images, files, onChunk) {
                 if (!jsonStr) continue;
                 try {
                     const parsed = JSON.parse(jsonStr);
+                    if (parsed.type === "meta" || parsed.conversationId || (parsed.conversation_id && !conversation_id)) {
+                        const newCid = parsed.conversationId || parsed.conversation_id;
+                        if (newCid && (!conversation_id || conversation_id !== newCid)) {
+                            conversation_id = newCid;
+                            window.history.pushState({ cid: newCid, conversationId: newCid }, "", `/c/${newCid}`);
+                            if (typeof loadHistory === "function") {
+                                loadHistory();
+                            }
+                        }
+                    }
                     if (parsed.chunk) {
                         accumulatedText += parsed.chunk;
                         if (typeof onChunk === "function") {
@@ -1041,8 +1051,13 @@ async function streamGeminiChat(userText, images, files, onChunk) {
                     }
                     if (parsed.done) {
                         finalDoneData = parsed;
+                        const finalCid = parsed.conversation_id || parsed.conversationId || conversation_id;
+                        if (finalCid && (!conversation_id || conversation_id !== finalCid)) {
+                            conversation_id = finalCid;
+                            window.history.pushState({ cid: finalCid, conversationId: finalCid }, "", `/c/${finalCid}`);
+                        }
                         if (parsed.conversation_title && parsed.conversation_title !== "Chat mới" && !parsed.conversation_title.startsWith("{")) {
-                            syncSidebarChatTitle(parsed.conversation_title, parsed.conversation_id || conversation_id);
+                            syncSidebarChatTitle(parsed.conversation_title, finalCid);
                         }
                     }
                 } catch (e) {
@@ -2231,7 +2246,14 @@ async function deleteChat(id) {
 }
 
 async function loadConversation(id, updateUrl = true) {
+    if (!id) return;
     console.log(performance.now(), "[LOAD CONVERSATION START]", id);
+
+    if (window._loadConvAbortController) {
+        try { window._loadConvAbortController.abort(); } catch (e) { }
+    }
+    window._loadConvAbortController = new AbortController();
+    const signal = window._loadConvAbortController.signal;
 
     window.isLoadingConversation = true;
     window._isViewingLearningHub = false;
@@ -2248,86 +2270,89 @@ async function loadConversation(id, updateUrl = true) {
         }
     }
 
-    if (window._loadingConversationId === id) {
-        console.log(performance.now(), "[LOAD CONVERSATION SKIPPED - IN PROGRESS]", id);
-        return;
-    }
-
-    if (conversation_id === id && chatEl.innerHTML !== "" && !updateUrl && !chatEl.querySelector(".spinner-border")) {
-        console.log(performance.now(), "[LOAD CONVERSATION SKIPPED - ALREADY LOADED]", id);
-        window.isLoadingConversation = false;
-        return;
-    }
-
     window._loadingConversationId = id;
-
     conversation_id = id;
     if (updateUrl) {
-        window.history.pushState({ cid: id }, "", `/c/${id}`);
+        window.history.pushState({ cid: id, conversationId: id }, "", `/c/${id}`);
     }
 
     // Immediate UI Feedback
     updateSidebarActive(id);
     console.log(performance.now(), "[LOAD CONVERSATION CLEAR CHATEL INNERHTML]");
     chatEl.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted opacity-50">
+        <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted opacity-50" style="min-height: 220px;">
             <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
             <div style="font-size: 13px;">Đang tải cuộc trò chuyện...</div>
         </div>
     `;
-    attachments.innerHTML = "";
+    if (attachments) attachments.innerHTML = "";
     chatHistoryBuffer = [];
     lastExportContent = "";
 
     try {
         let data = [];
         try {
-            const res = await fetch(`/api/chat/conversation/${id}`);
+            const res = await fetch(`/api/chat/conversation/${id}`, { signal });
             if (res.ok) {
                 data = await res.json();
             } else {
-                const fbRes = await fetch("/ai/api/get_messages.php?conversation_id=" + id);
+                const fbRes = await fetch("/ai/api/get_messages.php?conversation_id=" + id, { signal });
                 data = await fbRes.json();
             }
         } catch (fetchErr) {
-            const fbRes = await fetch("/ai/api/get_messages.php?conversation_id=" + id);
+            if (signal.aborted) return;
+            const fbRes = await fetch("/ai/api/get_messages.php?conversation_id=" + id, { signal });
             data = await fbRes.json();
         }
 
-        const msgList = Array.isArray(data) ? data : (data?.messages || data?.data || []);
+        if (signal.aborted) return;
+
+        const msgList = data?.messages || data?.data || (Array.isArray(data) ? data : []);
         console.log(performance.now(), "[LOAD CONVERSATION FETCH DONE]", msgList.length, "messages");
 
+        // Cập nhật tiêu đề trang nếu có
+        if (data?.title && data.title !== "Chat mới" && data.title !== "Cuộc trò chuyện" && !data.title.startsWith("{")) {
+            document.title = `${data.title} - Btoan AI`;
+            syncSidebarChatTitle(data.title, id);
+        }
+
         chatEl.innerHTML = ""; // Clear loader
+        showWelcomeScreen(false);
 
         if (!msgList || msgList.length === 0) {
-            showWelcomeScreen(true);
+            chatEl.innerHTML = `
+                <div class="empty-conversation-notice text-center text-secondary py-5 d-flex flex-column align-items-center justify-content-center" style="min-height: 280px;">
+                    <div style="font-size: 36px; margin-bottom: 12px; opacity: 0.6;">💬</div>
+                    <div class="fw-semibold text-light mb-1" style="font-size: 14px;">Cuộc trò chuyện này chưa có nội dung tin nhắn</div>
+                    <div class="text-muted extra-small" style="max-width: 340px;">Hãy nhập câu hỏi bên dưới để bắt đầu trò chuyện cùng Btoan AI.</div>
+                </div>
+            `;
             return;
         }
 
-        showWelcomeScreen(false);
-
         msgList.forEach(m => {
+            const rawText = m.text || m.content || "";
             if (m.role === "user") {
-                addUserBubble(m.text, m.images || [])
+                addUserBubble(rawText, m.images || []);
                 chatHistoryBuffer.push({
                     role: "user",
-                    parts: [{ text: m.text }]
-                })
+                    parts: [{ text: rawText }]
+                });
             } else {
-                if (m.text.startsWith("[EXPORT_FILE]||")) {
-                    const base64Data = m.text.split("||")[1]
-                    const content = atob(base64Data)
-                    const clean = fixLatex(cleanExportContent(content))
-                    const base64Encoded = btoa(unescape(encodeURIComponent(clean)))
-                    const url = "data:text/plain;base64," + base64Encoded
+                if (rawText.startsWith("[EXPORT_FILE]||")) {
+                    const base64Data = rawText.split("||")[1];
+                    const content = atob(base64Data);
+                    const clean = fixLatex(cleanExportContent(content));
+                    const base64Encoded = btoa(unescape(encodeURIComponent(clean)));
+                    const url = "data:text/plain;base64," + base64Encoded;
                     addBotBubble(`
     📄 File đã xuất trước đó:
 
     👉 <a href="${url}" target="_blank">Mở lại</a>
-    `)
+    `);
                 } else {
-                    let text = m.text
-                    let exportType = null
+                    let text = rawText;
+                    let exportType = null;
                     const expMatch = text.match(/(?:^|\n)\[EXPORT\]\s*(docx|doc|pdf|txt|md|html|xlsx)\s*$/i);
                     if (expMatch) {
                         exportType = expMatch[1].toLowerCase();
@@ -2339,10 +2364,10 @@ async function loadConversation(id, updateUrl = true) {
                         !text.includes("📄 File DOCX đã sẵn sàng") &&
                         !text.includes("📄 File đã sẵn sàng")
                     ) {
-                        lastExportContent = text
-                        localStorage.setItem("lastExportContent", text)
+                        lastExportContent = text;
+                        localStorage.setItem("lastExportContent", text);
                     }
-                    addBotBubble(text, exportType)
+                    addBotBubble(text, exportType);
 
                     // 🔥 RENDER SAVED VIDEO (SERIES)
                     if (Array.isArray(m.videos) && m.videos.length > 0) {
@@ -2422,14 +2447,15 @@ async function loadConversation(id, updateUrl = true) {
                 }
                 chatHistoryBuffer.push({
                     role: "model",
-                    parts: [{ text: m.text }]
-                })
+                    parts: [{ text: rawText }]
+                });
             }
-        })
+        });
         scrollToBottom();
     } catch (e) {
-        console.error("LOAD CONV ERROR:", e)
-        chatEl.innerHTML = '<div class="p-4 text-center text-danger">⚠️ Không thể tải cuộc trò chuyện.</div>'
+        if (signal && signal.aborted) return;
+        console.error("LOAD CONV ERROR:", e);
+        chatEl.innerHTML = '<div class="p-4 text-center text-danger">⚠️ Không thể tải cuộc trò chuyện. Vui lòng thử lại.</div>';
     } finally {
         window._loadingConversationId = null;
         window.isLoadingConversation = false;
@@ -2520,28 +2546,29 @@ window.onload = function () {
     }
     sendBtn = document.getElementById("send");
 
-    // Routing Logic
-    // Routing Logic
+    // Routing Logic: Tự động nạp hội thoại khi mở trực tiếp hoặc F5 tại URL /c/{id}
     const urlParams = new URLSearchParams(window.location.search);
     const cidFromQuery = urlParams.get('c');
     const pathMatch = window.location.pathname.match(/\/c\/([0-9]+)/);
-    const cidToLoad = (pathMatch ? pathMatch[1] : null) || cidFromQuery;
+    const cidToLoad = (pathMatch ? pathMatch[1] : null) || cidFromQuery || (window.SERVER_CONVERSATION_ID ? window.SERVER_CONVERSATION_ID.trim() : null);
 
     if (cidToLoad) {
         console.log("🚀 BtoanAI: Restoring conversation", cidToLoad);
-        setTimeout(() => {
-            loadConversation(cidToLoad, false);
-        }, 200);
+        const welcomeEl = document.getElementById("welcome-screen");
+        if (welcomeEl) welcomeEl.style.display = "none";
+        const hubEl = document.getElementById("learning-hub-screen");
+        if (hubEl) hubEl.style.display = "none";
+        if (chatEl) chatEl.style.display = "block";
+        loadConversation(cidToLoad, false);
     } else if (window.location.pathname === "/" || window.location.pathname.endsWith("index.php") || window.location.pathname === "") {
         console.log("🚀 BtoanAI: Starting new chat");
         newChat(false);
     }
 
-
-
     window.addEventListener('popstate', (e) => {
-        if (e.state && e.state.cid) {
-            loadConversation(e.state.cid, false);
+        const popCid = e.state?.cid || e.state?.conversationId || (window.location.pathname.match(/\/c\/([0-9]+)/)?.[1]);
+        if (popCid) {
+            loadConversation(popCid, false);
         } else {
             newChat(false);
         }

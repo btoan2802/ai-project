@@ -6,8 +6,14 @@ namespace BtoanAiNet.Controllers;
 
 public class HomeController : Controller
 {
-    public IActionResult Index()
+    [HttpGet]
+    [Route("")]
+    [Route("Home")]
+    [Route("Home/Index")]
+    [Route("c/{id}")]
+    public IActionResult Index(string? id = null)
     {
+        ViewBag.ConversationId = id;
         return View();
     }
 

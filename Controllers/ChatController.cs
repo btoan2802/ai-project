@@ -38,6 +38,12 @@ namespace BtoanAiNet.Controllers
             {
                 var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (int.TryParse(claimId, out int uid)) return uid;
+                var subId = User.FindFirst("sub")?.Value;
+                if (int.TryParse(subId, out int sid)) return sid;
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (int.TryParse(userIdClaim, out int uClaim)) return uClaim;
+                var idClaim = User.FindFirst("id")?.Value;
+                if (int.TryParse(idClaim, out int idVal)) return idVal;
                 return HttpContext.Session.GetInt32("user_id");
             }
         }
@@ -108,6 +114,24 @@ namespace BtoanAiNet.Controllers
                 catch { }
             }
 
+            // Gửi ngay event meta đầu tiên để frontend cập nhật URL /c/{id} ngay lập tức
+            if (conversationId > 0)
+            {
+                try
+                {
+                    var metaPayload = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        type = "meta",
+                        conversationId = conversationId,
+                        conversation_id = conversationId,
+                        isNew = isNewConv
+                    });
+                    await Response.WriteAsync($"data: {metaPayload}\n\n", ct);
+                    await Response.Body.FlushAsync(ct);
+                }
+                catch { }
+            }
+
             var swTotal = System.Diagnostics.Stopwatch.StartNew();
             long ttftMs = 0;
             bool firstChunk = true;
@@ -173,19 +197,36 @@ namespace BtoanAiNet.Controllers
                             var lastU = cArr.LastOrDefault(c => c?["role"]?.ToString() == "user");
                             if (lastU?["parts"] is System.Text.Json.Nodes.JsonArray pArr && pArr.Count > 0)
                             {
-                                qText = pArr[0]?["text"]?.ToString() ?? "";
+                                foreach (var p in pArr)
+                                {
+                                    string? t = p?["text"]?.ToString();
+                                    if (!string.IsNullOrWhiteSpace(t))
+                                    {
+                                        qText = t;
+                                        break;
+                                    }
+                                }
                             }
                         }
-                        await _conversationRepository.AddChatAsync(new Chat
+                        if (string.IsNullOrWhiteSpace(qText)) qText = "Tin nhắn";
+
+                        string answerText = sbFull.ToString();
+                        if (!string.IsNullOrWhiteSpace(answerText))
                         {
-                            UserId = currentUid,
-                            ConversationId = conversationId,
-                            Question = qText,
-                            Answer = sbFull.ToString(),
-                            CreatedAt = DateTime.UtcNow
-                        });
+                            await _conversationRepository.AddChatAsync(new Chat
+                            {
+                                UserId = currentUid,
+                                ConversationId = conversationId,
+                                Question = qText,
+                                Answer = answerText,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
                     }
-                    catch { }
+                    catch (Exception dbEx)
+                    {
+                        Console.WriteLine($"[StreamChat DB Save Error] {dbEx.Message}");
+                    }
                 }
 
                 // Auto-generate title: only if new conversation or title is empty / "Chat mới"
@@ -430,23 +471,33 @@ namespace BtoanAiNet.Controllers
             int targetId = conversation_id > 0 ? conversation_id : (id ?? 0);
             if (targetId == 0)
             {
-                return Json(new List<object>());
+                return Json(new { success = false, conversationId = 0, messages = new List<object>(), data = new List<object>() });
             }
 
             int? currentUid = CurrentUserId;
+            Conversation? conv = null;
             if (currentUid.HasValue && currentUid.Value > 0)
             {
-                var conv = await _conversationRepository.GetConversationByIdAsync(targetId, currentUid.Value);
+                conv = await _conversationRepository.GetConversationByIdAsync(targetId, currentUid.Value);
                 if (conv == null && currentUid.Value != 1)
                 {
-                    return StatusCode(403, new { error = "Không có quyền truy cập hội thoại này" });
+                    var anyConv = await _conversationRepository.GetConversationByIdAsync(targetId, 0);
+                    if (anyConv != null && anyConv.UserId.HasValue && anyConv.UserId.Value != currentUid.Value)
+                    {
+                        return StatusCode(403, new { success = false, error = "Không có quyền truy cập hội thoại này" });
+                    }
+                    conv = anyConv;
                 }
+            }
+            else
+            {
+                conv = await _conversationRepository.GetConversationByIdAsync(targetId, 0);
             }
 
             try
             {
                 var chats = await _conversationRepository.GetMessagesByConversationIdAsync(targetId);
-                var data = new List<object>();
+                var messages = new List<object>();
 
                 foreach (var chat in chats)
                 {
@@ -463,34 +514,57 @@ namespace BtoanAiNet.Controllers
                             catch { }
                         }
 
-                        data.Add(new
+                        messages.Add(new
                         {
+                            id = chat.Id * 2 - 1,
                             role = "user",
+                            content = chat.Question,
                             text = chat.Question,
-                            images = images
+                            images = images,
+                            createdAt = chat.CreatedAt.ToString("o")
                         });
                     }
 
                     if (!string.IsNullOrEmpty(chat.Answer))
                     {
-                        data.Add(new
+                        messages.Add(new
                         {
+                            id = chat.Id * 2,
                             role = "assistant",
+                            content = chat.Answer,
                             text = chat.Answer,
                             images = new List<string>(),
                             videos = (object?)null,
                             music_url = (string?)null,
                             music_prompt = (string?)null,
-                            music_duration = (int?)null
+                            music_duration = (int?)null,
+                            createdAt = chat.CreatedAt.ToString("o")
                         });
                     }
                 }
 
-                return Json(data);
+                return Json(new
+                {
+                    success = true,
+                    ok = true,
+                    conversationId = targetId,
+                    conversation_id = targetId,
+                    title = conv?.Title ?? "Cuộc trò chuyện",
+                    messages = messages,
+                    data = messages
+                });
             }
-            catch
+            catch (Exception ex)
             {
-                return Json(new List<object>());
+                return Json(new
+                {
+                    success = false,
+                    ok = false,
+                    conversationId = targetId,
+                    error = ex.Message,
+                    messages = new List<object>(),
+                    data = new List<object>()
+                });
             }
         }
 
