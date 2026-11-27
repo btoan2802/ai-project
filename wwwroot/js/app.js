@@ -1371,7 +1371,7 @@ async function send() {
 
     let liveBotRow = null;
     let liveBotBubble = null;
-    let geminiRes = null;
+    geminiRes = null;
 
     try {
 
