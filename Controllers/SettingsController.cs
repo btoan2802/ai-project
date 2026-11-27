@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using BtoanAiNet.Data;
 using BtoanAiNet.Models;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,10 +22,23 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
-                var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (int.TryParse(claimId, out int uid) && uid > 0) return uid;
-                var sessionUid = HttpContext.Session.GetInt32("user_id");
-                if (sessionUid.HasValue && sessionUid.Value > 0) return sessionUid.Value;
+                try
+                {
+                    var claimId = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (int.TryParse(claimId, out int uid) && uid > 0) return uid;
+                }
+                catch { }
+
+                try
+                {
+                    if (HttpContext != null && HttpContext.Features.Get<ISessionFeature>()?.Session != null)
+                    {
+                        var sessionUid = HttpContext.Session.GetInt32("user_id");
+                        if (sessionUid.HasValue && sessionUid.Value > 0) return sessionUid.Value;
+                    }
+                }
+                catch { }
+
                 return 1; // Default to active user
             }
         }
@@ -33,9 +47,10 @@ namespace BtoanAiNet.Controllers
         [HttpGet("api/settings/preferences")]
         public async Task<IActionResult> GetPreferences()
         {
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var pref = await _context.UserPreferences.FirstOrDefaultAsync(p => p.UserId == uid);
                 if (pref != null)
                 {
@@ -61,9 +76,10 @@ namespace BtoanAiNet.Controllers
         [HttpPost("api/settings/preferences")]
         public async Task<IActionResult> SavePreferences([FromBody] UserPreference model)
         {
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var pref = await _context.UserPreferences.FirstOrDefaultAsync(p => p.UserId == uid);
                 if (pref == null)
                 {
@@ -102,9 +118,10 @@ namespace BtoanAiNet.Controllers
         [HttpGet("api/settings/gems")]
         public async Task<IActionResult> GetGems()
         {
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var gems = await _context.UserGems
                     .Where(g => g.UserId == uid || g.UserId == 1)
                     .OrderByDescending(g => g.Id)
@@ -136,9 +153,10 @@ namespace BtoanAiNet.Controllers
             if (model == null || string.IsNullOrWhiteSpace(model.Name))
                 return BadRequest(new { ok = false, error = "Tên Gem không được để trống" });
 
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 if (model.Id > 0)
                 {
                     var existing = await _context.UserGems.FirstOrDefaultAsync(g => g.Id == model.Id && (g.UserId == uid || g.UserId == 1));
@@ -179,9 +197,10 @@ namespace BtoanAiNet.Controllers
         [HttpDelete("api/settings/gems/{id}")]
         public async Task<IActionResult> DeleteGem(int id)
         {
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var gem = await _context.UserGems.FirstOrDefaultAsync(g => g.Id == id && (g.UserId == uid || g.UserId == 1));
                 if (gem != null)
                 {
@@ -203,9 +222,10 @@ namespace BtoanAiNet.Controllers
             if (model == null || string.IsNullOrWhiteSpace(model.Message))
                 return BadRequest(new { ok = false, error = "Vui lòng nhập nội dung ý kiến đóng góp" });
 
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var fb = new UserFeedback
                 {
                     UserId = uid,
@@ -228,7 +248,7 @@ namespace BtoanAiNet.Controllers
         [HttpGet("api/settings/usage")]
         public async Task<IActionResult> GetUsage()
         {
-            int uid = CurrentUserId;
+            int uid = 1;
             var today = DateTime.UtcNow.Date;
 
             int chatCountToday = 12;
@@ -238,6 +258,7 @@ namespace BtoanAiNet.Controllers
 
             try
             {
+                uid = CurrentUserId;
                 chatCountToday = await _context.Chats.CountAsync(c => c.UserId == uid && c.CreatedAt >= today);
                 chatCountTotal = await _context.Chats.CountAsync(c => c.UserId == uid);
                 projectCount = await _context.Projects.CountAsync(p => p.UserId == uid);
@@ -278,9 +299,10 @@ namespace BtoanAiNet.Controllers
         [HttpGet("api/settings/shared-links")]
         public async Task<IActionResult> GetSharedLinks()
         {
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var links = await _context.SharedLinks
                     .Where(s => s.UserId == uid && !s.IsRevoked)
                     .OrderByDescending(s => s.CreatedAt)
@@ -299,9 +321,10 @@ namespace BtoanAiNet.Controllers
             string token = payload.TryGetProperty("token", out var tProp) ? tProp.GetString() ?? "" : "";
             if (string.IsNullOrWhiteSpace(token)) return BadRequest(new { ok = false, error = "Token không hợp lệ" });
 
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var link = await _context.SharedLinks.FirstOrDefaultAsync(s => s.ShareToken == token && s.UserId == uid);
                 if (link != null)
                 {
@@ -320,9 +343,10 @@ namespace BtoanAiNet.Controllers
             string memoryText = payload.TryGetProperty("memoryText", out var mProp) ? mProp.GetString() ?? "" : "";
             if (string.IsNullOrWhiteSpace(memoryText)) return BadRequest(new { ok = false, error = "Vui lòng nhập nội dung bộ nhớ" });
 
-            int uid = CurrentUserId;
+            int uid = 1;
             try
             {
+                uid = CurrentUserId;
                 var pref = await _context.UserPreferences.FirstOrDefaultAsync(p => p.UserId == uid);
                 if (pref == null)
                 {
