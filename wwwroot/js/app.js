@@ -33,30 +33,10 @@ const REQUEST_TIMEOUT_MS = 600000;
 // ====== MATHJAX & MARKDOWN HELPER (PREVENT INLINE MATH FROM WRAPPING) ======
 function renderMarkdownWithMath(text) {
     if (!text) return "";
-    const mathTokens = [];
 
-    // 1. Protect block/display math ($$...$$ and \[...\])
-    let processed = text.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g, (match) => {
-        const token = `@@MATH_BLOCK_${mathTokens.length}@@`;
-        mathTokens.push({ token, val: match });
-        return token;
-    });
+    let processed = text;
 
-    // 2. Protect inline math ($...$ and \(...\))
-    processed = processed.replace(/(\$(?!\$)(\S(?:[\s\S]*?\S)?)\$|\\\([\s\S]*?\\\))/g, (match) => {
-        const token = `@@MATH_INLINE_${mathTokens.length}@@`;
-        mathTokens.push({ token, val: match });
-        return token;
-    });
-
-    // 2.5 Handle streaming docx artifact indicator
-    let isStreamingDocx = false;
-    if (/\[ARTIFACT\s+type=["']docx["'][^\]]*\](?![\s\S]*?\[\/ARTIFACT\])/i.test(processed)) {
-        isStreamingDocx = true;
-        processed = processed.replace(/\[ARTIFACT\s+type=["']docx["'][^\]]*\][\s\S]*$/i, "\n\n@@DOCX_STREAMING_PLACEHOLDER@@\n\n");
-    }
-
-    // 2.6 Handle quiz data interactive & streaming
+    // 1. TÁCH KHỐI [QUIZ_DATA] TRƯỚC TIÊN ĐỂ TRÁNH MARKDOWN ĂN MẤT DẤU \ CỦA LATEX
     let isStreamingQuiz = false;
     processed = processed.replace(/\[QUIZ_DATA\]([\s\S]*?)\[\/QUIZ_DATA\]/gi, (match, jsonStr) => {
         return `\n\n@@QUIZ_BLOCK_${registerQuizData(jsonStr)}@@\n\n`;
@@ -66,7 +46,7 @@ function renderMarkdownWithMath(text) {
         processed = processed.replace(/\[QUIZ_DATA\][\s\S]*$/i, "\n\n@@QUIZ_STREAMING_PLACEHOLDER@@\n\n");
     }
 
-    // 2.7 Handle flashcard data interactive & streaming
+    // 2. TÁCH KHỐI [FLASHCARD_DATA] TRƯỚC MARKDOWN
     let isStreamingFlashcard = false;
     processed = processed.replace(/\[FLASHCARD_DATA\]([\s\S]*?)\[\/FLASHCARD_DATA\]/gi, (match, jsonStr) => {
         return `\n\n@@FLASHCARD_BLOCK_${registerFlashcardData(jsonStr)}@@\n\n`;
@@ -76,7 +56,29 @@ function renderMarkdownWithMath(text) {
         processed = processed.replace(/\[FLASHCARD_DATA\][\s\S]*$/i, "\n\n@@FLASHCARD_STREAMING_PLACEHOLDER@@\n\n");
     }
 
-    // 3. Parse Markdown
+    // 3. TÁCH KHỐI [ARTIFACT type="docx"]
+    let isStreamingDocx = false;
+    if (/\[ARTIFACT\s+type=["']docx["'][^\]]*\](?![\s\S]*?\[\/ARTIFACT\])/i.test(processed)) {
+        isStreamingDocx = true;
+        processed = processed.replace(/\[ARTIFACT\s+type=["']docx["'][^\]]*\][\s\S]*$/i, "\n\n@@DOCX_STREAMING_PLACEHOLDER@@\n\n");
+    }
+
+    // 4. Protect block/display math ($$...$$ and \[...\])
+    const mathTokens = [];
+    processed = processed.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g, (match) => {
+        const token = `@@MATH_BLOCK_${mathTokens.length}@@`;
+        mathTokens.push({ token, val: match });
+        return token;
+    });
+
+    // 5. Protect inline math ($...$ and \(...\))
+    processed = processed.replace(/(\$(?!\$)(\S(?:[\s\S]*?\S)?)\$|\\\([\s\S]*?\\\))/g, (match) => {
+        const token = `@@MATH_INLINE_${mathTokens.length}@@`;
+        mathTokens.push({ token, val: match });
+        return token;
+    });
+
+    // 6. Parse Markdown
     let html = "";
     try {
         const escaped = typeof escapeUnsafeTags === "function" ? escapeUnsafeTags(processed) : processed;
@@ -87,27 +89,27 @@ function renderMarkdownWithMath(text) {
 
     if (isStreamingDocx) {
         html = html.replace("@@DOCX_STREAMING_PLACEHOLDER@@", `
-            <div class="docx-artifact-streaming" style="background: #1e1e2e; border: 1px dashed #3b3b54; border-radius: 12px; padding: 12px 18px; margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+            <div class="docx-artifact-streaming rounded-3 p-3 my-2 d-flex align-items-center gap-2 border border-primary-subtle bg-body-tertiary">
                 <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                <span style="color: #93c5fd; font-size: 13px; font-weight: 500;">Đang tạo tệp Word...</span>
+                <span class="text-primary small fw-semibold">Đang tạo tệp Word...</span>
             </div>
         `);
     }
 
     if (isStreamingQuiz) {
         html = html.replace("@@QUIZ_STREAMING_PLACEHOLDER@@", `
-            <div class="quiz-streaming-card" style="background: #18191a; border: 1px dashed #333537; border-radius: 14px; padding: 14px 18px; margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+            <div class="quiz-streaming-card rounded-3 p-3 my-2 d-flex align-items-center gap-2 border border-success-subtle bg-body-tertiary">
                 <div class="spinner-border spinner-border-sm text-success" role="status"></div>
-                <span style="color: #4ade80; font-size: 13px; font-weight: 500;">Đang thiết lập đề thi trắc nghiệm tương tác & chấm điểm...</span>
+                <span class="text-success small fw-semibold">Đang thiết lập đề thi trắc nghiệm tương tác & chấm điểm...</span>
             </div>
         `);
     }
 
     if (isStreamingFlashcard) {
         html = html.replace("@@FLASHCARD_STREAMING_PLACEHOLDER@@", `
-            <div class="flashcard-streaming-card" style="background: #18191a; border: 1px dashed #333537; border-radius: 14px; padding: 14px 18px; margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+            <div class="flashcard-streaming-card rounded-3 p-3 my-2 d-flex align-items-center gap-2 border border-warning-subtle bg-body-tertiary">
                 <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
-                <span style="color: #facc15; font-size: 13px; font-weight: 500;">Đang tạo bộ Flashcards 3D thông minh...</span>
+                <span class="text-warning small fw-semibold">Đang tạo bộ Flashcards 3D thông minh...</span>
             </div>
         `);
     }
@@ -124,7 +126,7 @@ function renderMarkdownWithMath(text) {
         });
     }
 
-    // 4. Restore math tokens
+    // Restore math tokens
     mathTokens.forEach(({ token, val }) => {
         html = html.replace(token, val);
     });
@@ -4187,107 +4189,91 @@ function triggerKaTeX(el) {
     }
 }
 
-// Helper: Sửa từ khóa LaTeX bị mất dấu \ và escape HTML an toàn cho KaTeX
-function formatQuizMathText(text) {
+// Helper: Chuẩn hóa và sửa triệt để lỗi vỡ công thức LaTeX (frac12, intcos, \sin, ...)
+function normalizeMathLatex(text) {
     if (!text) return "";
     let str = String(text);
-    // Khôi phục các ký hiệu LaTeX thường gặp bị mất dấu \
-    str = str.replace(/(?<!\\)\b(frac|sqrt|int|sum|lim|pi|infty|alpha|beta|gamma|Delta|theta|times|div|pm|leq|geq|neq|approx|rightarrow|leftarrow|left|right)\b/g, "\\$1");
-    // Escape HTML cho thẻ < và > để tránh phá vỡ DOM, nhưng giữ lại dấu $
+
+    // 1. Phục hồi phân số bị dính số hoặc mất ngoặc nhọn: frac12 -> \frac{1}{2}, frac13 -> \frac{1}{3}, \frac12 -> \frac{1}{2}
+    str = str.replace(/\\?frac(\d)(\d)/g, "\\frac{$1}{$2}");
+    str = str.replace(/\\?frac\{/g, "\\frac{");
+    str = str.replace(/(?<!\\)frac\b/g, "\\frac");
+
+    // 2. Phục hồi các toán tử dính chữ với toán tử hoặc biến khác (intcos -> \int \cos, intsin -> \int \sin, intdx -> \int dx)
+    str = str.replace(/(?<!\\)intcos/g, "\\int \\cos ");
+    str = str.replace(/(?<!\\)intsin/g, "\\int \\sin ");
+    str = str.replace(/(?<!\\)intdx/g, "\\int dx");
+    str = str.replace(/\\intcos/g, "\\int \\cos ");
+    str = str.replace(/\\intsin/g, "\\int \\sin ");
+    str = str.replace(/\\intdx/g, "\\int dx");
+
+    // 3. Khôi phục dấu \ cho các toán tử và hàm toán học phổ biến nếu bị mất
+    const mathKeywords = [
+        "frac", "sqrt", "int", "iint", "iiint", "oint", "sum", "prod", "lim",
+        "sin", "cos", "tan", "cot", "arcsin", "arccos", "arctan",
+        "ln", "log", "exp", "pi", "alpha", "beta", "gamma", "Delta", "delta", "theta",
+        "omega", "lambda", "mu", "sigma", "epsilon", "infty",
+        "times", "div", "pm", "mp", "cdot", "leq", "geq", "neq", "approx", "equiv",
+        "in", "notin", "subset", "subseteq", "cap", "cup", "forall", "exists", "to",
+        "rightarrow", "leftarrow", "leftrightarrow", "Rightarrow", "Leftarrow", "Leftrightarrow",
+        "partial", "vec", "left", "right"
+    ];
+    const kwRegex = new RegExp("(?<!\\\\)\\b(" + mathKeywords.join("|") + ")\\b", "g");
+    str = str.replace(kwRegex, "\\$1");
+
+    // 4. Chèn dấu cách sau các toán tử nếu dính liền với biến hoặc ngoặc
+    str = str.replace(/\\(int|sum|lim|sin|cos|tan|cot|ln|log)(?=[a-zA-Z0-9])/g, "\\$1 ");
+
+    // 5. Tự động bọc $...$ nếu có cú pháp LaTeX mà chưa nằm trong cặp dấu $
+    if (!/(\$|\\\(|\\\[)/.test(str)) {
+        if (/(\\frac|\\sqrt|\\int|\\sum|\\lim|\\sin|\\cos|\\tan|\\cot|\\ln|\\log|\\pi|\\alpha|\\beta|\\Delta|\\infty)/.test(str)) {
+            str = `$${str.trim()}$`;
+        }
+    }
+
+    // Escape HTML an toàn
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatQuizMathText(text) {
+    return normalizeMathLatex(text);
+}
+
+// Làm sạch JSON chuỗi trắc nghiệm tránh hỏng escape sequence KaTeX
+function cleanQuizJsonString(rawStr) {
+    let clean = String(rawStr || "")
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```$/i, "")
+        .trim();
+
+    // Sửa các ký tự điều khiển ASCII sinh ra do \f (form feed) và \b (backspace) trong JSON spec
+    clean = clean.replace(/\u000c/g, "\\\\f").replace(/\u0008/g, "\\\\b");
+
+    // Nhân đôi các backslash không thuộc escape sequence JSON chuẩn
+    clean = clean.replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
+
+    return clean;
 }
 
 // 1. Register & Render Interactive Quiz
 function registerQuizData(jsonStr) {
     const qid = "q_" + Math.random().toString(36).substr(2, 7);
     try {
-        let clean = jsonStr.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-        // Cứu các escape sequence bị hỏng trong JSON do LaTeX
-        clean = clean.replace(/\u000c/g, "\\\\f")
-                     .replace(/\u0008/g, "\\\\b")
-                     .replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
+        const clean = cleanQuizJsonString(jsonStr);
         const data = JSON.parse(clean);
         data.answers = {};
         window.quizRegistry[qid] = data;
 
-        const questions = data.questions || [];
-        let questionsHtml = "";
+        // Phân loại Đề THPTQG 2025–2026 (3 Phần) hay Đề thi thông thường
+        const isThptqg = (data.exam_type === "THPTQG_2025" || (data.part1 && Array.isArray(data.part1)) || data.part2 || data.part3);
 
-        questions.forEach((q, idx) => {
-            let optionsObj = q.options || {};
-            if (Array.isArray(optionsObj)) {
-                const map = {};
-                optionsObj.forEach((optText, i) => {
-                    const letter = String.fromCharCode(65 + i);
-                    map[letter] = optText;
-                });
-                optionsObj = map;
-            }
-
-            let optionsHtml = "";
-            let optIndex = 0;
-            for (const [rawKey, rawVal] of Object.entries(optionsObj)) {
-                let keyLetter = String(rawKey).trim().toUpperCase();
-                if (/^\d+$/.test(keyLetter)) {
-                    keyLetter = String.fromCharCode(65 + parseInt(keyLetter, 10));
-                } else if (!/^[A-Z]$/.test(keyLetter)) {
-                    keyLetter = String.fromCharCode(65 + optIndex);
-                }
-
-                // Strip leading prefixes like "0 A.", "1 B.", "A.", "A)", "1." triệt để
-                let cleanVal = String(rawVal || "")
-                    .replace(/^(\s*[\$\(]?\s*)[A-Da-d][\.\)\:\-]\s*/i, "")
-                    .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, "")
-                    .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
-                    .trim();
-
-                optionsHtml += `
-                    <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-idx="${idx}" data-key="${keyLetter}" onclick="selectQuizOption('${qid}', ${idx}, '${keyLetter}', this)">
-                        <span class="quiz-opt-letter">${keyLetter}</span>
-                        <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal)}</span>
-                    </div>
-                `;
-                optIndex++;
-            }
-
-            questionsHtml += `
-                <div class="quiz-question-item mb-4 p-3 rounded-3" id="qitem_${qid}_${idx}">
-                    <div class="fw-bold fs-6 quiz-question-text mb-2.5">
-                        <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
-                    </div>
-                    <div class="quiz-options-group">${optionsHtml}</div>
-                    <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="qexp_${qid}_${idx}" style="display:none; background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1;">
-                        <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
-                        <div class="small">${formatQuizMathText(q.explanation || "Không có giải thích chi tiết.")}</div>
-                    </div>
-                </div>
-            `;
-        });
-
-        const widgetHtml = `
-            <div class="quiz-card-container quiz-card-interactive shadow-sm my-3" id="quizWidget_${qid}">
-                <div class="quiz-card-header p-3 d-flex align-items-center justify-content-between border-bottom" style="background: rgba(255,255,255,0.03);">
-                    <div>
-                        <h5 class="fw-bold text-white mb-0 fs-6">🎯 ${escapeHtml(data.title || "Bài kiểm tra trắc nghiệm")}</h5>
-                        <span class="extra-small text-secondary">Số lượng: ${questions.length} câu • Chấm điểm thang 10</span>
-                    </div>
-                    <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1.5 rounded-pill">
-                        ⏱️ Làm bài trực tiếp
-                    </div>
-                </div>
-
-                <div class="quiz-questions-list p-3">${questionsHtml}</div>
-
-                <div class="quiz-card-footer p-3 d-flex align-items-center justify-content-between border-top" id="quizActionBar_${qid}" style="background: rgba(255,255,255,0.02);">
-                    <div id="quizScoreText_${qid}" class="fw-bold fs-6 text-white"></div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-success rounded-pill px-4 btn-sm fw-semibold shadow-sm" id="btnGrade_${qid}" onclick="gradeQuiz('${qid}')">
-                            <i class="bi bi-check2-circle me-1"></i>Nộp bài &amp; Chấm điểm
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
+        let widgetHtml = "";
+        if (isThptqg) {
+            widgetHtml = renderThptqgQuizWidget(qid, data);
+        } else {
+            widgetHtml = renderStandardQuizWidget(qid, data);
+        }
 
         window.quizBlocks[qid] = widgetHtml;
         setTimeout(() => {
@@ -4302,6 +4288,562 @@ function registerQuizData(jsonStr) {
     }
 }
 
+// Render Đề thi chuẩn thông thường (1 Phần phẳng)
+function renderStandardQuizWidget(qid, data) {
+    const questions = data.questions || [];
+    let questionsHtml = "";
+
+    questions.forEach((q, idx) => {
+        let optionsObj = q.options || {};
+        if (Array.isArray(optionsObj)) {
+            const map = {};
+            optionsObj.forEach((optText, i) => {
+                const letter = String.fromCharCode(65 + i);
+                map[letter] = optText;
+            });
+            optionsObj = map;
+        }
+
+        let optionsHtml = "";
+        let optIndex = 0;
+        for (const [rawKey, rawVal] of Object.entries(optionsObj)) {
+            let keyLetter = String(rawKey).trim().toUpperCase();
+            if (/^\d+$/.test(keyLetter)) {
+                keyLetter = String.fromCharCode(65 + parseInt(keyLetter, 10));
+            } else if (!/^[A-Z]$/.test(keyLetter)) {
+                keyLetter = String.fromCharCode(65 + optIndex);
+            }
+
+            let cleanVal = String(rawVal || "")
+                .replace(/^(\s*[\$\(]?\s*)[A-Da-d][\.\)\:\-]\s*/i, "")
+                .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, "")
+                .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
+                .trim();
+
+            optionsHtml += `
+                <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-idx="${idx}" data-key="${keyLetter}" onclick="selectQuizOption('${qid}', ${idx}, '${keyLetter}', this)">
+                    <span class="quiz-opt-letter">${keyLetter}</span>
+                    <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal)}</span>
+                </div>
+            `;
+            optIndex++;
+        }
+
+        questionsHtml += `
+            <div class="quiz-question-item mb-4 p-3 rounded-3" id="qitem_${qid}_${idx}">
+                <div class="fw-bold fs-6 quiz-question-text mb-2.5">
+                    <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
+                </div>
+                <div class="quiz-options-group">${optionsHtml}</div>
+                <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="qexp_${qid}_${idx}" style="display:none;">
+                    <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
+                    <div class="small">${formatQuizMathText(q.explanation || "Không có giải thích chi tiết.")}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    return `
+        <div class="quiz-card-container quiz-card-interactive shadow-sm my-3" id="quizWidget_${qid}">
+            <div class="quiz-card-header p-3 d-flex align-items-center justify-content-between border-bottom">
+                <div>
+                    <h5 class="fw-bold mb-0 fs-6 quiz-card-title">🎯 ${escapeHtml(data.title || "Bài kiểm tra trắc nghiệm")}</h5>
+                    <span class="extra-small quiz-card-subtitle">Số lượng: ${questions.length} câu • Chấm điểm thang 10</span>
+                </div>
+                <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1.5 rounded-pill">
+                    ⏱️ Làm bài trực tiếp
+                </div>
+            </div>
+
+            <div class="quiz-questions-list p-3">${questionsHtml}</div>
+
+            <div class="quiz-card-footer p-3 d-flex align-items-center justify-content-between border-top" id="quizActionBar_${qid}">
+                <div id="quizScoreText_${qid}" class="fw-bold fs-6 quiz-score-display"></div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-success rounded-pill px-4 btn-sm fw-semibold shadow-sm" id="btnGrade_${qid}" onclick="gradeQuiz('${qid}')">
+                        <i class="bi bi-check2-circle me-1"></i>Nộp bài &amp; Chấm điểm
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Render Đề thi chuẩn Bộ GD&ĐT THPTQG 2025–2026 (3 Phần)
+function renderThptqgQuizWidget(qid, data) {
+    data.p1Answers = {};
+    data.p2Answers = {};
+    data.p3Answers = {};
+    data.graded = false;
+
+    const part1 = data.part1 || [];
+    const part2 = data.part2 || [];
+    const part3 = data.part3 || [];
+
+    // --- PHẦN 1: TRẮC NGHIỆM 4 LỰA CHỌN ---
+    let p1Html = "";
+    part1.forEach((q, idx) => {
+        let optionsObj = q.options || {};
+        if (Array.isArray(optionsObj)) {
+            const map = {};
+            optionsObj.forEach((optText, i) => {
+                map[String.fromCharCode(65 + i)] = optText;
+            });
+            optionsObj = map;
+        }
+
+        let optionsHtml = "";
+        let optIndex = 0;
+        for (const [rawKey, rawVal] of Object.entries(optionsObj)) {
+            let keyLetter = String(rawKey).trim().toUpperCase();
+            if (/^\d+$/.test(keyLetter)) {
+                keyLetter = String.fromCharCode(65 + parseInt(keyLetter, 10));
+            } else if (!/^[A-Z]$/.test(keyLetter)) {
+                keyLetter = String.fromCharCode(65 + optIndex);
+            }
+
+            let cleanVal = String(rawVal || "")
+                .replace(/^(\s*[\$\(]?\s*)[A-Da-d][\.\)\:\-]\s*/i, "")
+                .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, "")
+                .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
+                .trim();
+
+            optionsHtml += `
+                <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-part="p1" data-idx="${idx}" data-key="${keyLetter}" onclick="selectThptqgP1Option('${qid}', ${idx}, '${keyLetter}', this)">
+                    <span class="quiz-opt-letter">${keyLetter}</span>
+                    <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal)}</span>
+                </div>
+            `;
+            optIndex++;
+        }
+
+        p1Html += `
+            <div class="quiz-question-item mb-4 p-3 rounded-3" id="thptqg_p1_${qid}_${idx}">
+                <div class="fw-bold fs-6 quiz-question-text mb-2.5">
+                    <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
+                </div>
+                <div class="quiz-options-group">${optionsHtml}</div>
+                <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="thptqg_p1_exp_${qid}_${idx}" style="display:none;">
+                    <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
+                    <div class="small">${formatQuizMathText(q.explanation || "Không có giải thích chi tiết.")}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    // --- PHẦN 2: TRẮC NGHIỆM ĐÚNG / SAI ---
+    let p2Html = "";
+    part2.forEach((q, idx) => {
+        const statements = q.statements || [];
+        let stmtsHtml = "";
+
+        statements.forEach((stmt, sIdx) => {
+            const sKey = (stmt.key || String.fromCharCode(97 + sIdx)).toLowerCase();
+            stmtsHtml += `
+                <div class="thptqg-statement-row d-flex align-items-center justify-content-between p-2.5 rounded-3 mb-2" id="thptqg_p2_stmt_${qid}_${idx}_${sKey}">
+                    <div class="thptqg-statement-text pe-3">
+                        <strong class="text-primary me-1">${sKey})</strong>
+                        <span>${formatQuizMathText(stmt.text)}</span>
+                    </div>
+                    <div class="thptqg-tf-actions d-flex gap-1.5 flex-shrink-0">
+                        <button type="button" class="btn btn-sm btn-outline-success btn-true-false px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_true" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', true, this)">
+                            Đúng
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger btn-true-false px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_false" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', false, this)">
+                            Sai
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        p2Html += `
+            <div class="quiz-question-item mb-4 p-3 rounded-3" id="thptqg_p2_${qid}_${idx}">
+                <div class="fw-bold fs-6 quiz-question-text mb-2.5">
+                    <span class="badge bg-success me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.context || q.question || "")}
+                </div>
+                <div class="thptqg-statements-group mb-2">${stmtsHtml}</div>
+                <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="thptqg_p2_exp_${qid}_${idx}" style="display:none;">
+                    <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
+                    <div class="small">${formatQuizMathText(q.explanation || "Không có giải thích chi tiết.")}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    // --- PHẦN 3: TRẮC NGHIỆM TRẢ LỜI NGẮN ---
+    let p3Html = "";
+    part3.forEach((q, idx) => {
+        p3Html += `
+            <div class="quiz-question-item mb-4 p-3 rounded-3" id="thptqg_p3_${qid}_${idx}">
+                <div class="fw-bold fs-6 quiz-question-text mb-2.5">
+                    <span class="badge bg-warning text-dark me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
+                </div>
+                <div class="d-flex align-items-center gap-2.5 mt-2">
+                    <label class="small fw-semibold text-secondary flex-shrink-0">Điền đáp số:</label>
+                    <input type="text" class="form-control form-control-sm thptqg-short-input rounded-3" style="max-width: 220px;" placeholder="Ví dụ: 2.5 hoặc -10" oninput="recordThptqgP3Answer('${qid}', ${idx}, this.value)" id="thptqg_p3_input_${qid}_${idx}">
+                    <span class="thptqg-p3-feedback-badge" id="thptqg_p3_badge_${qid}_${idx}"></span>
+                </div>
+                <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="thptqg_p3_exp_${qid}_${idx}" style="display:none;">
+                    <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT (Đáp án: ${escapeHtml(String(q.answer))}):</div>
+                    <div class="small">${formatQuizMathText(q.explanation || "Không có giải thích chi tiết.")}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    return `
+        <div class="quiz-card-container quiz-card-interactive thptqg-exam-container shadow-sm my-3" id="quizWidget_${qid}">
+            <!-- Header chuẩn Bộ GD&ĐT -->
+            <div class="quiz-card-header p-3 border-bottom d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="badge bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1 rounded-pill mb-1 fw-bold extra-small">
+                        🏆 ĐỀ CHUẨN BỘ GIÁO DỤC &amp; ĐÀO TẠO THPTQG 2025–2026
+                    </div>
+                    <h5 class="fw-bold mb-0 fs-6 quiz-card-title">${escapeHtml(data.title || "Đề thi thử Tốt nghiệp THPT")}</h5>
+                    <span class="extra-small quiz-card-subtitle">Môn: ${escapeHtml(data.subject || "Học tập")} • 3 Phần thi • Thang điểm 10.00</span>
+                </div>
+                <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1.5 rounded-pill">
+                    ⏱️ Chấm điểm lũy tiến
+                </div>
+            </div>
+
+            <!-- NỘI DUNG 3 PHẦN -->
+            <div class="quiz-questions-list p-3">
+                ${part1.length > 0 ? `
+                    <div class="thptqg-part-section mb-4">
+                        <div class="thptqg-part-title-badge p-2.5 rounded-3 mb-3 bg-primary-subtle text-primary border border-primary-subtle fw-bold small d-flex align-items-center justify-content-between">
+                            <span><i class="bi bi-1-circle-fill me-1.5"></i>PHẦN I: TRẮC NGHIỆM NHIỀU PHƯƠNG ÁN LỰA CHỌN</span>
+                            <span class="extra-small opacity-75">${part1.length} câu • 0.25đ / câu</span>
+                        </div>
+                        ${p1Html}
+                    </div>
+                ` : ''}
+
+                ${part2.length > 0 ? `
+                    <div class="thptqg-part-section mb-4">
+                        <div class="thptqg-part-title-badge p-2.5 rounded-3 mb-3 bg-success-subtle text-success border border-success-subtle fw-bold small d-flex align-items-center justify-content-between">
+                            <span><i class="bi bi-2-circle-fill me-1.5"></i>PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI</span>
+                            <span class="extra-small opacity-75">${part2.length} câu • Đúng 1 ý=0.1đ, 2 ý=0.25đ, 3 ý=0.5đ, 4 ý=1.0đ</span>
+                        </div>
+                        ${p2Html}
+                    </div>
+                ` : ''}
+
+                ${part3.length > 0 ? `
+                    <div class="thptqg-part-section mb-4">
+                        <div class="thptqg-part-title-badge p-2.5 rounded-3 mb-3 bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold small d-flex align-items-center justify-content-between">
+                            <span><i class="bi bi-3-circle-fill me-1.5"></i>PHẦN III: TRẮC NGHIỆM TRẢ LỜI NGẮN</span>
+                            <span class="extra-small opacity-75">${part3.length} câu • Điền đáp số</span>
+                        </div>
+                        ${p3Html}
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- Footer Action Bar & Score Summary -->
+            <div class="quiz-card-footer p-3 border-top" id="quizActionBar_${qid}">
+                <div id="quizScoreText_${qid}" class="quiz-score-display mb-2"></div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="extra-small text-secondary">Quy chế Bộ GD&ĐT: Kiểm tra kỹ bài làm trước khi nộp</span>
+                    <button type="button" class="btn btn-success rounded-pill px-4 btn-sm fw-semibold shadow-sm" id="btnGrade_${qid}" onclick="gradeThptqgQuiz('${qid}')">
+                        <i class="bi bi-check2-circle me-1"></i>Nộp bài &amp; Chấm điểm THPTQG
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Xử lý tương tác THPTQG
+function selectThptqgP1Option(qid, qIdx, optKey, el) {
+    const data = window.quizRegistry[qid];
+    if (!data || data.graded) return;
+    data.p1Answers[qIdx] = optKey;
+
+    const parent = el.closest(".quiz-options-group");
+    if (parent) {
+        parent.querySelectorAll(".quiz-option-label, .quiz-option-btn").forEach(l => l.classList.remove("selected"));
+    }
+    el.classList.add("selected");
+}
+
+function selectThptqgP2Option(qid, qIdx, stmtKey, isTrue, el) {
+    const data = window.quizRegistry[qid];
+    if (!data || data.graded) return;
+    const answerKey = `${qIdx}_${stmtKey}`;
+    data.p2Answers[answerKey] = isTrue;
+
+    const row = document.getElementById(`thptqg_p2_stmt_${qid}_${qIdx}_${stmtKey}`);
+    if (row) {
+        const btnTrue = document.getElementById(`btn_tf_${qid}_${qIdx}_${stmtKey}_true`);
+        const btnFalse = document.getElementById(`btn_tf_${qid}_${qIdx}_${stmtKey}_false`);
+        if (isTrue) {
+            btnTrue?.classList.add("active", "btn-success");
+            btnTrue?.classList.remove("btn-outline-success");
+            btnFalse?.classList.remove("active", "btn-danger");
+            btnFalse?.classList.add("btn-outline-danger");
+        } else {
+            btnFalse?.classList.add("active", "btn-danger");
+            btnFalse?.classList.remove("btn-outline-danger");
+            btnTrue?.classList.remove("active", "btn-success");
+            btnTrue?.classList.add("btn-outline-success");
+        }
+    }
+}
+
+function recordThptqgP3Answer(qid, qIdx, val) {
+    const data = window.quizRegistry[qid];
+    if (!data || data.graded) return;
+    data.p3Answers[qIdx] = String(val || "").trim();
+}
+
+// Chấm điểm chuẩn Bộ GD&ĐT THPTQG 2025–2026
+function gradeThptqgQuiz(qid) {
+    const data = window.quizRegistry[qid];
+    if (!data) return;
+    data.graded = true;
+
+    const part1 = data.part1 || [];
+    const part2 = data.part2 || [];
+    const part3 = data.part3 || [];
+
+    // --- 1. CHẤM PHẦN I (0.25đ / câu) ---
+    let p1Correct = 0;
+    part1.forEach((q, idx) => {
+        const userChoice = data.p1Answers[idx];
+        let correctChoice = String(q.answer || "").trim().toUpperCase();
+        if (/^\d+$/.test(correctChoice)) {
+            correctChoice = String.fromCharCode(65 + parseInt(correctChoice, 10));
+        }
+
+        const container = document.getElementById(`thptqg_p1_${qid}_${idx}`);
+        const expBox = document.getElementById(`thptqg_p1_exp_${qid}_${idx}`);
+        if (expBox) expBox.style.display = "block";
+
+        if (container) {
+            const labels = container.querySelectorAll(".quiz-option-btn, .quiz-option-label");
+            labels.forEach(lbl => {
+                const optKey = lbl.getAttribute("data-key");
+                lbl.classList.remove("selected");
+                if (optKey === correctChoice) {
+                    lbl.classList.add("correct", "is-correct");
+                }
+                if (optKey === userChoice && userChoice !== correctChoice) {
+                    lbl.classList.add("incorrect", "is-wrong");
+                }
+            });
+        }
+        if (userChoice === correctChoice) {
+            p1Correct++;
+        }
+    });
+    const p1Score = p1Correct * 0.25;
+
+    // --- 2. CHẤM PHẦN II (LŨY TIẾN: 1 ý=0.1đ, 2 ý=0.25đ, 3 ý=0.5đ, 4 ý=1.0đ) ---
+    let p2Score = 0;
+    let p2FullCorrectCount = 0;
+    part2.forEach((q, idx) => {
+        const statements = q.statements || [];
+        let correctStmtCount = 0;
+
+        statements.forEach((stmt, sIdx) => {
+            const sKey = (stmt.key || String.fromCharCode(97 + sIdx)).toLowerCase();
+            const userVal = data.p2Answers[`${idx}_${sKey}`];
+            const correctVal = Boolean(stmt.answer);
+
+            const row = document.getElementById(`thptqg_p2_stmt_${qid}_${idx}_${sKey}`);
+            const btnTrue = document.getElementById(`btn_tf_${qid}_${idx}_${sKey}_true`);
+            const btnFalse = document.getElementById(`btn_tf_${qid}_${idx}_${sKey}_false`);
+
+            if (row) {
+                if (userVal === correctVal) {
+                    row.classList.add("border", "border-success", "bg-success-subtle");
+                    correctStmtCount++;
+                } else {
+                    row.classList.add("border", "border-danger", "bg-danger-subtle");
+                }
+            }
+            if (btnTrue && btnFalse) {
+                if (correctVal === true) {
+                    btnTrue.classList.add("border-2", "shadow-sm");
+                } else {
+                    btnFalse.classList.add("border-2", "shadow-sm");
+                }
+            }
+        });
+
+        // Áp dụng thang điểm lũy tiến Bộ GD&ĐT
+        let qScore = 0;
+        if (correctStmtCount === 1) qScore = 0.10;
+        else if (correctStmtCount === 2) qScore = 0.25;
+        else if (correctStmtCount === 3) qScore = 0.50;
+        else if (correctStmtCount === 4) {
+            qScore = 1.00;
+            p2FullCorrectCount++;
+        }
+        p2Score += qScore;
+
+        const expBox = document.getElementById(`thptqg_p2_exp_${qid}_${idx}`);
+        if (expBox) expBox.style.display = "block";
+    });
+
+    // --- 3. CHẤM PHẦN III (TRẢ LỜI NGẮN) ---
+    let p3Correct = 0;
+    // Điểm mỗi câu Phần III (Toán: 6 câu = 0.5đ/câu; KHTN/KHXH: 6 câu = 0.25đ/câu)
+    const isMath = /toán/i.test(data.subject || data.title || "");
+    const p3PointPerQ = isMath ? 0.50 : 0.25;
+
+    part3.forEach((q, idx) => {
+        const rawUser = String(data.p3Answers[idx] || "").trim().replace(",", ".");
+        const rawCorrect = String(q.answer || "").trim().replace(",", ".");
+
+        let isRight = false;
+        if (rawUser && rawCorrect) {
+            const numUser = parseFloat(rawUser);
+            const numCorrect = parseFloat(rawCorrect);
+            if (!isNaN(numUser) && !isNaN(numCorrect)) {
+                isRight = Math.abs(numUser - numCorrect) < 0.001;
+            } else {
+                isRight = rawUser.toLowerCase() === rawCorrect.toLowerCase();
+            }
+        }
+
+        const inputEl = document.getElementById(`thptqg_p3_input_${qid}_${idx}`);
+        const badgeEl = document.getElementById(`thptqg_p3_badge_${qid}_${idx}`);
+        const expBox = document.getElementById(`thptqg_p3_exp_${qid}_${idx}`);
+
+        if (inputEl) {
+            inputEl.disabled = true;
+            if (isRight) {
+                inputEl.classList.add("is-valid");
+            } else {
+                inputEl.classList.add("is-invalid");
+            }
+        }
+        if (badgeEl) {
+            if (isRight) {
+                badgeEl.className = "badge bg-success py-1.5 px-2.5 rounded-pill extra-small";
+                badgeEl.innerHTML = `<i class="bi bi-check-lg me-1"></i>Đúng (+${p3PointPerQ}đ)`;
+            } else {
+                badgeEl.className = "badge bg-danger py-1.5 px-2.5 rounded-pill extra-small";
+                badgeEl.innerHTML = `<i class="bi bi-x-lg me-1"></i>Sai (ĐA: ${escapeHtml(rawCorrect)})`;
+            }
+        }
+        if (expBox) expBox.style.display = "block";
+
+        if (isRight) p3Correct++;
+    });
+
+    const p3Score = p3Correct * p3PointPerQ;
+
+    // --- 4. TỔNG HỢP KẾT QUẢ THEO QUY CHẾ ---
+    const totalScore = Math.min(10.0, Math.round((p1Score + p2Score + p3Score) * 100) / 100);
+
+    const scoreTextEl = document.getElementById(`quizScoreText_${qid}`);
+    if (scoreTextEl) {
+        scoreTextEl.innerHTML = `
+            <div class="thptqg-score-report-card p-3 rounded-4 mb-2 border">
+                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                    <span class="fw-bold fs-6"><i class="bi bi-award-fill text-warning me-1.5"></i>BẢNG ĐIỂM THPTQG CHUẨN BỘ GD&amp;ĐT:</span>
+                    <span class="fs-4 fw-extrabold text-success">${totalScore.toFixed(2)} / 10.00</span>
+                </div>
+                <div class="row g-2 extra-small">
+                    <div class="col-4">
+                        <div class="p-2 rounded-3 bg-primary-subtle text-primary border border-primary-subtle">
+                            <strong>Phần I:</strong> ${p1Score.toFixed(2)} đ<br>
+                            <span class="opacity-75">Đúng ${p1Correct}/${part1.length} câu</span>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 rounded-3 bg-success-subtle text-success border border-success-subtle">
+                            <strong>Phần II:</strong> ${p2Score.toFixed(2)} đ<br>
+                            <span class="opacity-75">Tối đa ${p2FullCorrectCount}/${part2.length} câu</span>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 rounded-3 bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                            <strong>Phần III:</strong> ${p3Score.toFixed(2)} đ<br>
+                            <span class="opacity-75">Đúng ${p3Correct}/${part3.length} câu</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    const actionBox = document.getElementById(`quizActionBar_${qid}`);
+    const gradeBtn = document.getElementById(`btnGrade_${qid}`);
+    if (gradeBtn) gradeBtn.style.display = "none";
+
+    const oldRetry = document.getElementById(`btnRetry_${qid}`);
+    if (oldRetry) oldRetry.remove();
+
+    const retryBtn = document.createElement("button");
+    retryBtn.id = `btnRetry_${qid}`;
+    retryBtn.className = "btn btn-outline-primary rounded-pill px-4 btn-sm fw-semibold";
+    retryBtn.innerHTML = `<i class="bi bi-arrow-counterclockwise me-1"></i>Thi lại đề này`;
+    retryBtn.onclick = () => resetThptqgQuiz(qid);
+    if (actionBox) actionBox.querySelector(".d-flex")?.appendChild(retryBtn);
+
+    setTimeout(() => {
+        const widget = document.getElementById(`quizWidget_${qid}`);
+        triggerKaTeX(widget);
+    }, 150);
+}
+
+function resetThptqgQuiz(qid) {
+    const data = window.quizRegistry[qid];
+    if (!data) return;
+    data.graded = false;
+    data.p1Answers = {};
+    data.p2Answers = {};
+    data.p3Answers = {};
+
+    const widget = document.getElementById(`quizWidget_${qid}`);
+    if (!widget) return;
+
+    // Reset P1
+    widget.querySelectorAll(".quiz-option-label, .quiz-option-btn").forEach(l => {
+        l.classList.remove("selected", "correct", "incorrect", "is-correct", "is-wrong");
+    });
+
+    // Reset P2
+    widget.querySelectorAll(".thptqg-statement-row").forEach(r => {
+        r.classList.remove("border", "border-success", "border-danger", "bg-success-subtle", "bg-danger-subtle");
+    });
+    widget.querySelectorAll(".btn-true-false").forEach(b => {
+        b.classList.remove("active", "btn-success", "btn-danger", "border-2", "shadow-sm");
+        if (b.id.endsWith("_true")) b.classList.add("btn-outline-success");
+        if (b.id.endsWith("_false")) b.classList.add("btn-outline-danger");
+    });
+
+    // Reset P3
+    widget.querySelectorAll(".thptqg-short-input").forEach(inp => {
+        inp.disabled = false;
+        inp.value = "";
+        inp.classList.remove("is-valid", "is-invalid");
+    });
+    widget.querySelectorAll(".thptqg-p3-feedback-badge").forEach(b => {
+        b.className = "thptqg-p3-feedback-badge";
+        b.innerHTML = "";
+    });
+
+    // Hide explanations
+    widget.querySelectorAll(".quiz-explanation-box").forEach(e => e.style.display = "none");
+
+    // Reset score display
+    const scoreTextEl = document.getElementById(`quizScoreText_${qid}`);
+    if (scoreTextEl) scoreTextEl.innerHTML = "";
+
+    const gradeBtn = document.getElementById(`btnGrade_${qid}`);
+    if (gradeBtn) gradeBtn.style.display = "inline-block";
+
+    const retryBtn = document.getElementById(`btnRetry_${qid}`);
+    if (retryBtn) retryBtn.remove();
+}
+
+// Xử lý Quiz thông thường
 function selectQuizOption(qid, qIndex, optionKey, el) {
     const data = window.quizRegistry[qid];
     if (!data || data.graded) return;
@@ -4608,6 +5150,23 @@ function onLearningSubjectChanged() {
     }
 }
 
+window.onLearningCountSelectChanged = function() {
+    const countSelect = document.getElementById("learningCountSelect");
+    const hint = document.getElementById("thptqgStructureHint");
+    if (!countSelect) return;
+    if (countSelect.value === "THPTQG_2025") {
+        if (hint) hint.style.display = "block";
+        // Nếu đang ở cấp học khác, tự động chọn cấp THPT
+        const gradeSelect = document.getElementById("learningGradeSelect");
+        if (gradeSelect && gradeSelect.value !== "thpt") {
+            gradeSelect.value = "thpt";
+            onLearningGradeChanged();
+        }
+    } else {
+        if (hint) hint.style.display = "none";
+    }
+};
+
 function selectLearningCard(modeKey) {
     window.currentLearningMode = modeKey;
     const configPanel = document.getElementById("learningConfigPanel");
@@ -4629,6 +5188,19 @@ function selectLearningCard(modeKey) {
 
     if (extraOpts) {
         extraOpts.style.display = (modeKey === "quiz" || modeKey === "flashcard") ? "block" : "none";
+        const countSelect = document.getElementById("learningCountSelect");
+        if (countSelect) {
+            const thptqgOpt = countSelect.querySelector('option[value="THPTQG_2025"]');
+            if (modeKey === "quiz") {
+                if (thptqgOpt) thptqgOpt.style.display = "";
+            } else {
+                if (thptqgOpt) thptqgOpt.style.display = "none";
+                if (countSelect.value === "THPTQG_2025") {
+                    countSelect.value = "10";
+                }
+            }
+        }
+        window.onLearningCountSelectChanged();
     }
 
     onLearningGradeChanged();
@@ -4748,11 +5320,12 @@ async function startLearningSession() {
 
     const count = document.getElementById("learningCountSelect")?.value || "10";
     const difficulty = document.getElementById("learningDifficultySelect")?.value || "Trung bình";
+    const isThptqgExam = (window.currentLearningMode === "quiz" && count === "THPTQG_2025");
 
     const modeLabels = {
         notebook: "Sổ tay ghi chú",
         visual: "Khám phá trực quan",
-        quiz: "Tự kiểm tra kiến thức",
+        quiz: isThptqgExam ? "Đề chuẩn Bộ GD&ĐT THPTQG 2025–2026" : "Tự kiểm tra kiến thức",
         flashcard: "Flashcards 3D",
         socratic: "Gia sư Socratic"
     };
@@ -4772,7 +5345,11 @@ async function startLearningSession() {
             prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa, công thức KaTeX ($$...$$) và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"${fileContextInstruction}`;
             break;
         case "quiz":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.${fileContextInstruction}`;
+            if (isThptqgExam) {
+                prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026]\nHãy tạo ĐỀ THI THỬ TỐT NGHIỆP THPT QG 2025–2026 chuẩn cấu trúc 3 PHẦN của Bộ Giáo dục & Đào tạo cho môn ${subjectText} về chủ đề "${topic}".\nĐộ khó: ${difficulty}.\n\nCẤU TRÚC BẮT BUỘC:\n- PHẦN I: Trắc nghiệm 4 lựa chọn (Toán 12 câu, Lý/Hóa/Sinh/Sử/Địa/GD 18 câu...; mỗi câu 0.25đ).\n- PHẦN II: Trắc nghiệm Đúng/Sai (Toán 4 câu, KHTN/KHXH 4 câu; mỗi câu có ngữ cảnh và 4 mệnh đề a, b, c, d; tính điểm lũy tiến: 1 ý=0.1đ, 2 ý=0.25đ, 3 ý=0.5đ, 4 ý=1.0đ).\n- PHẦN III: Trắc nghiệm trả lời ngắn (Toán 6 câu, KHTN/KHXH 6 câu; thí sinh điền kết quả dạng số thực/nguyên).\n\nQUY TẮC CÔNG THỨC TOÁN & KHOA HỌC:\n- Mọi công thức Toán/Lý/Hóa bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\\\ trong JSON.\n- Bắt buộc đầy đủ cặp ngoặc nhọn: \\\\frac{1}{2}, \\\\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\\\frac12).\n- Luôn có dấu cách sau các toán tử: \\\\int \\\\cos(2x+1)\\\\,dx, \\\\sqrt{x^2+1}.\n\nTrả về toàn bộ dữ liệu đề thi chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] với JSON exam_type: "THPTQG_2025" gồm part1, part2, part3.${fileContextInstruction}`;
+            } else {
+                prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.${fileContextInstruction}`;
+            }
             break;
         case "flashcard":
             prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm/công thức, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.${fileContextInstruction}`;
@@ -4787,7 +5364,11 @@ async function startLearningSession() {
 
     // Thiết lập tóm tắt đẹp cho bong bóng người dùng thay vì toàn bộ văn bản tài liệu dài
     let summaryText = `🎓 ${modeTitle} — Môn ${subjectText} (${gradeText})`;
-    if (attachedFileName) {
+    if (isThptqgExam) {
+        summaryText = `🎓 🏆 Đề chuẩn Bộ GD&ĐT THPTQG 2025–2026 — Môn ${subjectText} (${difficulty})`;
+        if (attachedFileName) summaryText += `\n📎 Tài liệu: ${attachedFileName}`;
+        else summaryText += `\n🎯 Chủ đề: ${topic}`;
+    } else if (attachedFileName) {
         summaryText += `\n📎 Tài liệu: ${attachedFileName} (${count} câu • ${difficulty})`;
     } else {
         summaryText += `: ${topic} (${count} câu • ${difficulty})`;

@@ -51,9 +51,10 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
 
   <!-- 4. CSS Local -->
-  <link rel="stylesheet" href="css/style.css?v=20261127_saas_v3">
-  <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261127_saas_v3">
-  <link rel="stylesheet" href="css/main_style.css?v=20261127_learning_upload_v7">
+  <link rel="stylesheet" href="css/style.css?v=20261128_quiz_thptqg_v1">
+  <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261128_quiz_thptqg_v1">
+  <link rel="stylesheet" href="css/main_style.css?v=20261128_quiz_thptqg_v1">
+  <link rel="stylesheet" href="css/app.css?v=20261128_quiz_thptqg_v1">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -996,11 +997,12 @@
                 <div class="col-12 col-md-6" id="learningExtraOptions" style="display:none;">
                   <div class="row g-2">
                     <div class="col-6">
-                      <label class="form-label small fw-semibold text-white">Số lượng:</label>
-                      <select id="learningCountSelect" class="form-select rounded-3">
+                      <label class="form-label small fw-semibold text-white">Chế độ / Số lượng:</label>
+                      <select id="learningCountSelect" class="form-select rounded-3" onchange="onLearningCountSelectChanged()">
                         <option value="5">5 câu / thẻ</option>
                         <option value="10" selected>10 câu / thẻ</option>
                         <option value="15">15 câu / thẻ</option>
+                        <option value="THPTQG_2025">🏆 Đề chuẩn Bộ GD&ĐT THPTQG 2025–2026 (3 Phần — Thang 10đ)</option>
                       </select>
                     </div>
                     <div class="col-6">
@@ -1010,6 +1012,16 @@
                         <option value="Trung bình" selected>Trung bình</option>
                         <option value="Nâng cao">Nâng cao</option>
                       </select>
+                    </div>
+                    <div class="col-12" id="thptqgStructureHint" style="display:none;">
+                      <div class="p-2.5 rounded-3 bg-primary-subtle text-primary border border-primary-subtle extra-small">
+                        <div class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-1"></i>Cấu trúc Đề thi THPTQG 2025–2026:</div>
+                        <ul class="mb-0 ps-3">
+                          <li><strong>Phần I:</strong> Trắc nghiệm 4 lựa chọn (0.25đ / câu).</li>
+                          <li><strong>Phần II:</strong> Trắc nghiệm Đúng/Sai 4 ý (chấm lũy tiến: 0.1đ - 0.25đ - 0.5đ - 1.0đ).</li>
+                          <li><strong>Phần III:</strong> Trắc nghiệm trả lời ngắn (điền kết quả/đáp số số thực).</li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1787,7 +1799,7 @@
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
   <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
-  <script src="js/app.js?v=20261127_learning_upload_v7"></script>
+  <script src="js/app.js?v=20261128_quiz_thptqg_v1"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">

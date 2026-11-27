@@ -2224,11 +2224,12 @@ mjx-container svg[viewBox*="NaN"] {
 }
 
 /* ========================================================
-   QUIZ CARD & WORD ARTIFACT THEME (LIGHT & DARK)
+   QUIZ CARD & THPTQG 3-PART EXAM THEME (LIGHT & DARK)
    ======================================================== */
 .quiz-card-container,
 .quiz-card-interactive,
-.quiz-card {
+.quiz-card,
+.thptqg-part-card {
   border-radius: 16px;
   overflow: hidden;
   margin: 14px 0;
@@ -2239,47 +2240,63 @@ mjx-container svg[viewBox*="NaN"] {
 :root:not([data-theme="dark"]) .quiz-card-container,
 :root:not([data-theme="dark"]) .quiz-card-interactive,
 :root:not([data-theme="dark"]) .quiz-card,
+:root:not([data-theme="dark"]) .thptqg-part-card,
 [data-theme="light"] .quiz-card-container,
 [data-theme="light"] .quiz-card-interactive,
-[data-theme="light"] .quiz-card {
+[data-theme="light"] .quiz-card,
+[data-theme="light"] .thptqg-part-card {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06) !important;
   color: #0f172a !important;
 }
 
 :root:not([data-theme="dark"]) .quiz-card-header,
-[data-theme="light"] .quiz-card-header {
+:root:not([data-theme="dark"]) .thptqg-part-header,
+[data-theme="light"] .quiz-card-header,
+[data-theme="light"] .thptqg-part-header {
   background: #f8fafc !important;
   border-bottom: 1px solid #e2e8f0 !important;
 }
 
 :root:not([data-theme="dark"]) .quiz-card-header h5,
+:root:not([data-theme="dark"]) .quiz-card-header h6,
 :root:not([data-theme="dark"]) .quiz-card-header .text-white,
+:root:not([data-theme="dark"]) .thptqg-part-header h6,
 [data-theme="light"] .quiz-card-header h5,
-[data-theme="light"] .quiz-card-header .text-white {
+[data-theme="light"] .quiz-card-header h6,
+[data-theme="light"] .quiz-card-header .text-white,
+[data-theme="light"] .thptqg-part-header h6 {
   color: #0f172a !important;
 }
 
 /* Item từng câu hỏi trong Light Mode: Nền sáng #ffffff, viền #e2e8f0 */
 :root:not([data-theme="dark"]) .quiz-question-item,
 :root:not([data-theme="dark"]) .quiz-question-box,
+:root:not([data-theme="dark"]) .thptqg-qitem,
 [data-theme="light"] .quiz-question-item,
-[data-theme="light"] .quiz-question-box {
+[data-theme="light"] .quiz-question-box,
+[data-theme="light"] .thptqg-qitem {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
 }
 
-/* Chữ câu hỏi và công thức KaTeX trong Light Mode: Đen đậm #0f172a rõ nét */
+/* Chữ câu hỏi và công thức KaTeX trong Light Mode: Đen đậm #0f172a rõ nét 100% */
 :root:not([data-theme="dark"]) .quiz-question-text,
 :root:not([data-theme="dark"]) .quiz-question-text *,
 :root:not([data-theme="dark"]) .quiz-question-text .katex,
 :root:not([data-theme="dark"]) .quiz-question-text .katex *,
+:root:not([data-theme="dark"]) .thptqg-qtext,
+:root:not([data-theme="dark"]) .thptqg-qtext *,
+:root:not([data-theme="dark"]) .thptqg-qtext .katex *,
 [data-theme="light"] .quiz-question-text,
 [data-theme="light"] .quiz-question-text *,
 [data-theme="light"] .quiz-question-text .katex,
-[data-theme="light"] .quiz-question-text .katex * {
+[data-theme="light"] .quiz-question-text .katex *,
+[data-theme="light"] .thptqg-qtext,
+[data-theme="light"] .thptqg-qtext *,
+[data-theme="light"] .thptqg-qtext .katex * {
   color: #0f172a !important;
 }
 
@@ -2287,9 +2304,11 @@ mjx-container svg[viewBox*="NaN"] {
 :root:not([data-theme="dark"]) .quiz-option-btn,
 :root:not([data-theme="dark"]) .quiz-option-label,
 :root:not([data-theme="dark"]) .quiz-option-item,
+:root:not([data-theme="dark"]) .thptqg-statement-row,
 [data-theme="light"] .quiz-option-btn,
 [data-theme="light"] .quiz-option-label,
-[data-theme="light"] .quiz-option-item {
+[data-theme="light"] .quiz-option-item,
+[data-theme="light"] .thptqg-statement-row {
   background: #f8fafc !important;
   border: 1px solid #cbd5e1 !important;
   color: #1e293b !important;
@@ -2315,7 +2334,7 @@ mjx-container svg[viewBox*="NaN"] {
   background: #eef2ff !important;
   border-color: #4f46e5 !important;
   color: #4338ca !important;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 :root:not([data-theme="dark"]) .quiz-option-btn.correct,
@@ -2336,6 +2355,64 @@ mjx-container svg[viewBox*="NaN"] {
   color: #991b1b !important;
 }
 
+/* Nút Đúng/Sai trong Light Mode */
+:root:not([data-theme="dark"]) .btn-true-false,
+[data-theme="light"] .btn-true-false {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #334155;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 4px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:root:not([data-theme="dark"]) .btn-true-false:hover,
+[data-theme="light"] .btn-true-false:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+:root:not([data-theme="dark"]) .btn-true-false.active-true,
+[data-theme="light"] .btn-true-false.active-true {
+  background: #0284c7 !important;
+  border-color: #0284c7 !important;
+  color: #ffffff !important;
+}
+
+:root:not([data-theme="dark"]) .btn-true-false.active-false,
+[data-theme="light"] .btn-true-false.active-false {
+  background: #475569 !important;
+  border-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+/* Input Part 3 trong Light Mode */
+:root:not([data-theme="dark"]) .thptqg-short-input,
+[data-theme="light"] .thptqg-short-input {
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 600;
+  max-width: 280px;
+  border-radius: 8px;
+}
+
+:root:not([data-theme="dark"]) .thptqg-short-input.is-correct,
+[data-theme="light"] .thptqg-short-input.is-correct {
+  border-color: #10b981 !important;
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+}
+
+:root:not([data-theme="dark"]) .thptqg-short-input.is-wrong,
+[data-theme="light"] .thptqg-short-input.is-wrong {
+  border-color: #ef4444 !important;
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+}
+
 :root:not([data-theme="dark"]) .quiz-card-footer,
 [data-theme="light"] .quiz-card-footer {
   background: #f8fafc !important;
@@ -2351,19 +2428,31 @@ mjx-container svg[viewBox*="NaN"] {
 [data-theme="dark"] .quiz-card-container,
 [data-theme="dark"] .quiz-card-interactive,
 [data-theme="dark"] .quiz-card,
+[data-theme="dark"] .thptqg-part-card,
 body.dark-mode .quiz-card-container,
 body.dark-mode .quiz-card-interactive,
-body.dark-mode .quiz-card {
+body.dark-mode .quiz-card,
+body.dark-mode .thptqg-part-card {
   background: #1e1f26 !important;
   border: 1px solid #2f3241 !important;
   box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
   color: #f8fafc !important;
 }
 
+[data-theme="dark"] .quiz-card-header,
+[data-theme="dark"] .thptqg-part-header,
+body.dark-mode .quiz-card-header,
+body.dark-mode .thptqg-part-header {
+  background: #252834 !important;
+  border-bottom: 1px solid #2f3241 !important;
+}
+
 [data-theme="dark"] .quiz-question-item,
 [data-theme="dark"] .quiz-question-box,
+[data-theme="dark"] .thptqg-qitem,
 body.dark-mode .quiz-question-item,
-body.dark-mode .quiz-question-box {
+body.dark-mode .quiz-question-box,
+body.dark-mode .thptqg-qitem {
   background: #232530 !important;
   border: 1px solid #333647 !important;
 }
@@ -2372,17 +2461,24 @@ body.dark-mode .quiz-question-box {
 [data-theme="dark"] .quiz-question-text *,
 [data-theme="dark"] .quiz-question-text .katex,
 [data-theme="dark"] .quiz-question-text .katex *,
+[data-theme="dark"] .thptqg-qtext,
+[data-theme="dark"] .thptqg-qtext *,
+[data-theme="dark"] .thptqg-qtext .katex *,
 body.dark-mode .quiz-question-text,
-body.dark-mode .quiz-question-text * {
+body.dark-mode .quiz-question-text *,
+body.dark-mode .thptqg-qtext,
+body.dark-mode .thptqg-qtext * {
   color: #f8fafc !important;
 }
 
 [data-theme="dark"] .quiz-option-btn,
 [data-theme="dark"] .quiz-option-label,
 [data-theme="dark"] .quiz-option-item,
+[data-theme="dark"] .thptqg-statement-row,
 body.dark-mode .quiz-option-btn,
 body.dark-mode .quiz-option-label,
-body.dark-mode .quiz-option-item {
+body.dark-mode .quiz-option-item,
+body.dark-mode .thptqg-statement-row {
   background: #262832 !important;
   border: 1px solid #3a3d4d !important;
   color: #f1f5f9 !important;
@@ -2423,12 +2519,56 @@ body.dark-mode .quiz-option-label.is-wrong {
   color: #fca5a5 !important;
 }
 
+/* Nút Đúng/Sai trong Dark Mode */
+[data-theme="dark"] .btn-true-false,
+body.dark-mode .btn-true-false {
+  background: #2b2f3d;
+  border: 1px solid #3e4456;
+  color: #cbd5e1;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 4px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme="dark"] .btn-true-false:hover,
+body.dark-mode .btn-true-false:hover {
+  background: #363b4d;
+  border-color: #6366f1;
+}
+
+[data-theme="dark"] .btn-true-false.active-true,
+body.dark-mode .btn-true-false.active-true {
+  background: #38bdf8 !important;
+  border-color: #38bdf8 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="dark"] .btn-true-false.active-false,
+body.dark-mode .btn-true-false.active-false {
+  background: #64748b !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+/* Input Part 3 trong Dark Mode */
+[data-theme="dark"] .thptqg-short-input,
+body.dark-mode .thptqg-short-input {
+  background: #262832 !important;
+  border: 1.5px solid #3a3d4d !important;
+  color: #f8fafc !important;
+  font-weight: 600;
+  max-width: 280px;
+  border-radius: 8px;
+}
+
 /* Khoảng đệm đáy chống cắt nút Nộp bài & Chấm điểm */
 #chat,
 .chat-viewport,
 .chat-scroll-wrapper,
 #chatMessagesContainer {
-  padding-bottom: 190px !important;
+  padding-bottom: 200px !important;
 }
 
 /* Single Letter Badge for Options */
