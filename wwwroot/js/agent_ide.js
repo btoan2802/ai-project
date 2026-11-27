@@ -1388,14 +1388,15 @@ function toggleBottomPanelHeight() {
     if (!panel) return;
     const btnIcon = panel.querySelector(".bi-chevron-up, .bi-chevron-down");
     if (isBottomPanelMaximized) {
-        panel.style.height = localStorage.getItem('antigravity_terminal_h') || "240px";
+        panel.style.height = "220px";
         isBottomPanelMaximized = false;
         if (btnIcon) {
             btnIcon.classList.remove('bi-chevron-down');
             btnIcon.classList.add('bi-chevron-up');
         }
     } else {
-        panel.style.height = "65vh";
+        const maxH = Math.min(Math.floor(window.innerHeight * 0.5), window.innerHeight - 240);
+        panel.style.height = `${Math.max(180, maxH)}px`;
         isBottomPanelMaximized = true;
         if (btnIcon) {
             btnIcon.classList.remove('bi-chevron-up');
@@ -4439,7 +4440,18 @@ function initDraggableSplitters() {
     const bottomPanel = document.getElementById("bottomPanel");
     if (resizerTerminal && bottomPanel) {
         const savedH = localStorage.getItem("antigravity_terminal_h");
-        if (savedH) bottomPanel.style.height = savedH;
+        let defaultH = 220;
+        if (savedH) {
+            const parsed = parseInt(savedH, 10);
+            const maxAllowed = Math.floor(window.innerHeight * 0.45);
+            if (!isNaN(parsed) && parsed >= 100 && parsed <= maxAllowed) {
+                defaultH = parsed;
+            } else {
+                defaultH = 220;
+                localStorage.setItem("antigravity_terminal_h", "220px");
+            }
+        }
+        bottomPanel.style.height = `${defaultH}px`;
 
         let isDragging = false;
         resizerTerminal.addEventListener("mousedown", (e) => {
@@ -4448,9 +4460,20 @@ function initDraggableSplitters() {
             document.body.style.userSelect = "none";
         });
 
+        // Double click resizer resets to 220px
+        resizerTerminal.addEventListener("dblclick", () => {
+            bottomPanel.style.height = "220px";
+            localStorage.setItem("antigravity_terminal_h", "220px");
+            triggerEditorLayout();
+            setTimeout(() => { try { fitAddon?.fit(); } catch (e) {} }, 50);
+        });
+
         window.addEventListener("mousemove", (e) => {
             if (!isDragging) return;
-            const newH = Math.max(100, Math.min(window.innerHeight - 150, window.innerHeight - e.clientY - 24)); // 24px status bar
+            const maxAllowed = Math.max(150, Math.floor(window.innerHeight - 220)); // Ensure at least 220px for editor & headers
+            const minAllowed = 80;
+            const targetH = window.innerHeight - e.clientY - 24;
+            const newH = Math.max(minAllowed, Math.min(maxAllowed, targetH));
             bottomPanel.style.height = `${newH}px`;
             triggerEditorLayout();
         });

@@ -676,6 +676,9 @@ body.agent-ide-body {
 
 .editor-viewport {
     background-color: var(--ide-bg-editor);
+    min-height: 180px !important;
+    flex: 1 1 auto;
+    overflow: hidden;
 }
 
 .diff-view-banner {
@@ -694,7 +697,9 @@ body.agent-ide-body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    min-height: 0;
+    min-height: 35px;
+    max-height: calc(100% - 200px) !important;
+    flex-shrink: 0;
 }
 
 .bottom-panel-header {
