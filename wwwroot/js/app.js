@@ -4187,6 +4187,11 @@ function triggerKaTeX(el) {
             console.warn("KaTeX render error:", e);
         }
     }
+    if (typeof MathJax !== "undefined" && MathJax.typesetPromise) {
+        try {
+            MathJax.typesetPromise(el ? [el] : undefined).catch(() => {});
+        } catch (e) {}
+    }
 }
 
 // Helper: Chuẩn hóa và sửa triệt để lỗi vỡ công thức LaTeX (frac12, intcos, \sin, ...)
