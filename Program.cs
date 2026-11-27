@@ -769,6 +769,62 @@ CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessage
                 {
                     try { dbContext.Database.ExecuteSqlRaw(alter); } catch { }
                 }
+
+                // Ensure Gemini-style settings tables for SQLite
+                dbContext.Database.ExecuteSqlRaw(@"
+CREATE TABLE IF NOT EXISTS UserPreferences (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL UNIQUE,
+    CustomInstructions TEXT,
+    SavedMemories TEXT,
+    Theme TEXT DEFAULT 'dark',
+    DefaultLocation TEXT DEFAULT 'TP. Hồ Chí Minh, Việt Nam',
+    CreatedAt TEXT,
+    UpdatedAt TEXT
+);
+CREATE TABLE IF NOT EXISTS UserGems (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Name TEXT NOT NULL,
+    Icon TEXT DEFAULT '💎',
+    Description TEXT,
+    SystemPrompt TEXT NOT NULL,
+    DefaultDocId INTEGER DEFAULT 0,
+    CreatedAt TEXT
+);
+CREATE TABLE IF NOT EXISTS UserFeedbacks (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER,
+    Category TEXT,
+    Message TEXT NOT NULL,
+    Rating INTEGER DEFAULT 5,
+    CreatedAt TEXT
+);
+CREATE TABLE IF NOT EXISTS SharedLinks (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    ConversationId INTEGER NOT NULL,
+    ShareToken TEXT NOT NULL UNIQUE,
+    Title TEXT,
+    IsRevoked INTEGER DEFAULT 0,
+    CreatedAt TEXT
+);
+CREATE INDEX IF NOT EXISTS IX_UserGems_UserId ON UserGems(UserId);
+CREATE INDEX IF NOT EXISTS IX_SharedLinks_Token ON SharedLinks(ShareToken);
+");
+
+                // Seed starter gems if none exist
+                try
+                {
+                    dbContext.Database.ExecuteSqlRaw(@"
+INSERT OR IGNORE INTO UserGems (UserId, Name, Icon, Description, SystemPrompt, CreatedAt)
+VALUES 
+(1, 'Gia sư Bách Khoa', '🎓', 'Gia sư phương pháp gợi mở (Socratic), hướng dẫn giải toán và khoa học từng bước', 'Bạn là Gia sư Bách Khoa tài năng, kiên nhẫn. Không đưa trực tiếp đáp án cuối cùng mà chia nhỏ vấn đề, đặt câu hỏi gợi mở cho học viên suy nghĩ.', datetime('now')),
+(1, 'Chuyên gia C# / .NET', '💻', 'Senior .NET Architect tối ưu mã nguồn, clean architecture và clean code', 'Bạn là Senior .NET Software Architect với hơn 15 năm kinh nghiệm. Tư vấn kiến trúc chuẩn mực, viết code C# hiện đại, tối ưu performance.', datetime('now')),
+(1, 'Luyện thi IELTS 8.0', '🗣️', 'Huấn luyện viên IELTS Speaking và Writing sửa lỗi từ vựng ngữ pháp cao cấp', 'You are an elite IELTS Examiner and Coach. Help the user improve vocabulary, lexical resource, and grammatical accuracy for band 8.0+.', datetime('now'));
+");
+                }
+                catch { }
             }
             catch { }
         }

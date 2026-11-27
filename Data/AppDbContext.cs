@@ -35,6 +35,10 @@ namespace BtoanAiNet.Data
         public DbSet<ProjectEnvironmentVariable> ProjectEnvironmentVariables { get; set; } = null!;
         public DbSet<DeploymentLog> DeploymentLogs { get; set; } = null!;
         public DbSet<AgentChatMessage> AgentChatMessages { get; set; } = null!;
+        public DbSet<UserPreference> UserPreferences { get; set; } = null!;
+        public DbSet<UserGem> UserGems { get; set; } = null!;
+        public DbSet<UserFeedback> UserFeedbacks { get; set; } = null!;
+        public DbSet<SharedLink> SharedLinks { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

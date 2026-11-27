@@ -56,6 +56,26 @@ function renderMarkdownWithMath(text) {
         processed = processed.replace(/\[ARTIFACT\s+type=["']docx["'][^\]]*\][\s\S]*$/i, "\n\n@@DOCX_STREAMING_PLACEHOLDER@@\n\n");
     }
 
+    // 2.6 Handle quiz data interactive & streaming
+    let isStreamingQuiz = false;
+    processed = processed.replace(/\[QUIZ_DATA\]([\s\S]*?)\[\/QUIZ_DATA\]/gi, (match, jsonStr) => {
+        return `\n\n@@QUIZ_BLOCK_${registerQuizData(jsonStr)}@@\n\n`;
+    });
+    if (/\[QUIZ_DATA\](?![\s\S]*?\[\/QUIZ_DATA\])/i.test(processed)) {
+        isStreamingQuiz = true;
+        processed = processed.replace(/\[QUIZ_DATA\][\s\S]*$/i, "\n\n@@QUIZ_STREAMING_PLACEHOLDER@@\n\n");
+    }
+
+    // 2.7 Handle flashcard data interactive & streaming
+    let isStreamingFlashcard = false;
+    processed = processed.replace(/\[FLASHCARD_DATA\]([\s\S]*?)\[\/FLASHCARD_DATA\]/gi, (match, jsonStr) => {
+        return `\n\n@@FLASHCARD_BLOCK_${registerFlashcardData(jsonStr)}@@\n\n`;
+    });
+    if (/\[FLASHCARD_DATA\](?![\s\S]*?\[\/FLASHCARD_DATA\])/i.test(processed)) {
+        isStreamingFlashcard = true;
+        processed = processed.replace(/\[FLASHCARD_DATA\][\s\S]*$/i, "\n\n@@FLASHCARD_STREAMING_PLACEHOLDER@@\n\n");
+    }
+
     // 3. Parse Markdown
     let html = "";
     try {
@@ -72,6 +92,36 @@ function renderMarkdownWithMath(text) {
                 <span style="color: #93c5fd; font-size: 13px; font-weight: 500;">Đang tạo tệp Word...</span>
             </div>
         `);
+    }
+
+    if (isStreamingQuiz) {
+        html = html.replace("@@QUIZ_STREAMING_PLACEHOLDER@@", `
+            <div class="quiz-streaming-card" style="background: #18191a; border: 1px dashed #333537; border-radius: 14px; padding: 14px 18px; margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                <span style="color: #4ade80; font-size: 13px; font-weight: 500;">Đang thiết lập đề thi trắc nghiệm tương tác & chấm điểm...</span>
+            </div>
+        `);
+    }
+
+    if (isStreamingFlashcard) {
+        html = html.replace("@@FLASHCARD_STREAMING_PLACEHOLDER@@", `
+            <div class="flashcard-streaming-card" style="background: #18191a; border: 1px dashed #333537; border-radius: 14px; padding: 14px 18px; margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+                <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                <span style="color: #facc15; font-size: 13px; font-weight: 500;">Đang tạo bộ Flashcards 3D thông minh...</span>
+            </div>
+        `);
+    }
+
+    // Restore interactive Quiz & Flashcard placeholders
+    if (window.quizBlocks) {
+        Object.keys(window.quizBlocks).forEach(qid => {
+            html = html.replace(`@@QUIZ_BLOCK_${qid}@@`, window.quizBlocks[qid]);
+        });
+    }
+    if (window.flashcardBlocks) {
+        Object.keys(window.flashcardBlocks).forEach(fcid => {
+            html = html.replace(`@@FLASHCARD_BLOCK_${fcid}@@`, window.flashcardBlocks[fcid]);
+        });
     }
 
     // 4. Restore math tokens
@@ -2021,7 +2071,9 @@ function logout() {
 // ====== WELCOME SCREEN ======
 function showWelcomeScreen(show) {
     const welcomeEl = document.getElementById("welcome-screen");
+    const hubEl = document.getElementById("learning-hub-screen");
     const chatEl = document.getElementById("chat");
+    if (hubEl && !window._isViewingLearningHub) hubEl.style.display = "none";
     if (!welcomeEl) return;
     if (show) {
         welcomeEl.style.display = "flex";
@@ -4033,4 +4085,697 @@ function copyMusicLink(url, btn) {
     setTimeout(() => {
         btn.innerHTML = originalText;
     }, 2000);
+}
+
+
+/* ==========================================================================
+   🎓 BTOAN LEARNING HUB, INTERACTIVE QUIZ, 3D FLASHCARDS & SETTINGS MODAL
+   ========================================================================== */
+
+// --- Global Data Stores for Interactive Artifacts ---
+window.quizBlocks = window.quizBlocks || {};
+window.quizRegistry = window.quizRegistry || {};
+window.flashcardBlocks = window.flashcardBlocks || {};
+window.flashcardRegistry = window.flashcardRegistry || {};
+
+// 1. Register & Render Interactive Quiz
+function registerQuizData(jsonStr) {
+    const qid = "q_" + Math.random().toString(36).substr(2, 7);
+    try {
+        let clean = jsonStr.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+        const data = JSON.parse(clean);
+        data.answers = {};
+        window.quizRegistry[qid] = data;
+
+        const questions = data.questions || [];
+        let questionsHtml = "";
+
+        questions.forEach((q, idx) => {
+            const options = q.options || {};
+            let optionsHtml = "";
+            for (const [key, val] of Object.entries(options)) {
+                optionsHtml += `
+                    <div class="quiz-option-label" data-qid="${qid}" data-idx="${idx}" data-key="${key}" onclick="selectQuizOption('${qid}', ${idx}, '${key}', this)">
+                        <span class="badge bg-secondary-subtle text-light fw-bold me-2 px-2 py-1">${key}</span>
+                        <span>${escapeHtml(val)}</span>
+                    </div>
+                `;
+            }
+
+            questionsHtml += `
+                <div class="quiz-question-item" id="qitem_${qid}_${idx}">
+                    <div class="fw-bold small text-white mb-2">Câu ${idx + 1}: ${escapeHtml(q.question)}</div>
+                    <div class="quiz-options-group">${optionsHtml}</div>
+                    <div class="quiz-explanation-box" id="qexp_${qid}_${idx}" style="display:none;">
+                        <span class="fw-bold text-indigo">💡 Giải thích:</span> ${escapeHtml(q.explanation || "Không có giải thích chi tiết.")}
+                    </div>
+                </div>
+            `;
+        });
+
+        const widgetHtml = `
+            <div class="quiz-card-interactive" id="quizWidget_${qid}">
+                <div class="quiz-header-bar">
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">🎯 ${escapeHtml(data.title || "Bài kiểm tra trắc nghiệm")}</h5>
+                        <span class="extra-small text-secondary">Số lượng: ${questions.length} câu • Chấm điểm tự động</span>
+                    </div>
+                    <div class="badge bg-dark-subtle text-info border border-secondary px-3 py-1.5 rounded-pill">
+                        ⏱️ Làm bài trực tiếp
+                    </div>
+                </div>
+
+                <div class="quiz-questions-list mb-3">${questionsHtml}</div>
+
+                <div class="d-flex align-items-center justify-content-between pt-2 border-top border-secondary" id="quizActionBar_${qid}">
+                    <div id="quizScoreText_${qid}" class="fw-bold fs-6 text-white"></div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-success rounded-pill px-4 btn-sm fw-semibold" id="btnGrade_${qid}" onclick="gradeQuiz('${qid}')">
+                            <i class="bi bi-check2-circle me-1"></i>Nộp bài &amp; Chấm điểm
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        window.quizBlocks[qid] = widgetHtml;
+        return qid;
+    } catch (e) {
+        console.error("Lỗi parse Quiz JSON:", e, jsonStr);
+        window.quizBlocks[qid] = `<div class="alert alert-warning small">Không thể nạp dữ liệu trắc nghiệm: ${escapeHtml(e.message)}</div>`;
+        return qid;
+    }
+}
+
+function selectQuizOption(qid, qIndex, optionKey, el) {
+    const data = window.quizRegistry[qid];
+    if (!data || data.graded) return;
+    data.answers[qIndex] = optionKey;
+
+    const parent = el.closest(".quiz-options-group");
+    if (parent) {
+        parent.querySelectorAll(".quiz-option-label").forEach(l => l.classList.remove("selected"));
+    }
+    el.classList.add("selected");
+}
+
+function gradeQuiz(qid) {
+    const data = window.quizRegistry[qid];
+    if (!data || !data.questions) return;
+    data.graded = true;
+
+    let correctCount = 0;
+    const total = data.questions.length;
+
+    data.questions.forEach((q, idx) => {
+        const userChoice = data.answers[idx];
+        const correctChoice = q.answer;
+        const qContainer = document.getElementById(`qitem_${qid}_${idx}`);
+        const expBox = document.getElementById(`qexp_${qid}_${idx}`);
+
+        if (expBox) expBox.style.display = "block";
+
+        if (qContainer) {
+            const labels = qContainer.querySelectorAll(".quiz-option-label");
+            labels.forEach(lbl => {
+                const optKey = lbl.getAttribute("data-key");
+                if (optKey === correctChoice) {
+                    lbl.classList.add("is-correct");
+                }
+                if (optKey === userChoice && userChoice !== correctChoice) {
+                    lbl.classList.add("is-wrong");
+                }
+            });
+        }
+
+        if (userChoice === correctChoice) {
+            correctCount++;
+        }
+    });
+
+    const score10 = ((correctCount / total) * 10).toFixed(1);
+    const scoreTextEl = document.getElementById(`quizScoreText_${qid}`);
+    if (scoreTextEl) {
+        scoreTextEl.innerHTML = `🎉 Điểm số: <span class="text-success">${score10}/10</span> (Đúng ${correctCount}/${total} câu)`;
+    }
+
+    const actionBox = document.getElementById(`quizActionBar_${qid}`);
+    const gradeBtn = document.getElementById(`btnGrade_${qid}`);
+    if (gradeBtn) gradeBtn.style.display = "none";
+
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "btn btn-outline-light rounded-pill px-3 btn-sm";
+    retryBtn.innerHTML = `<i class="bi bi-arrow-counterclockwise me-1"></i>Làm lại`;
+    retryBtn.onclick = () => resetQuiz(qid);
+    actionBox.appendChild(retryBtn);
+}
+
+function resetQuiz(qid) {
+    const data = window.quizRegistry[qid];
+    if (!data) return;
+    data.graded = false;
+    data.answers = {};
+
+    const widget = document.getElementById(`quizWidget_${qid}`);
+    if (!widget) return;
+
+    widget.querySelectorAll(".quiz-option-label").forEach(l => {
+        l.classList.remove("selected", "is-correct", "is-wrong");
+    });
+    widget.querySelectorAll(".quiz-explanation-box").forEach(e => e.style.display = "none");
+
+    const scoreTextEl = document.getElementById(`quizScoreText_${qid}`);
+    if (scoreTextEl) scoreTextEl.innerHTML = "";
+
+    const gradeBtn = document.getElementById(`btnGrade_${qid}`);
+    if (gradeBtn) gradeBtn.style.display = "inline-block";
+}
+
+// 2. Register & Render 3D Flashcards
+function registerFlashcardData(jsonStr) {
+    const fcid = "fc_" + Math.random().toString(36).substr(2, 7);
+    try {
+        let clean = jsonStr.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+        const data = JSON.parse(clean);
+        const cards = data.cards || [];
+        window.flashcardRegistry[fcid] = { cards, index: 0, mastered: new Set() };
+
+        const firstCard = cards[0] || { front: "Chưa có thẻ", back: "Chưa có nội dung" };
+
+        const widgetHtml = `
+            <div class="flashcards-interactive-container" id="fcWidget_${fcid}">
+                <div class="d-flex align-items-center justify-content-between mb-2 border-bottom border-secondary pb-2">
+                    <h6 class="fw-bold text-white mb-0">🎴 ${escapeHtml(data.title || "Bộ thẻ ghi nhớ Flashcards")}</h6>
+                    <span class="badge bg-dark-subtle text-warning border border-secondary px-2.5 py-1 extra-small" id="fcCounter_${fcid}">
+                        Thẻ 1 / ${cards.length}
+                    </span>
+                </div>
+
+                <div class="flashcard-stage" id="stage_${fcid}" onclick="flipFlashcard('${fcid}')" title="Nhấn để lật thẻ 3D">
+                    <div class="flashcard-3d-inner">
+                        <div class="flashcard-face flashcard-front">
+                            <span class="badge bg-indigo-subtle text-indigo mb-2 extra-small">MẶT TRƯỚC (CÂU HỎI)</span>
+                            <div class="fs-5 fw-semibold px-3" id="frontText_${fcid}">${escapeHtml(firstCard.front)}</div>
+                            <div class="text-secondary extra-small mt-3">💡 Nhấn vào thẻ để lật xem đáp án 🔄</div>
+                        </div>
+                        <div class="flashcard-face flashcard-back">
+                            <span class="badge bg-success-subtle text-success mb-2 extra-small">MẶT SAU (ĐÁP ÁN)</span>
+                            <div class="fs-6 px-3" id="backText_${fcid}">${escapeHtml(firstCard.back)}</div>
+                            <div class="text-secondary extra-small mt-3">🔄 Nhấn để lật lại mặt trước</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-between mt-3">
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="navFlashcard('${fcid}', -1)">
+                        <i class="bi bi-chevron-left me-1"></i>Trước
+                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-warning btn-sm rounded-pill px-3" onclick="markReview('${fcid}')">
+                            <i class="bi bi-arrow-repeat me-1"></i>Ôn lại
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm rounded-pill px-3 fw-semibold" onclick="markMastered('${fcid}')">
+                            <i class="bi bi-check-lg me-1"></i>Đã thuộc
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="navFlashcard('${fcid}', 1)">
+                        Tiếp<i class="bi bi-chevron-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        window.flashcardBlocks[fcid] = widgetHtml;
+        return fcid;
+    } catch (e) {
+        console.error("Lỗi parse Flashcard JSON:", e, jsonStr);
+        window.flashcardBlocks[fcid] = `<div class="alert alert-warning small">Không thể nạp Flashcards: ${escapeHtml(e.message)}</div>`;
+        return fcid;
+    }
+}
+
+function flipFlashcard(fcid) {
+    const stage = document.getElementById(`stage_${fcid}`);
+    if (stage) stage.classList.toggle("flipped");
+}
+
+function updateFlashcardUI(fcid) {
+    const state = window.flashcardRegistry[fcid];
+    if (!state || !state.cards.length) return;
+    const card = state.cards[state.index];
+
+    const stage = document.getElementById(`stage_${fcid}`);
+    if (stage) stage.classList.remove("flipped");
+
+    const frontEl = document.getElementById(`frontText_${fcid}`);
+    const backEl = document.getElementById(`backText_${fcid}`);
+    const counterEl = document.getElementById(`fcCounter_${fcid}`);
+
+    if (frontEl) frontEl.innerText = card.front;
+    if (backEl) backEl.innerText = card.back;
+    if (counterEl) {
+        const masteredPercent = Math.round((state.mastered.size / state.cards.length) * 100);
+        counterEl.innerText = `Thẻ ${state.index + 1} / ${state.cards.length} (${masteredPercent}% đã thuộc)`;
+    }
+}
+
+function navFlashcard(fcid, dir) {
+    const state = window.flashcardRegistry[fcid];
+    if (!state) return;
+    let nextIdx = state.index + dir;
+    if (nextIdx < 0) nextIdx = state.cards.length - 1;
+    if (nextIdx >= state.cards.length) nextIdx = 0;
+    state.index = nextIdx;
+    updateFlashcardUI(fcid);
+}
+
+function markMastered(fcid) {
+    const state = window.flashcardRegistry[fcid];
+    if (!state) return;
+    state.mastered.add(state.index);
+    navFlashcard(fcid, 1);
+}
+
+function markReview(fcid) {
+    const state = window.flashcardRegistry[fcid];
+    if (!state) return;
+    state.mastered.delete(state.index);
+    navFlashcard(fcid, 1);
+}
+
+// 3. Learning Hub Controller
+window.currentLearningMode = "notebook";
+
+function openLearningHub() {
+    window._isViewingLearningHub = true;
+    const welcome = document.getElementById("welcome-screen");
+    const chat = document.getElementById("chat");
+    const hub = document.getElementById("learning-hub-screen");
+
+    if (welcome) welcome.style.display = "none";
+    if (chat) chat.style.display = "none";
+    if (hub) hub.style.display = "block";
+
+    // Set sidebar active
+    document.querySelectorAll(".sidebar-menu-nav .nav-item").forEach(el => el.classList.remove("active"));
+    const btn = document.getElementById("sidebarLearningBtn");
+    if (btn) btn.classList.add("active");
+}
+
+function closeLearningHub() {
+    window._isViewingLearningHub = false;
+    const hub = document.getElementById("learning-hub-screen");
+    if (hub) hub.style.display = "none";
+
+    const chat = document.getElementById("chat");
+    if (chat && chat.children.length > 0) {
+        chat.style.display = "block";
+    } else {
+        const welcome = document.getElementById("welcome-screen");
+        if (welcome) welcome.style.display = "flex";
+    }
+}
+
+function scrollLearningCarousel(dir) {
+    const track = document.getElementById("learningCarouselTrack");
+    if (track) {
+        track.scrollBy({ left: dir * 300, behavior: "smooth" });
+    }
+}
+
+function selectLearningCard(modeKey) {
+    window.currentLearningMode = modeKey;
+    const configPanel = document.getElementById("learningConfigPanel");
+    const extraOpts = document.getElementById("learningExtraOptions");
+    const titleEl = document.getElementById("selectedModeTitle");
+    const iconEl = document.getElementById("selectedModeIcon");
+
+    const modeMeta = {
+        notebook: { title: "Biến đề cương thành sổ ghi chú học tập (Word .docx)", icon: "📖" },
+        visual: { title: "Thử trải nghiệm khám phá sống động đa tầng", icon: "🌌" },
+        quiz: { title: "Tự kiểm tra kiến thức (Đề thi trắc nghiệm chấm điểm)", icon: "🎯" },
+        flashcard: { title: "Tạo thẻ thông tin ghi nhớ (Flashcards 3D)", icon: "🎴" },
+        socratic: { title: "Học có hướng dẫn cùng Gia sư Socratic", icon: "👨‍🏫" }
+    };
+
+    const meta = modeMeta[modeKey] || modeMeta.notebook;
+    if (titleEl) titleEl.innerText = meta.title;
+    if (iconEl) iconEl.innerText = meta.icon;
+
+    if (extraOpts) {
+        extraOpts.style.display = (modeKey === "quiz" || modeKey === "flashcard") ? "block" : "none";
+    }
+
+    if (configPanel) {
+        configPanel.style.display = "block";
+        const input = document.getElementById("learningTopicInput");
+        if (input) input.focus();
+    }
+}
+
+function closeLearningConfig() {
+    const configPanel = document.getElementById("learningConfigPanel");
+    if (configPanel) configPanel.style.display = "none";
+}
+
+function startLearningSession() {
+    const topicInput = document.getElementById("learningTopicInput");
+    const docSelect = document.getElementById("learningDocSelect");
+    let topic = topicInput?.value?.trim() || "";
+
+    if (!topic && docSelect && docSelect.value) {
+        topic = `Tài liệu từ kho tri thức: ${docSelect.value}`;
+    }
+
+    if (!topic) {
+        alert("Vui lòng nhập chủ đề học tập hoặc dán nội dung bài học!");
+        topicInput?.focus();
+        return;
+    }
+
+    const count = document.getElementById("learningCountSelect")?.value || "10";
+    const difficulty = document.getElementById("learningDifficultySelect")?.value || "Trung bình";
+
+    let prompt = "";
+    switch (window.currentLearningMode) {
+        case "notebook":
+            prompt = `[HỌC TẬP - SỔ GHI CHÚ KHOA HỌC]\nHãy tổng hợp và biên soạn toàn bộ nội dung sau thành một Sổ tay ghi chú học tập chi tiết, khoa học, có cấu trúc rõ ràng và tạo sẵn tệp Word (.docx) chuẩn hóa với thẻ [ARTIFACT type="docx" title="So_tay_ghi_chu"] để tôi tải về:\n"${topic}"`;
+            break;
+        case "visual":
+            prompt = `[HỌC TẬP - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"`;
+            break;
+        case "quiz":
+            prompt = `[HỌC TẬP - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.`;
+            break;
+        case "flashcard":
+            prompt = `[HỌC TẬP - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.`;
+            break;
+        case "socratic":
+            prompt = `[HỌC TẬP - GIA SƯ SOCRATIC]\nBạn là một gia sư AI kiên nhẫn và thông thái theo phương pháp gợi mở Socratic. Tôi muốn học về: "${topic}".\nHãy bắt đầu bằng cách chia nhỏ lộ trình học thành các nấc kiến thức, đặt cho tôi đúng 1 câu hỏi đầu tiên để kiểm tra hiểu biết ban đầu của tôi, TUYỆT ĐỐI KHÔNG đưa ngay đáp án!`;
+            break;
+        default:
+            prompt = `Học tập về chủ đề: ${topic}`;
+            break;
+    }
+
+    closeLearningConfig();
+    closeLearningHub();
+
+    const msgEl = document.getElementById("msg");
+    if (msgEl) {
+        msgEl.value = prompt;
+        const sendBtn = document.getElementById("send");
+        if (sendBtn) sendBtn.click();
+    }
+}
+
+// 4. Advanced Settings Controller
+function openSettingsModal() {
+    const modal = document.getElementById("settingsModal");
+    if (!modal) return;
+    modal.style.display = "flex";
+    switchSettingsGroup("account");
+    loadSettingsUsage();
+    loadSettingsPreferences();
+    loadSettingsGems();
+    loadSharedLinks();
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById("settingsModal");
+    if (modal) modal.style.display = "none";
+}
+
+function switchSettingsGroup(group) {
+    document.querySelectorAll(".settings-group-pane").forEach(el => el.style.display = "none");
+    document.querySelectorAll(".settings-group-pill").forEach(el => el.classList.remove("active"));
+
+    const pane = document.getElementById(`setGroup-${group}`);
+    const btn = document.getElementById(`setTabBtn-${group}`);
+    if (pane) pane.style.display = "block";
+    if (btn) btn.classList.add("active");
+}
+
+async function loadSettingsUsage() {
+    try {
+        const res = await fetch("/api/settings/usage");
+        const data = await res.json();
+        if (data.ok) {
+            const chatLbl = document.getElementById("usageChatLabel");
+            const chatBar = document.getElementById("usageChatBar");
+            const ideLbl = document.getElementById("usageIdeLabel");
+            const ideBar = document.getElementById("usageIdeBar");
+            const imgLbl = document.getElementById("usageImageLabel");
+            const imgBar = document.getElementById("usageImageBar");
+
+            if (chatLbl) chatLbl.innerText = `${data.chatCount || 12} / ${data.chatLimit || 100} lượt`;
+            if (chatBar) chatBar.style.width = `${Math.min(100, Math.round(((data.chatCount || 12) / (data.chatLimit || 100)) * 100))}%`;
+
+            if (ideLbl) ideLbl.innerText = `${data.ideCount || 5} / ${data.ideLimit || 30} lượt`;
+            if (ideBar) ideBar.style.width = `${Math.min(100, Math.round(((data.ideCount || 5) / (data.ideLimit || 30)) * 100))}%`;
+
+            if (imgLbl) imgLbl.innerText = `${data.imageCount || 3} / ${data.imageLimit || 20} ảnh`;
+            if (imgBar) imgBar.style.width = `${Math.min(100, Math.round(((data.imageCount || 3) / (data.imageLimit || 20)) * 100))}%`;
+        }
+    } catch (e) {
+        console.warn("Usage load failed:", e);
+    }
+}
+
+async function loadSettingsPreferences() {
+    try {
+        const res = await fetch("/api/settings/preferences");
+        const data = await res.json();
+        if (data.ok && data.preferences) {
+            const p = data.preferences;
+            const ci = document.getElementById("setCustomInstructions");
+            const sm = document.getElementById("setSavedMemories");
+            if (ci && p.customInstructions) ci.value = p.customInstructions;
+            if (sm && p.savedMemories) sm.value = p.savedMemories;
+        }
+    } catch (e) {
+        console.warn("Preferences load failed:", e);
+    }
+}
+
+async function saveSettingsPreferences() {
+    const ci = document.getElementById("setCustomInstructions")?.value || "";
+    const sm = document.getElementById("setSavedMemories")?.value || "";
+    const theme = document.querySelector('input[name="setThemeRadio"]:checked')?.value || "dark";
+    const alertEl = document.getElementById("settingsAlertMsg");
+
+    try {
+        const res = await fetch("/api/settings/preferences", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customInstructions: ci, savedMemories: sm, theme: theme })
+        });
+        const data = await res.json();
+        if (alertEl) {
+            alertEl.innerText = "✅ Đã lưu cài đặt và chỉ dẫn AI thành công!";
+            setTimeout(() => { alertEl.innerText = ""; }, 3000);
+        }
+    } catch (e) {
+        if (alertEl) alertEl.innerText = "❌ Lỗi lưu cài đặt: " + e.message;
+    }
+}
+
+async function loadSettingsGems() {
+    const container = document.getElementById("gemsListContainer");
+    if (!container) return;
+
+    try {
+        const res = await fetch("/api/settings/gems");
+        const data = await res.json();
+        if (data.ok && data.gems && data.gems.length > 0) {
+            container.innerHTML = "";
+            data.gems.forEach(g => {
+                const item = document.createElement("div");
+                item.className = "p-2.5 rounded-3 d-flex align-items-center justify-content-between";
+                item.style.background = "#1e1f20";
+                item.style.border = "1px solid #3c4043";
+                item.innerHTML = `
+                    <div class="d-flex align-items-center gap-2.5">
+                        <span class="fs-4">${escapeHtml(g.icon || "💎")}</span>
+                        <div>
+                            <div class="fw-semibold small text-white">${escapeHtml(g.name)}</div>
+                            <div class="extra-small text-secondary">${escapeHtml(g.description || "")}</div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1.5">
+                        <button type="button" class="btn btn-outline-success btn-sm extra-small rounded-pill px-2.5" onclick="useGem('${escapeHtml(g.name)}', '${encodeURIComponent(g.systemInstruction || "")}')">
+                            <i class="bi bi-play-fill me-1"></i>Dùng
+                        </button>
+                        ${!g.isPreset ? `<button type="button" class="btn btn-outline-danger btn-sm extra-small rounded-pill px-2" onclick="deleteGem(${g.id})"><i class="bi bi-trash"></i></button>` : ""}
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        } else {
+            container.innerHTML = `<div class="text-secondary extra-small text-center py-2">Chưa có trợ lý Gem nào.</div>`;
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="text-secondary extra-small text-center py-2">Không thể tải danh sách Gem.</div>`;
+    }
+}
+
+function toggleNewGemForm() {
+    const form = document.getElementById("newGemFormContainer");
+    if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+}
+
+async function saveNewGem() {
+    const name = document.getElementById("newGemName")?.value?.trim();
+    const icon = document.getElementById("newGemIcon")?.value?.trim() || "💎";
+    const desc = document.getElementById("newGemDesc")?.value?.trim() || "";
+    const prompt = document.getElementById("newGemPrompt")?.value?.trim() || "";
+
+    if (!name) {
+        alert("Vui lòng nhập tên cho Gem!");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/settings/gems", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, icon, description: desc, systemInstruction: prompt })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            toggleNewGemForm();
+            loadSettingsGems();
+        } else {
+            alert("Lỗi lưu Gem: " + (data.error || ""));
+        }
+    } catch (e) {
+        alert("Lỗi kết nối: " + e.message);
+    }
+}
+
+async function deleteGem(id) {
+    if (!confirm("Bạn có chắc chắn muốn xóa Gem này?")) return;
+    try {
+        const res = await fetch(`/api/settings/gems/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) loadSettingsGems();
+    } catch (e) {
+        alert("Lỗi xóa Gem: " + e.message);
+    }
+}
+
+function useGem(name, encodedPrompt) {
+    closeSettingsModal();
+    const prompt = decodeURIComponent(encodedPrompt);
+    newChat(true);
+    const msgEl = document.getElementById("msg");
+    if (msgEl) {
+        msgEl.value = `Xin chào! Tôi muốn trò chuyện cùng Gem: ${name}.`;
+        const sendBtn = document.getElementById("send");
+        if (sendBtn) sendBtn.click();
+    }
+}
+
+async function submitImportMemory() {
+    const input = document.getElementById("importMemoryInput");
+    const text = input?.value?.trim();
+    if (!text) {
+        alert("Vui lòng dán nội dung bộ nhớ muốn nhập!");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/settings/import-memory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ memoryText: text })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert("🎉 Đã nhập bộ nhớ vào Btoan AI thành công!");
+            input.value = "";
+            loadSettingsPreferences();
+        }
+    } catch (e) {
+        alert("Lỗi nhập bộ nhớ: " + e.message);
+    }
+}
+
+async function loadSharedLinks() {
+    const container = document.getElementById("sharedLinksContainer");
+    if (!container) return;
+
+    try {
+        const res = await fetch("/api/settings/shared-links");
+        const data = await res.json();
+        if (data.ok && data.links && data.links.length > 0) {
+            container.innerHTML = "";
+            data.links.forEach(l => {
+                const item = document.createElement("div");
+                item.className = "p-2 rounded-3 d-flex align-items-center justify-content-between";
+                item.style.background = "#1e1f20";
+                item.innerHTML = `
+                    <div class="overflow-hidden me-2">
+                        <div class="text-white extra-small fw-semibold text-truncate">${escapeHtml(l.title || "Cuộc trò chuyện chia sẻ")}</div>
+                        <div class="text-secondary extra-small" style="font-size:0.7rem;">Tạo lúc: ${l.createdAt ? new Date(l.createdAt).toLocaleDateString("vi-VN") : "Gần đây"}</div>
+                    </div>
+                    <div class="d-flex gap-1.5 flex-shrink-0">
+                        <button type="button" class="btn btn-outline-info btn-sm extra-small rounded-pill" onclick="navigator.clipboard.writeText(location.origin + '/share/' + '${l.token}'); alert('Đã sao chép link!');">Sao chép</button>
+                        <button type="button" class="btn btn-outline-danger btn-sm extra-small rounded-pill" onclick="revokeShareLink('${l.token}')">Thu hồi</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+    } catch (e) {}
+}
+
+async function revokeShareLink(token) {
+    if (!confirm("Bạn có chắc chắn muốn thu hồi liên kết chia sẻ này?")) return;
+    try {
+        const res = await fetch("/api/settings/revoke-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token })
+        });
+        loadSharedLinks();
+    } catch (e) {
+        alert("Lỗi thu hồi link: " + e.message);
+    }
+}
+
+async function submitUserFeedback() {
+    const category = document.getElementById("feedbackCategory")?.value || "Góp ý tính năng";
+    const rating = parseInt(document.getElementById("feedbackRating")?.value || "5");
+    const comment = document.getElementById("feedbackComment")?.value?.trim();
+
+    if (!comment) {
+        alert("Vui lòng nhập nội dung ý kiến phản hồi!");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/settings/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category, rating, comment })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert("🙏 Cảm ơn bạn rất nhiều! Ý kiến đóng góp của bạn đã được ghi nhận.");
+            const cEl = document.getElementById("feedbackComment");
+            if (cEl) cEl.value = "";
+        }
+    } catch (e) {
+        alert("Lỗi gửi phản hồi: " + e.message);
+    }
+}
+
+function openKnowledgeModal() {
+    const fileDoc = document.getElementById("fileDoc");
+    if (fileDoc) {
+        fileDoc.click();
+    } else {
+        alert("Đang mở kho tài liệu & tri thức cá nhân...");
+    }
 }
