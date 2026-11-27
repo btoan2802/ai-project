@@ -29,6 +29,21 @@ namespace BtoanAiNet.Services
 
         public async Task<string> ExecutePromptWithToolsAsync(string userPrompt, int maxToolTurns = 5, CancellationToken cancellationToken = default)
         {
+            if (string.IsNullOrWhiteSpace(userPrompt)) return "Vui lòng nhập yêu cầu.";
+            string cleanPrompt = userPrompt.Trim().ToLowerInvariant().TrimEnd('!', '?', '.', '~', ' ', ',');
+            var shortPhrases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "ê", "e", "ê bạn", "alo", "alô", "hi", "hello", "chào", "chào bạn", "bạn ơi", "test", "hey", "yo", "ơi", "oi",
+                "uk", "ừ", "u", "uh", "um", "uhm", "uhmm", "ok", "oke", "okay", "okie", "ok bạn", "vâng", "dạ", "được", "tốt", "hay",
+                "cảm ơn", "cảm ơn bạn", "thanks", "thank", "thank you", "tks", "k", "ko", "khong", "không", "chuẩn", "đúng", "tuyệt", "?"
+            };
+            if (shortPhrases.Contains(cleanPrompt))
+            {
+                if (cleanPrompt.Contains("cảm ơn") || cleanPrompt.Contains("thanks")) return "Không có chi! Rất vui được hỗ trợ bạn.";
+                if (cleanPrompt is "uk" or "ừ" or "ok" or "oke" or "okay" or "vâng" or "dạ" or "được") return "Ok bạn! Bạn cần mình hỗ trợ gì tiếp theo trong dự án?";
+                return "Chào bạn! Btoan AI Agent sẵn sàng hỗ trợ bạn lập trình và phát triển dự án.";
+            }
+
             var toolsSchema = _toolRegistry.GetOpenAiToolsDefinition();
 
             var messages = new JsonArray

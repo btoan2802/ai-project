@@ -1032,7 +1032,8 @@ body.agent-ide-body {
 .agent-chat-body {
     flex: 1 1 0px !important;
     min-height: 0 !important;
-    max-height: 100% !important;
+    height: 0 !important;
+    max-height: none !important;
     width: 100% !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -1153,14 +1154,18 @@ body.agent-ide-body {
 }
 
 /* Bottom Antigravity Prompt Box */
-.agent-prompt-wrapper {
+.agent-prompt-wrapper,
+.agent-input-footer {
     flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
     width: 100% !important;
     padding: 10px;
     background-color: var(--ide-bg-base);
-    border-top: 1px solid var(--ide-border);
-    position: relative;
+    border-top: 1px solid #2b2b2b !important;
+    position: relative !important;
+    z-index: 10 !important;
     box-sizing: border-box;
+    margin-top: auto !important;
 }
 
 .agent-prompt-box {

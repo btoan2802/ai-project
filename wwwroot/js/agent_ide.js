@@ -3959,6 +3959,11 @@ function renderAgentResponse(data, container) {
         `;
         container.appendChild(diffCard);
     }
+
+    const chatContainer = document.getElementById("agentMessagesContainer") || document.getElementById("agentChatMessages");
+    if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
 }
 
 async function runScaffoldingAndApplyAll() {

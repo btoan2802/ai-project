@@ -38,6 +38,40 @@ namespace BtoanAiNet.Services
             var response = new AgentProposalResponseModel();
             try
             {
+                if (string.IsNullOrWhiteSpace(request?.Prompt))
+                {
+                    response.Ok = false;
+                    response.Error = "Vui lòng nhập yêu cầu lập trình hoặc câu hỏi.";
+                    return response;
+                }
+
+                string cleanPrompt = request.Prompt.Trim().ToLowerInvariant().TrimEnd('!', '?', '.', '~', ' ', ',');
+                var shortPhrases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "ê", "e", "ê bạn", "alo", "alô", "hi", "hello", "chào", "chào bạn", "bạn ơi", "test", "hey", "yo", "ơi", "oi",
+                    "uk", "ừ", "u", "uh", "um", "uhm", "uhmm", "ok", "oke", "okay", "okie", "ok bạn", "vâng", "dạ", "được", "tốt", "hay",
+                    "cảm ơn", "cảm ơn bạn", "thanks", "thank", "thank you", "tks", "k", "ko", "khong", "không", "chuẩn", "đúng", "tuyệt", "?"
+                };
+
+                if (shortPhrases.Contains(cleanPrompt))
+                {
+                    response.Ok = true;
+                    response.Proposals = new List<FileChangeProposal>();
+                    if (cleanPrompt.Contains("cảm ơn") || cleanPrompt.Contains("thanks"))
+                    {
+                        response.Summary = "Không có chi! Rất vui được đồng hành cùng bạn trong dự án này.";
+                    }
+                    else if (cleanPrompt is "uk" or "ừ" or "ok" or "oke" or "okay" or "vâng" or "dạ" or "được")
+                    {
+                        response.Summary = "Ok bạn nhé! Mình luôn sẵn sàng, bạn cần mình viết thêm code, bổ sung chức năng hay tối ưu giao diện file nào cứ nhắn nhé!";
+                    }
+                    else
+                    {
+                        response.Summary = "Chào bạn! Mình là Btoan AI Agent. Dự án của bạn đã sẵn sàng, bạn cần mình hỗ trợ viết code, giải thích logic hay sửa lỗi phần nào không?";
+                    }
+                    return response;
+                }
+
                 string targetDir = string.IsNullOrWhiteSpace(request.TargetDirectory) ? projectRoot : request.TargetDirectory;
                 if (request.ProjectId > 0)
                 {

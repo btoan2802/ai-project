@@ -3399,8 +3399,12 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         [HttpGet("/api/agent/history")]
         public async Task<IActionResult> GetAgentHistory([FromQuery] string? project)
         {
-            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            int userId = CurrentUserId;
             string cleanProj = SanitizeProjectName(project);
+            if (userId <= 0)
+            {
+                return Ok(new { ok = true, project = cleanProj, messages = Array.Empty<object>() });
+            }
 
             try
             {
@@ -3484,9 +3488,13 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
         [HttpPost("/api/agent/clear-history")]
         public async Task<IActionResult> ClearAgentHistory([FromQuery] string? project, [FromBody] JsonObject? body)
         {
-            int userId = CurrentUserId > 0 ? CurrentUserId : 1;
+            int userId = CurrentUserId;
             string? proj = project ?? body?["project"]?.ToString();
             string cleanProj = SanitizeProjectName(proj);
+            if (userId <= 0)
+            {
+                return Ok(new { ok = true, project = cleanProj, message = "Đã xóa lịch sử trò chuyện." });
+            }
 
             try
             {
@@ -3516,11 +3524,38 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             return Ok(new { ok = true, project = cleanProj, message = "Đã khởi tạo phiên trò chuyện mới thành công." });
         }
 
+        private static bool ShouldDisableTools(string? prompt)
+        {
+            if (string.IsNullOrWhiteSpace(prompt)) return true;
+            string clean = prompt.Trim().ToLowerInvariant().TrimEnd('!', '?', '.', '~', ' ', ',');
+
+            var shortPhrases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "ê", "e", "ê bạn", "alo", "alô", "hi", "hello", "chào", "chào bạn", "bạn ơi", "test", "hey", "yo", "ơi", "oi",
+                "uk", "ừ", "u", "uh", "um", "uhm", "uhmm", "ok", "oke", "okay", "okie", "ok bạn", "vâng", "dạ", "được", "tốt", "hay",
+                "cảm ơn", "cảm ơn bạn", "thanks", "thank", "thank you", "tks", "k", "ko", "khong", "không", "chuẩn", "đúng", "tuyệt", "?"
+            };
+            if (shortPhrases.Contains(clean)) return true;
+
+            string[] actionVerbs = new[]
+            {
+                "tạo", "sửa", "xóa", "thêm", "fix", "build", "run", "code", "viết", "làm", "cài", "đổi", "cập nhật",
+                "compile", "biên dịch", "chạy", "scaffold", "patch", "chỉnh", "thay", "phát triển", "nâng cấp",
+                "thực hiện", "hoàn thiện", "triển khai", "setup", "install", "update", "delete", "create", "modify"
+            };
+
+            bool hasActionVerb = actionVerbs.Any(v => clean.Contains(v));
+            return !hasActionVerb;
+        }
+
         private static bool IsCasualGreeting(string? prompt)
         {
             if (string.IsNullOrWhiteSpace(prompt)) return false;
             string clean = prompt.Trim().ToLowerInvariant().TrimEnd('!', '?', '.', '~', ' ', ',');
-            return clean is "ê" or "e" or "ê bạn" or "alo" or "alô" or "hi" or "hello" or "chào" or "chào bạn" or "bạn ơi" or "test" or "hey" or "yo" or "ơi" or "oi";
+            return clean is "ê" or "e" or "ê bạn" or "alo" or "alô" or "hi" or "hello" or "chào" or "chào bạn" or "bạn ơi"
+                or "test" or "hey" or "yo" or "ơi" or "oi" or "uk" or "ừ" or "u" or "uh" or "um" or "uhm" or "uhmm"
+                or "ok" or "oke" or "okay" or "okie" or "ok bạn" or "vâng" or "dạ" or "được" or "tốt" or "hay"
+                or "cảm ơn" or "cảm ơn bạn" or "thanks" or "thank" or "tks" or "k" or "ko" or "khong" or "không" or "?";
         }
 
         // POST /api/ide/agent-chat and /api/ide/agent-run
@@ -3684,9 +3719,19 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
             // Fast Intent Gate: Trả lời chào hỏi / hội thoại thông thường ngay lập tức (không chạy tool hay quét dự án)
             if (IsCasualGreeting(model.Prompt))
             {
-                string greetingResponse = "Chào bạn! Mình là Btoan AI Agent. Dự án của bạn đã sẵn sàng, bạn cần mình hỗ trợ viết code, giải thích logic hay sửa lỗi phần nào không?";
+                string greetingResponse = "Chào bạn! Mình là Btoan AI Agent. Mình luôn sẵn sàng hỗ trợ bạn lập trình dự án này. Bạn cần mình tạo tính năng mới, giải thích code hay sửa lỗi gì cứ nhắn nhé!";
+                string lowerP = model.Prompt.Trim().ToLowerInvariant();
+                if (lowerP.Contains("cảm ơn") || lowerP.Contains("thanks"))
+                {
+                    greetingResponse = "Không có chi! Rất vui được đồng hành cùng bạn. Chúc bạn làm việc hiệu quả và cứ nhắn mình bất cứ khi nào cần nhé!";
+                }
+                else if (lowerP.Contains("uk") || lowerP.Contains("ừ") || lowerP.Contains("ok") || lowerP.Contains("oke") || lowerP.Contains("okay") || lowerP.Contains("vâng") || lowerP.Contains("dạ"))
+                {
+                    greetingResponse = "Ok bạn nhé! Dự án đã sẵn sàng, bạn cần mình viết thêm code, bổ sung chức năng hay chỉnh sửa file nào tiếp theo?";
+                }
+
                 await SendSseEventAsync("status", new { stage = "chat", message = "Btoan Agent sẵn sàng hỗ trợ..." });
-                await Task.Delay(150);
+                await Task.Delay(100);
                 await SendSseEventAsync("done", new
                 {
                     explanation = greetingResponse,
@@ -4203,6 +4248,8 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                     currentTurn++;
                     await SendSseEventAsync("turn_start", new { turn = currentTurn, message = $"Btoan Agent đang phân tích & lên phương án thực thi (Lượt {currentTurn}/{maxTurns})..." });
 
+                    bool disableTools = ShouldDisableTools(model.Prompt);
+
                     var payload = new JsonObject
                     {
                         ["systemInstruction"] = new JsonObject
@@ -4210,17 +4257,21 @@ TUYỆT ĐỐI KHÔNG XUẤT RA CHUỖI JSON {{ ""plan"": [...] }} DẠNG TEXT:
                             ["parts"] = new JsonArray { new JsonObject { ["text"] = agentSystemInstruction } }
                         },
                         ["contents"] = messages.DeepClone(),
-                        ["tools"] = toolsDefinition.DeepClone(),
-                        ["toolConfig"] = new JsonObject
-                        {
-                            ["functionCallingConfig"] = new JsonObject { ["mode"] = "AUTO" }
-                        },
                         ["generationConfig"] = new JsonObject
                         {
                             ["temperature"] = isFastMode ? 0.2 : 0.4,
                             ["maxOutputTokens"] = 16384
                         }
                     };
+
+                    if (!disableTools)
+                    {
+                        payload["tools"] = toolsDefinition.DeepClone();
+                        payload["toolConfig"] = new JsonObject
+                        {
+                            ["functionCallingConfig"] = new JsonObject { ["mode"] = "AUTO" }
+                        };
+                    }
                     if (isFastMode)
                     {
                         payload["generationConfig"]!["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };

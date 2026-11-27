@@ -4508,25 +4508,26 @@ function scrollLearningCarousel(dir) {
 
 const LEARNING_SUBJECTS = {
     tieuhoc: [
-        "Toán", "Tiếng Việt", "Tiếng Anh", "Tự nhiên và Xã hội", "Lịch sử và Địa lí", "Tin học và Công nghệ", "Đạo đức", "Khoa học"
+        "Tiếng Việt", "Toán", "Tiếng Anh", "Đạo đức", "Tự nhiên & Xã hội", "Khoa học", "Lịch sử & Địa lí", "Tin học & Công nghệ", "Giáo dục thể chất", "Âm nhạc", "Mĩ thuật", "Hoạt động trải nghiệm", "Tiếng dân tộc"
     ],
     thcs: [
-        "Toán", "Ngữ văn", "Tiếng Anh", "Khoa học tự nhiên (Vật lí, Hóa học, Sinh học)", "Lịch sử và Địa lí", "Giáo dục công dân", "Tin học", "Công nghệ"
+        "Ngữ văn", "Toán", "Ngoại ngữ 1 (Tiếng Anh)", "Giáo dục công dân", "Lịch sử", "Địa lí", "Vật lí (KHTN)", "Hóa học (KHTN)", "Sinh học (KHTN)", "Công nghệ", "Tin học", "Giáo dục thể chất", "Nghệ thuật (Âm nhạc, Mĩ thuật)", "Hoạt động trải nghiệm", "Giáo dục địa phương", "Ngoại ngữ 2"
     ],
     thpt: [
-        "Toán", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "Giáo dục kinh tế và pháp luật", "Tin học", "Công nghệ", "Luyện thi ĐGNL ĐHQG TP.HCM / Hà Nội", "Luyện thi Đánh giá tư duy ĐHBK", "Ôn thi Tốt nghiệp THPT Quốc gia"
+        "Ngữ văn", "Toán", "Ngoại ngữ 1 (Tiếng Anh)", "Lịch sử", "Địa lí", "Giáo dục kinh tế & pháp luật", "Vật lí", "Hóa học", "Sinh học", "Công nghệ", "Tin học", "GDQP & An ninh", "Giáo dục thể chất", "Nghệ thuật", "Hoạt động trải nghiệm & GDĐP", "Tư duy định lượng / Toán học (ĐGNL)", "Tư duy định tính / Ngôn ngữ (ĐGNL)", "Khoa học tự nhiên & Xã hội (ĐGNL)", "Ôn thi Tốt nghiệp THPT Quốc gia"
     ],
     dh_daicuong: [
-        "Triết học Mác - Lênin", "Kinh tế chính trị Mác - Lênin", "Chủ nghĩa xã hội khoa học", "Lịch sử Đảng Cộng sản Việt Nam", "Tư tưởng Hồ Chí Minh", "Giải tích 1", "Giải tích 2", "Giải tích 3", "Đại số tuyến tính", "Xác suất thống kê", "Vật lý đại cương", "Hóa học đại cương", "Pháp luật đại cương", "Tin học đại cương"
+        "Triết học Mác - Lênin", "Kinh tế chính trị Mác - Lênin", "Chủ nghĩa xã hội khoa học", "Lịch sử Đảng Cộng sản Việt Nam", "Tư tưởng Hồ Chí Minh", "Pháp luật đại cương", "Toán cao cấp (Giải tích 1-2-3)", "Đại số tuyến tính", "Xác suất thống kê", "Toán rời rạc", "Phương pháp tính", "Vật lý đại cương", "Hóa học đại cương", "Tin học đại cương", "Ngoại ngữ chuẩn đầu ra (IELTS/TOEIC/HSK/JLPT/TOPIK)", "Giáo dục quốc phòng & Thể chất"
     ],
     dh_chuyennganh: [
-        "CNTT: Cấu trúc dữ liệu & Giải thuật", "CNTT: Lập trình hướng đối tượng (OOP)", "CNTT: Cơ sở dữ liệu & SQL", "CNTT: Mạng máy tính & An toàn thông tin", "CNTT: Trí tuệ nhân tạo (AI & Machine Learning)", "CNTT: Phát triển Web (Fullstack)", "CNTT: Lập trình ứng dụng di động",
-        "Kinh tế: Kinh tế vi mô & Vĩ mô", "Kinh tế: Nguyên lý kế toán & Tài chính", "Kinh tế: Marketing căn bản & Digital Marketing", "Kinh tế: Quản trị học & Quản trị nhân sự", "Kinh tế: Kinh tế lượng & Phân tích dữ liệu",
-        "Kỹ thuật: Cơ học kỹ thuật & Sức bền vật liệu", "Kỹ thuật: Kỹ thuật điện & Điện tử", "Kỹ thuật: Vẽ kỹ thuật & CAD/CAM", "Kỹ thuật: Tự động hóa & PLC",
-        "Y Dược: Giải phẫu học người", "Y Dược: Sinh lý học & Sinh lý bệnh", "Y Dược: Dược lý học & Dược lâm sàng", "Y Dược: Hóa sinh y học",
-        "KH Xã hội: Xã hội học đại cương", "KH Xã hội: Tâm lý học đại cương", "KH Xã hội: Quan hệ quốc tế", "KH Xã hội: Báo chí & Truyền thông",
-        "Ngoại ngữ: Tiếng Anh chuyên ngành", "Ngoại ngữ: Luyện thi IELTS / TOEIC", "Ngoại ngữ: Tiếng Trung / Tiếng Nhật / Tiếng Hàn",
-        "Sư phạm: Giáo dục học đại cương", "Sư phạm: Tâm lý học lứa tuổi & Sư phạm"
+        "CNTT: Cấu trúc dữ liệu & Giải thuật", "CNTT: Lập trình hướng đối tượng (OOP)", "CNTT: Cơ sở dữ liệu & SQL", "CNTT: Mạng máy tính & An toàn thông tin", "CNTT: Trí tuệ nhân tạo (AI & Machine Learning)", "CNTT: Phát triển Web (Frontend / Backend / Fullstack)", "CNTT: Lập trình ứng dụng di động", "CNTT: Hệ điều hành & Kiến trúc máy tính",
+        "Kinh tế: Kinh tế vi mô & Vĩ mô", "Kinh tế: Nguyên lý kế toán & Tài chính doanh nghiệp", "Kinh tế: Marketing căn bản & Digital Marketing", "Kinh tế: Quản trị học & Quản trị nhân sự", "Kinh tế: Kinh tế lượng & Phân tích dữ liệu", "Kinh tế: Logistics & Quản lý chuỗi cung ứng", "Kinh tế: Tài chính tiền tệ & Ngân hàng",
+        "Kỹ thuật: Cơ học kỹ thuật & Sức bền vật liệu", "Kỹ thuật: Kỹ thuật điện & Điện tử", "Kỹ thuật: Vẽ kỹ thuật & CAD/CAM", "Kỹ thuật: Tự động hóa & PLC", "Kỹ thuật: Kỹ thuật nhiệt & Cơ lưu chất",
+        "Y Dược: Giải phẫu học người", "Y Dược: Sinh lý học & Sinh lý bệnh", "Y Dược: Dược lý học & Dược lâm sàng", "Y Dược: Hóa sinh y học", "Y Dược: Vi sinh & Ký sinh trùng", "Y Dược: Bệnh học nội - ngoại khoa",
+        "Luật & Hành chính: Luật dân sự & Tố tụng dân sự", "Luật & Hành chính: Luật hình sự & Tố tụng hình sự", "Luật & Hành chính: Luật hành chính & Luật kinh tế",
+        "KH Xã hội: Xã hội học đại cương", "KH Xã hội: Tâm lý học đại cương", "KH Xã hội: Quan hệ quốc tế", "KH Xã hội: Báo chí & Truyền thông đa phương tiện", "KH Xã hội: Quản trị du lịch & Lữ hành",
+        "Ngoại ngữ: Tiếng Anh chuyên ngành", "Ngoại ngữ: Ngữ pháp tiếng Anh nâng cao", "Ngoại ngữ: Luyện thi IELTS / TOEIC", "Ngoại ngữ: Tiếng Trung / Tiếng Nhật / Tiếng Hàn",
+        "Sư phạm & Nghệ thuật: Giáo dục học đại cương", "Sư phạm & Nghệ thuật: Tâm lý học lứa tuổi & Sư phạm", "Sư phạm & Nghệ thuật: Phương pháp dạy học bộ môn", "Sư phạm & Nghệ thuật: Mỹ thuật & Kiến trúc"
     ]
 };
 
