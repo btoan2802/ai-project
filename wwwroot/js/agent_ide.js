@@ -1399,8 +1399,8 @@ function toggleBottomPanelHeight() {
             btnIcon.classList.add('bi-chevron-up');
         }
     } else {
-        const maxH = Math.min(Math.floor(window.innerHeight * 0.5), window.innerHeight - 240);
-        panel.style.height = `${Math.max(180, maxH)}px`;
+        const maxH = Math.min(Math.floor(window.innerHeight * 0.45), Math.max(160, window.innerHeight - 280));
+        panel.style.height = `${Math.max(160, maxH)}px`;
         isBottomPanelMaximized = true;
         if (btnIcon) {
             btnIcon.classList.remove('bi-chevron-up');
@@ -2881,6 +2881,7 @@ async function loadAgentChatHistory(projectId) {
         if (Array.isArray(list) && list.length > 0) {
             if (splash) splash.style.display = "none";
             container.style.display = "flex";
+            container.style.flexDirection = "column";
             container.innerHTML = "";
 
             list.forEach(item => {
@@ -3258,6 +3259,7 @@ async function sendAgentTask() {
     document.getElementById("chatSplashArea").style.display = "none";
     const container = document.getElementById("agentMessagesContainer");
     container.style.display = "flex";
+    container.style.flexDirection = "column";
 
     // Append User Message
     const userMsgWrapper = document.createElement("div");
@@ -4479,7 +4481,7 @@ function initDraggableSplitters() {
 
         window.addEventListener("mousemove", (e) => {
             if (!isDragging) return;
-            const maxAllowed = Math.max(150, Math.floor(window.innerHeight - 220)); // Ensure at least 220px for editor & headers
+            const maxAllowed = Math.min(Math.floor(window.innerHeight * 0.45), Math.max(160, window.innerHeight - 260));
             const minAllowed = 80;
             const targetH = window.innerHeight - e.clientY - 24;
             const newH = Math.max(minAllowed, Math.min(maxAllowed, targetH));

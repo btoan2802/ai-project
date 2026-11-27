@@ -53,7 +53,7 @@
   <!-- 4. CSS Local -->
   <link rel="stylesheet" href="css/style.css?v=20261127_saas_v3">
   <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261127_saas_v3">
-  <link rel="stylesheet" href="css/main_style.css?v=20261127_saas_v5">
+  <link rel="stylesheet" href="css/main_style.css?v=20261127_learning_upload_v7">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -964,11 +964,31 @@
                   <textarea id="learningTopicInput" class="form-control rounded-3" rows="3" placeholder="Ví dụ: Khảo sát sự biến thiên của hàm số bậc 3, hoặc Giải bài toán mạch điện RLC, hoặc dán đề bài vào đây..."></textarea>
                 </div>
 
-                <!-- OPTIONAL: CHOOSE FROM KNOWLEDGE BASE -->
+                <!-- 4. UPLOAD DOCUMENT FROM DEVICE OR CHOOSE FROM KNOWLEDGE BASE -->
                 <div class="col-12 col-md-6">
-                  <label class="form-label small fw-semibold text-white">4. Hoặc chọn từ Kho tri thức đã tải lên:</label>
-                  <select id="learningDocSelect" class="form-select rounded-3">
-                    <option value="">-- Dùng chủ đề nhập ở trên --</option>
+                  <label class="form-label small fw-semibold text-white">4. Tài liệu ôn tập / Đề cương (Tải từ máy hoặc chọn từ Kho tri thức):</label>
+                  
+                  <!-- Direct File Upload Box -->
+                  <div class="learning-upload-box mb-2 p-2 rounded-3 border border-secondary border-dashed bg-dark d-flex flex-column gap-2">
+                    <input type="file" id="learningFileUpload" accept=".pdf,.docx,.doc,.txt,.md,.csv,.jpg,.jpeg,.png,.webp" style="display:none;" onchange="onLearningFileSelected(event)" />
+                    <button type="button" class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center gap-2 py-1.5" onclick="document.getElementById('learningFileUpload').click()">
+                      <i class="bi bi-paperclip"></i>
+                      <span>📎 Chọn tệp tài liệu từ máy (PDF, Word, TXT, Ảnh đề bài)</span>
+                    </button>
+                    <!-- File Chip preview -->
+                    <div id="learningFileChip" class="d-none align-items-center justify-content-between p-1.5 px-2.5 rounded-2 bg-secondary bg-opacity-25 border border-info extra-small text-info">
+                      <div class="d-flex align-items-center gap-2 text-truncate">
+                        <i id="learningFileIcon" class="bi bi-file-earmark-text"></i>
+                        <span id="learningFileName" class="text-truncate fw-semibold"></span>
+                        <span id="learningFileSize" class="text-secondary extra-small"></span>
+                      </div>
+                      <button type="button" class="btn btn-link text-danger p-0 ms-2 text-decoration-none" onclick="removeLearningFile()" title="Gỡ tệp">×</button>
+                    </div>
+                  </div>
+
+                  <!-- Dropdown Kho tri thức -->
+                  <select id="learningDocSelect" class="form-select rounded-3" onchange="onLearningDocSelectChanged()">
+                    <option value="">-- Hoặc chọn từ Kho tri thức đã tải lên --</option>
                   </select>
                 </div>
 
@@ -1767,7 +1787,7 @@
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
   <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
-  <script src="js/app.js?v=20261127_saas_v5"></script>
+  <script src="js/app.js?v=20261127_learning_upload_v7"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">

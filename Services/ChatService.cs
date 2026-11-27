@@ -84,14 +84,17 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
        ""questions"": [
          {
            ""id"": 1,
-           ""question"": ""Nội dung câu hỏi 1?"",
-           ""options"": [""A. Đáp án 1"", ""B. Đáp án 2"", ""C. Đáp án 3"", ""D. Đáp án 4""],
+           ""question"": ""Nội dung câu hỏi 1 (nếu có công thức Toán/Lý/Hóa thì bọc trong $...$ và BẮT BUỘC DÙNG 2 DẤU GẠCH CHÉO NGƯỢC \\\\ như \\\\frac{1}{2}, \\\\int_0^1, \\\\pi, \\\\sqrt{x})?"",
+           ""options"": [""Đáp án 1"", ""Đáp án 2"", ""Đáp án 3"", ""Đáp án 4""],
            ""correctIndex"": 0,
            ""explanation"": ""Giải thích chi tiết vì sao đáp án đúng...""
          }
        ]
      }
      [/QUIZ_DATA]
+     * QUY TẮC BẮT BUỘC TRONG [QUIZ_DATA]:
+       1. Trong mảng ""options"", TUYỆT ĐỐI KHÔNG ghi tiền tố ""A."", ""B."", ""C."", ""D."" ở đầu chuỗi (hệ thống tự động gắn huy hiệu lựa chọn A, B, C, D).
+       2. Với mọi công thức LaTeX trong JSON (như \\frac, \\sqrt, \\pi, \\int, \\sum, \\left, \\right...), BẮT BUỘC dùng 2 dấu gạch chéo ngược \\\\ để JSON không bị lỗi escape.
 4. Chế độ 'Tạo thẻ thông tin' (Flashcards):
    - Khi người dùng muốn tạo flashcard, thẻ nhớ, thẻ học nhanh:
    - Viết 1 câu mở đầu, rồi BẮT BUỘC trả về dữ liệu thẻ ghi nhớ trong cặp thẻ:

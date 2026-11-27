@@ -56,7 +56,7 @@
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
 
     <!-- Btoan Studio IDE Dark Modern CSS -->
-    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261127_agent_fix_v38" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/agent_ide.css?v=20261127_lock_layout_v40" asp-append-version="true" />
     <style>
         @@keyframes pulseFixBtn {
             0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); border-color: #f59e0b; }
@@ -620,7 +620,7 @@
             </div>
 
             <!-- Monaco Code & Diff Editor Container (#1f1f1f) -->
-            <div class="flex-grow-1 position-relative overflow-hidden d-flex flex-column editor-viewport">
+            <div class="flex-grow-1 position-relative overflow-hidden d-flex flex-column editor-viewport" style="min-height: 180px !important; flex: 1 1 200px !important;">
                 <!-- Diff View Banner (Only visible during diff review) -->
                 <div id="diffViewBanner" class="diff-view-banner" style="display: none;">
                     <div class="d-flex align-items-center gap-2">
@@ -716,7 +716,7 @@
             <div id="resizerTerminal" class="vscode-resizer-h" title="Kéo để chỉnh độ cao Terminal"></div>
 
             <!-- Bottom Terminal / Output / Problems Panel (#181818) -->
-            <div id="bottomPanel" class="vscode-bottom-panel border-top" style="height: 220px; min-height: 0; overflow: hidden;">
+            <div id="bottomPanel" class="vscode-bottom-panel border-top" style="height: 220px; min-height: 35px; max-height: calc(100% - 200px) !important; overflow: hidden;">
                 <div class="bottom-panel-header flex-shrink-0">
                     <div class="d-flex align-items-center gap-1">
                         <button id="bottomTabBtnProblems" onclick="switchBottomTab('problems')" class="panel-tab-btn">
@@ -794,7 +794,7 @@
         <div id="resizerAgent" class="vscode-resizer-v" title="Kéo để chỉnh kích thước Agent Panel"></div>
 
         <!-- 2.4. RIGHT SIDEBAR: ANTIGRAVITY AGENT PANEL (#181818) -->
-        <aside id="rightAgentPanel" class="right-chat-panel ide-right-panel" data-panel="agentPanel">
+        <aside id="rightAgentPanel" class="right-chat-panel ide-right-panel" data-panel="agentPanel" style="display: flex !important; flex-direction: column !important; height: 100% !important; max-height: 100% !important; min-height: 0 !important; overflow: hidden !important; position: relative;">
             <!-- Header -->
             <div class="agent-panel-header flex-shrink-0">
                 <div class="d-flex align-items-center gap-1.5">
@@ -829,10 +829,10 @@
             </div>
 
             <!-- Agent Messages / Timeline / Change Cards Container -->
-            <div id="agentMessagesContainer" class="agent-messages-container agent-chat-body" style="display: none;"></div>
+            <div id="agentMessagesContainer" class="agent-messages-container agent-chat-body" style="display: none; flex: 1 1 0px !important; min-height: 0 !important; height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important;"></div>
 
             <!-- Bottom Antigravity Prompt Box -->
-            <div class="agent-prompt-wrapper agent-input-footer flex-shrink-0">
+            <div class="agent-prompt-wrapper agent-input-footer flex-shrink-0" style="flex: 0 0 auto !important; position: relative !important; z-index: 10 !important; width: 100% !important; box-sizing: border-box !important;">
                 
                 <!-- Autocomplete Popup for '@@' Files Mention -->
                 <div id="mentionPopup" class="agent-autocomplete-popup" style="display: none;">
@@ -1394,6 +1394,6 @@
             if (fixBtn) fixBtn.classList.remove("pulse-fix-btn");
         };
     </script>
-    <script src="~/js/agent_ide.js?v=20261127_agent_fix_v38" asp-append-version="true"></script>
+    <script src="~/js/agent_ide.js?v=20261127_lock_layout_v40" asp-append-version="true"></script>
 </body>
 </html>

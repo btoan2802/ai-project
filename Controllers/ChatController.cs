@@ -4,6 +4,9 @@ using BtoanAiNet.Repositories;
 using BtoanAiNet.Services;
 using BtoanAiNet.ViewModels;
 using Microsoft.AspNetCore.Mvc;
+using UglyToad.PdfPig;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace BtoanAiNet.Controllers
 {
@@ -820,6 +823,115 @@ namespace BtoanAiNet.Controllers
             catch
             {
                 return Json(new List<object>());
+            }
+        }
+
+        // POST /api/learning/parse-document
+        [HttpPost]
+        [Route("api/learning/parse-document")]
+        public async Task<IActionResult> ParseLearningDocument([FromForm] IFormFile? file, [FromForm] bool saveToKnowledge = false)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return Json(new { success = false, error = "Vui lòng chọn tệp tài liệu hợp lệ" });
+            }
+
+            try
+            {
+                string fileName = Path.GetFileName(file.FileName);
+                string ext = Path.GetExtension(fileName).ToLowerInvariant();
+                string extractedText = "";
+                string? imageBase64 = null;
+                string mimeType = file.ContentType;
+
+                using var stream = file.OpenReadStream();
+
+                if (ext is ".txt" or ".md" or ".csv" or ".json")
+                {
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    extractedText = await reader.ReadToEndAsync();
+                }
+                else if (ext is ".docx")
+                {
+                    using var doc = WordprocessingDocument.Open(stream, false);
+                    var body = doc.MainDocumentPart?.Document?.Body;
+                    if (body != null)
+                    {
+                        var sb = new System.Text.StringBuilder();
+                        foreach (var elem in body.Elements())
+                        {
+                            if (elem is Paragraph p)
+                            {
+                                string t = p.InnerText;
+                                if (!string.IsNullOrWhiteSpace(t)) sb.AppendLine(t);
+                            }
+                            else if (elem is Table tbl)
+                            {
+                                foreach (var row in tbl.Elements<TableRow>())
+                                {
+                                    var cells = row.Elements<TableCell>()
+                                                   .Select(c => c.InnerText.Trim())
+                                                   .Where(c => !string.IsNullOrEmpty(c));
+                                    sb.AppendLine(string.Join(" | ", cells));
+                                }
+                            }
+                        }
+                        extractedText = sb.ToString();
+                    }
+                }
+                else if (ext is ".pdf")
+                {
+                    using var pdf = PdfDocument.Open(stream);
+                    var sb = new System.Text.StringBuilder();
+                    foreach (var page in pdf.GetPages())
+                    {
+                        string pageText = page.Text;
+                        if (!string.IsNullOrWhiteSpace(pageText))
+                        {
+                            sb.AppendLine(pageText);
+                        }
+                    }
+                    extractedText = sb.ToString();
+                }
+                else if (ext is ".jpg" or ".jpeg" or ".png" or ".webp")
+                {
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    byte[] bytes = ms.ToArray();
+                    string b64 = Convert.ToBase64String(bytes);
+                    mimeType = ext switch
+                    {
+                        ".jpg" or ".jpeg" => "image/jpeg",
+                        ".png" => "image/png",
+                        ".webp" => "image/webp",
+                        _ => "image/jpeg"
+                    };
+                    imageBase64 = $"data:{mimeType};base64,{b64}";
+                    extractedText = $"[Hình ảnh tài liệu / Đề bài: {fileName}]";
+                }
+                else
+                {
+                    return Json(new { success = false, error = $"Định dạng tệp '{ext}' chưa được hỗ trợ. Vui lòng tải file PDF, Word .docx, TXT, MD hoặc Ảnh." });
+                }
+
+                if (extractedText.Length > 300000)
+                {
+                    extractedText = extractedText.Substring(0, 300000) + "\n\n...[Tài liệu đã được rút gọn để phù hợp ngữ cảnh]...";
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    fileName = fileName,
+                    extractedText = extractedText,
+                    imageBase64 = imageBase64,
+                    mimeType = mimeType,
+                    length = extractedText.Length
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, error = $"Lỗi xử lý tài liệu: {ex.Message}" });
             }
         }
     }

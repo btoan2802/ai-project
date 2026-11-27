@@ -1332,6 +1332,11 @@ async function send() {
 
     }
 
+    if (window._pendingLearningImageBase64) {
+        images.push(window._pendingLearningImageBase64);
+        window._pendingLearningImageBase64 = null;
+    }
+
     if (docInput.files.length > 0) {
 
         for (const file of docInput.files) {
@@ -1415,7 +1420,9 @@ async function send() {
         return exportDOCX(lastExportContent)
     }
 
-    addUserBubble(userText, images)
+    const displayUserText = window._pendingUserDisplaySummary || userText;
+    window._pendingUserDisplaySummary = null;
+    addUserBubble(displayUserText, images)
     scrollToBottom()
 
     msgEl.value = ""
@@ -4180,11 +4187,25 @@ function triggerKaTeX(el) {
     }
 }
 
+// Helper: Sửa từ khóa LaTeX bị mất dấu \ và escape HTML an toàn cho KaTeX
+function formatQuizMathText(text) {
+    if (!text) return "";
+    let str = String(text);
+    // Khôi phục các ký hiệu LaTeX thường gặp bị mất dấu \
+    str = str.replace(/(?<!\\)\b(frac|sqrt|int|sum|lim|pi|infty|alpha|beta|gamma|Delta|theta|times|div|pm|leq|geq|neq|approx|rightarrow|leftarrow|left|right)\b/g, "\\$1");
+    // Escape HTML cho thẻ < và > để tránh phá vỡ DOM, nhưng giữ lại dấu $
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // 1. Register & Render Interactive Quiz
 function registerQuizData(jsonStr) {
     const qid = "q_" + Math.random().toString(36).substr(2, 7);
     try {
         let clean = jsonStr.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+        // Cứu các escape sequence bị hỏng trong JSON do LaTeX
+        clean = clean.replace(/\u000c/g, "\\\\f")
+                     .replace(/\u0008/g, "\\\\b")
+                     .replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
         const data = JSON.parse(clean);
         data.answers = {};
         window.quizRegistry[qid] = data;
@@ -4213,16 +4234,17 @@ function registerQuizData(jsonStr) {
                     keyLetter = String.fromCharCode(65 + optIndex);
                 }
 
-                // Strip leading prefixes like "0 A.", "1 B.", "A.", "A)", "1."
+                // Strip leading prefixes like "0 A.", "1 B.", "A.", "A)", "1." triệt để
                 let cleanVal = String(rawVal || "")
-                    .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/, "")
+                    .replace(/^(\s*[\$\(]?\s*)[A-Da-d][\.\)\:\-]\s*/i, "")
+                    .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, "")
                     .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
                     .trim();
 
                 optionsHtml += `
                     <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-idx="${idx}" data-key="${keyLetter}" onclick="selectQuizOption('${qid}', ${idx}, '${keyLetter}', this)">
                         <span class="quiz-opt-letter">${keyLetter}</span>
-                        <span class="quiz-opt-text flex-grow-1">${escapeHtml(cleanVal)}</span>
+                        <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal)}</span>
                     </div>
                 `;
                 optIndex++;
@@ -4231,12 +4253,12 @@ function registerQuizData(jsonStr) {
             questionsHtml += `
                 <div class="quiz-question-item mb-4 p-3 rounded-3" id="qitem_${qid}_${idx}">
                     <div class="fw-bold fs-6 quiz-question-text mb-2.5">
-                        <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${escapeHtml(q.question)}
+                        <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
                     </div>
                     <div class="quiz-options-group">${optionsHtml}</div>
                     <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="qexp_${qid}_${idx}" style="display:none; background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1;">
                         <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
-                        <div class="small">${escapeHtml(q.explanation || "Không có giải thích chi tiết.")}</div>
+                        <div class="small">${formatQuizMathText(q.explanation || "Không có giải thích chi tiết.")}</div>
                     </div>
                 </div>
             `;
@@ -4623,7 +4645,58 @@ function closeLearningConfig() {
     if (configPanel) configPanel.style.display = "none";
 }
 
-function startLearningSession() {
+// ====== FILE UPLOAD IN LEARNING HUB ======
+window._currentLearningFile = null;
+
+window.onLearningFileSelected = function(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    window._currentLearningFile = file;
+
+    const chip = document.getElementById("learningFileChip");
+    const nameEl = document.getElementById("learningFileName");
+    const sizeEl = document.getElementById("learningFileSize");
+    const iconEl = document.getElementById("learningFileIcon");
+
+    if (chip) chip.classList.remove("d-none");
+    if (nameEl) nameEl.innerText = file.name;
+    if (sizeEl) sizeEl.innerText = (file.size / 1024).toFixed(1) + " KB";
+
+    // Set icon based on extension
+    if (iconEl) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext === 'pdf') {
+            iconEl.className = "bi bi-file-earmark-pdf text-danger";
+        } else if (ext === 'docx' || ext === 'doc') {
+            iconEl.className = "bi bi-file-earmark-word text-primary";
+        } else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+            iconEl.className = "bi bi-file-earmark-image text-warning";
+        } else {
+            iconEl.className = "bi bi-file-earmark-text text-info";
+        }
+    }
+
+    // Reset doc dropdown if file selected
+    const docSelect = document.getElementById("learningDocSelect");
+    if (docSelect) docSelect.value = "";
+};
+
+window.removeLearningFile = function() {
+    window._currentLearningFile = null;
+    const fileInput = document.getElementById("learningFileUpload");
+    if (fileInput) fileInput.value = "";
+    const chip = document.getElementById("learningFileChip");
+    if (chip) chip.classList.add("d-none");
+};
+
+window.onLearningDocSelectChanged = function() {
+    const docSelect = document.getElementById("learningDocSelect");
+    if (docSelect && docSelect.value) {
+        window.removeLearningFile();
+    }
+};
+
+async function startLearningSession() {
     const gradeSelect = document.getElementById("learningGradeSelect");
     const subjectSelect = document.getElementById("learningSubjectSelect");
     const customInput = document.getElementById("learningCustomSubjectInput");
@@ -4637,8 +4710,36 @@ function startLearningSession() {
     }
 
     let topic = topicInput?.value?.trim() || "";
-    if (!topic && docSelect && docSelect.value) {
-        topic = `Tài liệu từ kho tri thức: ${docSelect.value}`;
+    let uploadedFileText = "";
+    let attachedFileName = "";
+    let attachedImageBase64 = null;
+
+    // 1. Nếu có file upload từ máy
+    if (window._currentLearningFile) {
+        attachedFileName = window._currentLearningFile.name;
+        try {
+            const formData = new FormData();
+            formData.append("file", window._currentLearningFile);
+            const parseRes = await fetch("/api/learning/parse-document", {
+                method: "POST",
+                body: formData
+            });
+            if (parseRes.ok) {
+                const parseData = await parseRes.json();
+                if (parseData.success) {
+                    uploadedFileText = parseData.extractedText || "";
+                    attachedImageBase64 = parseData.imageBase64 || null;
+                }
+            }
+        } catch (e) {
+            console.warn("Lỗi trích xuất tài liệu học tập:", e);
+        }
+    } else if (docSelect && docSelect.value) {
+        attachedFileName = docSelect.value;
+    }
+
+    if (!topic && attachedFileName) {
+        topic = `Tài liệu: ${attachedFileName}`;
     }
 
     if (!topic) {
@@ -4648,34 +4749,64 @@ function startLearningSession() {
     const count = document.getElementById("learningCountSelect")?.value || "10";
     const difficulty = document.getElementById("learningDifficultySelect")?.value || "Trung bình";
 
+    const modeLabels = {
+        notebook: "Sổ tay ghi chú",
+        visual: "Khám phá trực quan",
+        quiz: "Tự kiểm tra kiến thức",
+        flashcard: "Flashcards 3D",
+        socratic: "Gia sư Socratic"
+    };
+    const modeTitle = modeLabels[window.currentLearningMode] || "Học tập";
+
+    let fileContextInstruction = "";
+    if (uploadedFileText) {
+        fileContextInstruction = `\n\n[NỘI DUNG TÀI LIỆU ÔN TẬP TỪ TỆP "${attachedFileName}"]:\n${uploadedFileText.substring(0, 30000)}\n[HẾT TÀI LIỆU - YÊU CẦU AI RA ĐỀ VÀ GIẢNG DẠY BÁM SÁT 100% THEO TÀI LIỆU TRÊN]`;
+    }
+
     let prompt = "";
     switch (window.currentLearningMode) {
         case "notebook":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - SỔ GHI CHÚ KHOA HỌC]\nHãy tổng hợp và biên soạn toàn bộ nội dung sau thành một Sổ tay ghi chú học tập chi tiết, khoa học, đầy đủ công thức toán/lý/hóa (định dạng LaTeX $$...$$) và tạo sẵn tệp Word (.docx) chuẩn hóa với thẻ [ARTIFACT type="docx" title="So_tay_ghi_chu_${subjectText}"] để tôi tải về:\n"${topic}"`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - SỔ GHI CHÚ KHOA HỌC]\nHãy tổng hợp và biên soạn toàn bộ nội dung sau thành một Sổ tay ghi chú học tập chi tiết, khoa học, đầy đủ công thức toán/lý/hóa (định dạng LaTeX $$...$$) và tạo sẵn tệp Word (.docx) chuẩn hóa với thẻ [ARTIFACT type="docx" title="So_tay_ghi_chu_${subjectText}"] để tôi tải về:\n"${topic}"${fileContextInstruction}`;
             break;
         case "visual":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa, công thức KaTeX ($$...$$) và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa, công thức KaTeX ($$...$$) và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"${fileContextInstruction}`;
             break;
         case "quiz":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.${fileContextInstruction}`;
             break;
         case "flashcard":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm/công thức, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm/công thức, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.${fileContextInstruction}`;
             break;
         case "socratic":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - GIA SƯ SOCRATIC]\nBạn là một gia sư AI kiên nhẫn và thông thái theo phương pháp gợi mở Socratic. Tôi muốn học về môn ${subjectText}: "${topic}".\nHãy bắt đầu bằng cách chia nhỏ lộ trình học thành các nấc kiến thức, đặt cho tôi đúng 1 câu hỏi đầu tiên để kiểm tra hiểu biết ban đầu của tôi, TUYỆT ĐỐI KHÔNG đưa ngay đáp án!`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - GIA SƯ SOCRATIC]\nBạn là một gia sư AI kiên nhẫn và thông thái theo phương pháp gợi mở Socratic. Tôi muốn học về môn ${subjectText}: "${topic}".\nHãy bắt đầu bằng cách chia nhỏ lộ trình học thành các nấc kiến thức, đặt cho tôi đúng 1 câu hỏi đầu tiên để kiểm tra hiểu biết ban đầu của tôi, TUYỆT ĐỐI KHÔNG đưa ngay đáp án!${fileContextInstruction}`;
             break;
         default:
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText}]\nChủ đề: ${topic}`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText}]\nChủ đề: ${topic}${fileContextInstruction}`;
             break;
     }
 
+    // Thiết lập tóm tắt đẹp cho bong bóng người dùng thay vì toàn bộ văn bản tài liệu dài
+    let summaryText = `🎓 ${modeTitle} — Môn ${subjectText} (${gradeText})`;
+    if (attachedFileName) {
+        summaryText += `\n📎 Tài liệu: ${attachedFileName} (${count} câu • ${difficulty})`;
+    } else {
+        summaryText += `: ${topic} (${count} câu • ${difficulty})`;
+    }
+    window._pendingUserDisplaySummary = summaryText;
+
+    // Cập nhật title trình duyệt và sidebar title
+    document.title = `🎓 ${modeTitle}: ${subjectText} - Btoan AI`;
+
     closeLearningConfig();
     closeLearningHub();
+    window.removeLearningFile();
 
     const msgEl = document.getElementById("msg");
     if (msgEl) {
         msgEl.value = prompt;
+        if (attachedImageBase64) {
+            window._pendingLearningImageBase64 = attachedImageBase64;
+        }
         const sendBtn = document.getElementById("send");
         if (sendBtn) sendBtn.click();
     }
