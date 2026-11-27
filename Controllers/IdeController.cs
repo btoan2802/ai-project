@@ -700,32 +700,24 @@ namespace {cleanNamespace}.Helpers
                 }
             }
 
-            // If user still has no projects, seed shop-senior-mvc from WorkspaceTemplates if available
-            if (projectsList.Count == 0)
+            // Auto-repair outdated Order.cs in shop-senior-mvc if Status property is missing
+            try
             {
-                string templatePath = Path.Combine(_env.ContentRootPath, "WorkspaceTemplates", "shop-senior-mvc");
-                if (Directory.Exists(templatePath))
+                string shopOrderPath = Path.Combine(userRoot, "shop-senior-mvc", "Models", "Order.cs");
+                if (System.IO.File.Exists(shopOrderPath))
                 {
-                    string targetShop = Path.Combine(userRoot, "shop-senior-mvc");
-                    try
+                    string orderContent = System.IO.File.ReadAllText(shopOrderPath);
+                    if (!orderContent.Contains("public string Status"))
                     {
-                        CopyDirectoryRecursively(templatePath, targetShop);
-                        var d = new DirectoryInfo(targetShop);
-                        int fileCount = d.GetFiles("*", SearchOption.AllDirectories).Count();
-                        projectsList.Add(new
+                        string templateOrderPath = Path.Combine(_env.ContentRootPath, "WorkspaceTemplates", "shop-senior-mvc", "Models", "Order.cs");
+                        if (System.IO.File.Exists(templateOrderPath))
                         {
-                            id = d.Name,
-                            name = d.Name,
-                            path = d.Name,
-                            fileCount = fileCount,
-                            createdAt = d.CreationTimeUtc,
-                            lastModified = d.LastWriteTimeUtc,
-                            hasIndexHtml = System.IO.File.Exists(Path.Combine(d.FullName, "index.html"))
-                        });
+                            System.IO.File.Copy(templateOrderPath, shopOrderPath, true);
+                        }
                     }
-                    catch { }
                 }
             }
+            catch { }
 
             return Ok(new
             {
@@ -3415,12 +3407,6 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                 var query = _dbContext.AgentChatMessages
                     .Where(m => m.UserId == userId && m.ProjectName == cleanProj);
 
-                if (userId > 1 && !await query.AnyAsync())
-                {
-                    query = _dbContext.AgentChatMessages
-                        .Where(m => m.UserId == 1 && m.ProjectName == cleanProj);
-                }
-
                 var messages = await query
                     .OrderBy(m => m.CreatedAt)
                     .Select(m => new
@@ -3443,11 +3429,6 @@ p {{ color: #94a3b8; line-height: 1.6; font-size: 13.5px; margin-bottom: 20px; }
                     string userRoot = GetUserRootPath(userId);
                     string projectPath = Path.Combine(userRoot, cleanProj);
                     string chatFile = Path.Combine(projectPath, ".btoan_chat.json");
-                    if (!System.IO.File.Exists(chatFile) && userId > 1)
-                    {
-                        string user1Root = GetUserRootPath(1);
-                        chatFile = Path.Combine(user1Root, cleanProj, ".btoan_chat.json");
-                    }
                     if (System.IO.File.Exists(chatFile))
                     {
                         try

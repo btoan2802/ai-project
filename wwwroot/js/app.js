@@ -2798,8 +2798,10 @@ document.addEventListener("click", function (e) {
 
 function scrollToBottom() {
     const scrollContainer = document.getElementById("chatScrollWrapper") || chatEl;
-    if (!scrollContainer) return;
-    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        triggerKaTeX(scrollContainer);
+    }
 }
 window.visualViewport?.addEventListener("resize", () => {
 
@@ -4129,6 +4131,28 @@ window.quizRegistry = window.quizRegistry || {};
 window.flashcardBlocks = window.flashcardBlocks || {};
 window.flashcardRegistry = window.flashcardRegistry || {};
 
+// ====== KATEX FORMULA RENDERING HELPER ======
+function triggerKaTeX(el) {
+    if (!el && typeof document !== "undefined") {
+        el = document.getElementById("chatScrollWrapper") || document.body;
+    }
+    if (el && typeof renderMathInElement === "function") {
+        try {
+            renderMathInElement(el, {
+                delimiters: [
+                    { left: "$$", right: "$$", display: true },
+                    { left: "$", right: "$", display: false },
+                    { left: "\\(", right: "\\)", display: false },
+                    { left: "\\[", right: "\\]", display: true }
+                ],
+                throwOnError: false
+            });
+        } catch (e) {
+            console.warn("KaTeX render error:", e);
+        }
+    }
+}
+
 // 1. Register & Render Interactive Quiz
 function registerQuizData(jsonStr) {
     const qid = "q_" + Math.random().toString(36).substr(2, 7);
@@ -4142,46 +4166,73 @@ function registerQuizData(jsonStr) {
         let questionsHtml = "";
 
         questions.forEach((q, idx) => {
-            const options = q.options || {};
+            let optionsObj = q.options || {};
+            if (Array.isArray(optionsObj)) {
+                const map = {};
+                optionsObj.forEach((optText, i) => {
+                    const letter = String.fromCharCode(65 + i);
+                    map[letter] = optText;
+                });
+                optionsObj = map;
+            }
+
             let optionsHtml = "";
-            for (const [key, val] of Object.entries(options)) {
+            let optIndex = 0;
+            for (const [rawKey, rawVal] of Object.entries(optionsObj)) {
+                let keyLetter = String(rawKey).trim().toUpperCase();
+                if (/^\d+$/.test(keyLetter)) {
+                    keyLetter = String.fromCharCode(65 + parseInt(keyLetter, 10));
+                } else if (!/^[A-Z]$/.test(keyLetter)) {
+                    keyLetter = String.fromCharCode(65 + optIndex);
+                }
+
+                // Strip leading prefixes like "0 A.", "1 B.", "A.", "A)", "1."
+                let cleanVal = String(rawVal || "")
+                    .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/, "")
+                    .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
+                    .trim();
+
                 optionsHtml += `
-                    <div class="quiz-option-label" data-qid="${qid}" data-idx="${idx}" data-key="${key}" onclick="selectQuizOption('${qid}', ${idx}, '${key}', this)">
-                        <span class="badge bg-secondary-subtle text-light fw-bold me-2 px-2 py-1">${key}</span>
-                        <span>${escapeHtml(val)}</span>
+                    <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-idx="${idx}" data-key="${keyLetter}" onclick="selectQuizOption('${qid}', ${idx}, '${keyLetter}', this)">
+                        <span class="quiz-opt-letter">${keyLetter}</span>
+                        <span class="quiz-opt-text flex-grow-1">${escapeHtml(cleanVal)}</span>
                     </div>
                 `;
+                optIndex++;
             }
 
             questionsHtml += `
-                <div class="quiz-question-item" id="qitem_${qid}_${idx}">
-                    <div class="fw-bold small text-white mb-2">Câu ${idx + 1}: ${escapeHtml(q.question)}</div>
+                <div class="quiz-question-item mb-4 p-3 rounded-3" id="qitem_${qid}_${idx}">
+                    <div class="fw-bold fs-6 quiz-question-text mb-2.5">
+                        <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${escapeHtml(q.question)}
+                    </div>
                     <div class="quiz-options-group">${optionsHtml}</div>
-                    <div class="quiz-explanation-box" id="qexp_${qid}_${idx}" style="display:none;">
-                        <span class="fw-bold text-indigo">💡 Giải thích:</span> ${escapeHtml(q.explanation || "Không có giải thích chi tiết.")}
+                    <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="qexp_${qid}_${idx}" style="display:none; background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1;">
+                        <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
+                        <div class="small">${escapeHtml(q.explanation || "Không có giải thích chi tiết.")}</div>
                     </div>
                 </div>
             `;
         });
 
         const widgetHtml = `
-            <div class="quiz-card-interactive" id="quizWidget_${qid}">
-                <div class="quiz-header-bar">
+            <div class="quiz-card-container quiz-card-interactive shadow-sm my-3" id="quizWidget_${qid}">
+                <div class="quiz-card-header p-3 d-flex align-items-center justify-content-between border-bottom" style="background: rgba(255,255,255,0.03);">
                     <div>
-                        <h5 class="fw-bold text-white mb-0">🎯 ${escapeHtml(data.title || "Bài kiểm tra trắc nghiệm")}</h5>
-                        <span class="extra-small text-secondary">Số lượng: ${questions.length} câu • Chấm điểm tự động</span>
+                        <h5 class="fw-bold text-white mb-0 fs-6">🎯 ${escapeHtml(data.title || "Bài kiểm tra trắc nghiệm")}</h5>
+                        <span class="extra-small text-secondary">Số lượng: ${questions.length} câu • Chấm điểm thang 10</span>
                     </div>
-                    <div class="badge bg-dark-subtle text-info border border-secondary px-3 py-1.5 rounded-pill">
+                    <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1.5 rounded-pill">
                         ⏱️ Làm bài trực tiếp
                     </div>
                 </div>
 
-                <div class="quiz-questions-list mb-3">${questionsHtml}</div>
+                <div class="quiz-questions-list p-3">${questionsHtml}</div>
 
-                <div class="d-flex align-items-center justify-content-between pt-2 border-top border-secondary" id="quizActionBar_${qid}">
+                <div class="quiz-card-footer p-3 d-flex align-items-center justify-content-between border-top" id="quizActionBar_${qid}" style="background: rgba(255,255,255,0.02);">
                     <div id="quizScoreText_${qid}" class="fw-bold fs-6 text-white"></div>
                     <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-success rounded-pill px-4 btn-sm fw-semibold" id="btnGrade_${qid}" onclick="gradeQuiz('${qid}')">
+                        <button type="button" class="btn btn-success rounded-pill px-4 btn-sm fw-semibold shadow-sm" id="btnGrade_${qid}" onclick="gradeQuiz('${qid}')">
                             <i class="bi bi-check2-circle me-1"></i>Nộp bài &amp; Chấm điểm
                         </button>
                     </div>
@@ -4190,6 +4241,10 @@ function registerQuizData(jsonStr) {
         `;
 
         window.quizBlocks[qid] = widgetHtml;
+        setTimeout(() => {
+            const widget = document.getElementById(`quizWidget_${qid}`);
+            triggerKaTeX(widget);
+        }, 150);
         return qid;
     } catch (e) {
         console.error("Lỗi parse Quiz JSON:", e, jsonStr);
@@ -4205,7 +4260,7 @@ function selectQuizOption(qid, qIndex, optionKey, el) {
 
     const parent = el.closest(".quiz-options-group");
     if (parent) {
-        parent.querySelectorAll(".quiz-option-label").forEach(l => l.classList.remove("selected"));
+        parent.querySelectorAll(".quiz-option-label, .quiz-option-btn").forEach(l => l.classList.remove("selected"));
     }
     el.classList.add("selected");
 }
@@ -4219,22 +4274,27 @@ function gradeQuiz(qid) {
     const total = data.questions.length;
 
     data.questions.forEach((q, idx) => {
-        const userChoice = data.answers[idx];
-        const correctChoice = q.answer;
+        let userChoice = data.answers[idx];
+        let correctChoice = String(q.answer || "").trim().toUpperCase();
+        if (/^\d+$/.test(correctChoice)) {
+            correctChoice = String.fromCharCode(65 + parseInt(correctChoice, 10));
+        }
+
         const qContainer = document.getElementById(`qitem_${qid}_${idx}`);
         const expBox = document.getElementById(`qexp_${qid}_${idx}`);
 
         if (expBox) expBox.style.display = "block";
 
         if (qContainer) {
-            const labels = qContainer.querySelectorAll(".quiz-option-label");
+            const labels = qContainer.querySelectorAll(".quiz-option-btn, .quiz-option-label");
             labels.forEach(lbl => {
                 const optKey = lbl.getAttribute("data-key");
+                lbl.classList.remove("selected");
                 if (optKey === correctChoice) {
-                    lbl.classList.add("is-correct");
+                    lbl.classList.add("correct", "is-correct");
                 }
                 if (optKey === userChoice && userChoice !== correctChoice) {
-                    lbl.classList.add("is-wrong");
+                    lbl.classList.add("incorrect", "is-wrong");
                 }
             });
         }
@@ -4247,18 +4307,27 @@ function gradeQuiz(qid) {
     const score10 = ((correctCount / total) * 10).toFixed(1);
     const scoreTextEl = document.getElementById(`quizScoreText_${qid}`);
     if (scoreTextEl) {
-        scoreTextEl.innerHTML = `🎉 Điểm số: <span class="text-success">${score10}/10</span> (Đúng ${correctCount}/${total} câu)`;
+        scoreTextEl.innerHTML = `🎉 Điểm số: <span class="text-success fw-bold fs-5">${score10}/10</span> (Đúng ${correctCount}/${total} câu)`;
     }
 
     const actionBox = document.getElementById(`quizActionBar_${qid}`);
     const gradeBtn = document.getElementById(`btnGrade_${qid}`);
     if (gradeBtn) gradeBtn.style.display = "none";
 
+    const oldRetry = document.getElementById(`btnRetry_${qid}`);
+    if (oldRetry) oldRetry.remove();
+
     const retryBtn = document.createElement("button");
-    retryBtn.className = "btn btn-outline-light rounded-pill px-3 btn-sm";
+    retryBtn.id = `btnRetry_${qid}`;
+    retryBtn.className = "btn btn-outline-primary rounded-pill px-4 btn-sm fw-semibold";
     retryBtn.innerHTML = `<i class="bi bi-arrow-counterclockwise me-1"></i>Làm lại`;
     retryBtn.onclick = () => resetQuiz(qid);
-    actionBox.appendChild(retryBtn);
+    if (actionBox) actionBox.appendChild(retryBtn);
+
+    setTimeout(() => {
+        const widget = document.getElementById(`quizWidget_${qid}`);
+        triggerKaTeX(widget);
+    }, 100);
 }
 
 function resetQuiz(qid) {
@@ -4270,8 +4339,8 @@ function resetQuiz(qid) {
     const widget = document.getElementById(`quizWidget_${qid}`);
     if (!widget) return;
 
-    widget.querySelectorAll(".quiz-option-label").forEach(l => {
-        l.classList.remove("selected", "is-correct", "is-wrong");
+    widget.querySelectorAll(".quiz-option-label, .quiz-option-btn").forEach(l => {
+        l.classList.remove("selected", "correct", "incorrect", "is-correct", "is-wrong");
     });
     widget.querySelectorAll(".quiz-explanation-box").forEach(e => e.style.display = "none");
 
@@ -4280,6 +4349,9 @@ function resetQuiz(qid) {
 
     const gradeBtn = document.getElementById(`btnGrade_${qid}`);
     if (gradeBtn) gradeBtn.style.display = "inline-block";
+
+    const retryBtn = document.getElementById(`btnRetry_${qid}`);
+    if (retryBtn) retryBtn.remove();
 }
 
 // 2. Register & Render 3D Flashcards
@@ -4434,6 +4506,58 @@ function scrollLearningCarousel(dir) {
     }
 }
 
+const LEARNING_SUBJECTS = {
+    tieuhoc: [
+        "Toán", "Tiếng Việt", "Tiếng Anh", "Tự nhiên và Xã hội", "Lịch sử và Địa lí", "Tin học và Công nghệ", "Đạo đức", "Khoa học"
+    ],
+    thcs: [
+        "Toán", "Ngữ văn", "Tiếng Anh", "Khoa học tự nhiên (Vật lí, Hóa học, Sinh học)", "Lịch sử và Địa lí", "Giáo dục công dân", "Tin học", "Công nghệ"
+    ],
+    thpt: [
+        "Toán", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "Giáo dục kinh tế và pháp luật", "Tin học", "Công nghệ", "Luyện thi ĐGNL ĐHQG TP.HCM / Hà Nội", "Luyện thi Đánh giá tư duy ĐHBK", "Ôn thi Tốt nghiệp THPT Quốc gia"
+    ],
+    dh_daicuong: [
+        "Triết học Mác - Lênin", "Kinh tế chính trị Mác - Lênin", "Chủ nghĩa xã hội khoa học", "Lịch sử Đảng Cộng sản Việt Nam", "Tư tưởng Hồ Chí Minh", "Giải tích 1", "Giải tích 2", "Giải tích 3", "Đại số tuyến tính", "Xác suất thống kê", "Vật lý đại cương", "Hóa học đại cương", "Pháp luật đại cương", "Tin học đại cương"
+    ],
+    dh_chuyennganh: [
+        "CNTT: Cấu trúc dữ liệu & Giải thuật", "CNTT: Lập trình hướng đối tượng (OOP)", "CNTT: Cơ sở dữ liệu & SQL", "CNTT: Mạng máy tính & An toàn thông tin", "CNTT: Trí tuệ nhân tạo (AI & Machine Learning)", "CNTT: Phát triển Web (Fullstack)", "CNTT: Lập trình ứng dụng di động",
+        "Kinh tế: Kinh tế vi mô & Vĩ mô", "Kinh tế: Nguyên lý kế toán & Tài chính", "Kinh tế: Marketing căn bản & Digital Marketing", "Kinh tế: Quản trị học & Quản trị nhân sự", "Kinh tế: Kinh tế lượng & Phân tích dữ liệu",
+        "Kỹ thuật: Cơ học kỹ thuật & Sức bền vật liệu", "Kỹ thuật: Kỹ thuật điện & Điện tử", "Kỹ thuật: Vẽ kỹ thuật & CAD/CAM", "Kỹ thuật: Tự động hóa & PLC",
+        "Y Dược: Giải phẫu học người", "Y Dược: Sinh lý học & Sinh lý bệnh", "Y Dược: Dược lý học & Dược lâm sàng", "Y Dược: Hóa sinh y học",
+        "KH Xã hội: Xã hội học đại cương", "KH Xã hội: Tâm lý học đại cương", "KH Xã hội: Quan hệ quốc tế", "KH Xã hội: Báo chí & Truyền thông",
+        "Ngoại ngữ: Tiếng Anh chuyên ngành", "Ngoại ngữ: Luyện thi IELTS / TOEIC", "Ngoại ngữ: Tiếng Trung / Tiếng Nhật / Tiếng Hàn",
+        "Sư phạm: Giáo dục học đại cương", "Sư phạm: Tâm lý học lứa tuổi & Sư phạm"
+    ]
+};
+
+function onLearningGradeChanged() {
+    const gradeSelect = document.getElementById("learningGradeSelect");
+    const subjectSelect = document.getElementById("learningSubjectSelect");
+    const customWrapper = document.getElementById("learningCustomSubjectWrapper");
+    if (!gradeSelect || !subjectSelect) return;
+
+    const grade = gradeSelect.value || "thpt";
+    const subjects = LEARNING_SUBJECTS[grade] || LEARNING_SUBJECTS.thpt;
+
+    subjectSelect.innerHTML = subjects.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("") +
+        `<option value="__custom__">-- Tự nhập môn học khác --</option>`;
+
+    if (customWrapper) customWrapper.style.display = "none";
+}
+
+function onLearningSubjectChanged() {
+    const subjectSelect = document.getElementById("learningSubjectSelect");
+    const customWrapper = document.getElementById("learningCustomSubjectWrapper");
+    if (!subjectSelect || !customWrapper) return;
+    if (subjectSelect.value === "__custom__") {
+        customWrapper.style.display = "block";
+        const customInput = document.getElementById("learningCustomSubjectInput");
+        if (customInput) customInput.focus();
+    } else {
+        customWrapper.style.display = "none";
+    }
+}
+
 function selectLearningCard(modeKey) {
     window.currentLearningMode = modeKey;
     const configPanel = document.getElementById("learningConfigPanel");
@@ -4457,6 +4581,8 @@ function selectLearningCard(modeKey) {
         extraOpts.style.display = (modeKey === "quiz" || modeKey === "flashcard") ? "block" : "none";
     }
 
+    onLearningGradeChanged();
+
     if (configPanel) {
         configPanel.style.display = "block";
         const input = document.getElementById("learningTopicInput");
@@ -4470,18 +4596,25 @@ function closeLearningConfig() {
 }
 
 function startLearningSession() {
+    const gradeSelect = document.getElementById("learningGradeSelect");
+    const subjectSelect = document.getElementById("learningSubjectSelect");
+    const customInput = document.getElementById("learningCustomSubjectInput");
     const topicInput = document.getElementById("learningTopicInput");
     const docSelect = document.getElementById("learningDocSelect");
-    let topic = topicInput?.value?.trim() || "";
 
+    const gradeText = gradeSelect?.options[gradeSelect.selectedIndex]?.text || "Phổ thông";
+    let subjectText = subjectSelect?.value || "";
+    if (subjectText === "__custom__") {
+        subjectText = customInput?.value?.trim() || "Chung";
+    }
+
+    let topic = topicInput?.value?.trim() || "";
     if (!topic && docSelect && docSelect.value) {
         topic = `Tài liệu từ kho tri thức: ${docSelect.value}`;
     }
 
     if (!topic) {
-        alert("Vui lòng nhập chủ đề học tập hoặc dán nội dung bài học!");
-        topicInput?.focus();
-        return;
+        topic = `Toàn bộ trọng tâm kiến thức và bài tập môn ${subjectText} (${gradeText})`;
     }
 
     const count = document.getElementById("learningCountSelect")?.value || "10";
@@ -4490,22 +4623,22 @@ function startLearningSession() {
     let prompt = "";
     switch (window.currentLearningMode) {
         case "notebook":
-            prompt = `[HỌC TẬP - SỔ GHI CHÚ KHOA HỌC]\nHãy tổng hợp và biên soạn toàn bộ nội dung sau thành một Sổ tay ghi chú học tập chi tiết, khoa học, có cấu trúc rõ ràng và tạo sẵn tệp Word (.docx) chuẩn hóa với thẻ [ARTIFACT type="docx" title="So_tay_ghi_chu"] để tôi tải về:\n"${topic}"`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - SỔ GHI CHÚ KHOA HỌC]\nHãy tổng hợp và biên soạn toàn bộ nội dung sau thành một Sổ tay ghi chú học tập chi tiết, khoa học, đầy đủ công thức toán/lý/hóa (định dạng LaTeX $$...$$) và tạo sẵn tệp Word (.docx) chuẩn hóa với thẻ [ARTIFACT type="docx" title="So_tay_ghi_chu_${subjectText}"] để tôi tải về:\n"${topic}"`;
             break;
         case "visual":
-            prompt = `[HỌC TẬP - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa, công thức KaTeX ($$...$$) và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"`;
             break;
         case "quiz":
-            prompt = `[HỌC TẬP - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.`;
             break;
         case "flashcard":
-            prompt = `[HỌC TẬP - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm/công thức, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.`;
             break;
         case "socratic":
-            prompt = `[HỌC TẬP - GIA SƯ SOCRATIC]\nBạn là một gia sư AI kiên nhẫn và thông thái theo phương pháp gợi mở Socratic. Tôi muốn học về: "${topic}".\nHãy bắt đầu bằng cách chia nhỏ lộ trình học thành các nấc kiến thức, đặt cho tôi đúng 1 câu hỏi đầu tiên để kiểm tra hiểu biết ban đầu của tôi, TUYỆT ĐỐI KHÔNG đưa ngay đáp án!`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - GIA SƯ SOCRATIC]\nBạn là một gia sư AI kiên nhẫn và thông thái theo phương pháp gợi mở Socratic. Tôi muốn học về môn ${subjectText}: "${topic}".\nHãy bắt đầu bằng cách chia nhỏ lộ trình học thành các nấc kiến thức, đặt cho tôi đúng 1 câu hỏi đầu tiên để kiểm tra hiểu biết ban đầu của tôi, TUYỆT ĐỐI KHÔNG đưa ngay đáp án!`;
             break;
         default:
-            prompt = `Học tập về chủ đề: ${topic}`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText}]\nChủ đề: ${topic}`;
             break;
     }
 
@@ -4539,12 +4672,23 @@ function closeSettingsModal() {
 
 function switchSettingsGroup(group) {
     document.querySelectorAll(".settings-group-pane").forEach(el => el.style.display = "none");
-    document.querySelectorAll(".settings-group-pill").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".settings-group-pill, .settings-nav-item").forEach(el => el.classList.remove("active"));
 
     const pane = document.getElementById(`setGroup-${group}`);
     const btn = document.getElementById(`setTabBtn-${group}`);
     if (pane) pane.style.display = "block";
     if (btn) btn.classList.add("active");
+
+    const titleEl = document.getElementById("settingsCurrentGroupTitle");
+    if (titleEl) {
+        const titles = {
+            account: "Tài khoản & Hạn mức",
+            preferences: "Lựa chọn ưu tiên",
+            privacy: "Dữ liệu & Quyền riêng tư",
+            admin: "Quản trị viên"
+        };
+        titleEl.innerText = titles[group] || "Cài đặt";
+    }
 
     if (group === "admin") {
         loadAdminData();
@@ -4942,12 +5086,12 @@ async function loadAdminUsers() {
                 </td>
                 <td class="text-center fw-semibold text-info">${u.conversationCount || 0}</td>
                 <td class="text-center fw-semibold text-success">${u.projectCount || 0}</td>
-                <td class="text-end">
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-${u.isPro ? 'warning' : 'primary'} extra-small py-0 px-2" onclick="toggleAdminUserPro(${u.id})" title="${u.isPro ? 'Chuyển về Free' : 'Nâng cấp Pro'}">
-                            ${u.isPro ? 'Hạ Free' : 'Lên Pro'}
+                <td class="text-end" style="white-space: nowrap;">
+                    <div class="d-inline-flex gap-1">
+                        <button type="button" class="btn btn-outline-${u.isPro ? 'warning' : 'primary'} extra-small py-0.5 px-2 text-nowrap" onclick="toggleAdminUserPro(${u.id})" title="${u.isPro ? 'Chuyển về Free' : 'Nâng cấp Pro'}">
+                            ${u.isPro ? 'Hạ Free' : 'Nâng Pro'}
                         </button>
-                        <button type="button" class="btn btn-outline-${u.isLocked ? 'success' : 'danger'} extra-small py-0 px-2" onclick="toggleAdminUserLock(${u.id})" title="${u.isLocked ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}">
+                        <button type="button" class="btn btn-outline-${u.isLocked ? 'success' : 'danger'} extra-small py-0.5 px-2 text-nowrap" onclick="toggleAdminUserLock(${u.id})" title="${u.isLocked ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}">
                             ${u.isLocked ? 'Mở' : 'Khóa'}
                         </button>
                     </div>

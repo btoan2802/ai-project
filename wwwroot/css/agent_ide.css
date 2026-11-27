@@ -764,16 +764,18 @@ body.agent-ide-body {
     align-items: center;
     gap: 5px;
     height: 24px;
+    line-height: 22px;
     padding: 0 8px;
     border-radius: 4px;
     background: #252526;
     color: #cccccc;
     font-size: 11.5px;
-    white-space: nowrap;
+    white-space: nowrap !important;
     border: 1px solid #333333;
     cursor: pointer;
     user-select: none;
-    flex-shrink: 0;
+    flex-shrink: 0 !important;
+    box-sizing: border-box;
     transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
@@ -791,7 +793,7 @@ body.agent-ide-body {
 
 .terminal-pill-name {
     display: inline-block;
-    white-space: nowrap;
+    white-space: nowrap !important;
 }
 
 .terminal-pill-close {
@@ -812,6 +814,7 @@ body.agent-ide-body {
     align-items: center;
     gap: 5px;
     height: 24px;
+    line-height: 22px;
     padding: 0 10px;
     border-radius: 5px;
     background: rgba(234, 179, 8, 0.14);
@@ -819,10 +822,16 @@ body.agent-ide-body {
     color: #facc15;
     font-size: 11.5px;
     font-weight: 500;
-    white-space: nowrap;
-    flex-shrink: 0;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box;
     cursor: pointer;
     transition: all 0.15s ease;
+}
+
+.fix-btn-text {
+    white-space: nowrap !important;
+    display: inline-block !important;
 }
 
 .terminal-fix-pill:hover {
@@ -929,6 +938,7 @@ body.agent-ide-body {
     width: 380px;
     min-width: 320px;
     height: 100% !important;
+    max-height: 100% !important;
     background-color: var(--ide-bg-base);
     border-left: 1px solid var(--ide-border);
     display: flex !important;
@@ -1020,8 +1030,9 @@ body.agent-ide-body {
 #agentMessagesContainer,
 #agentChatMessages,
 .agent-chat-body {
-    flex: 1 1 auto !important;
+    flex: 1 1 0px !important;
     min-height: 0 !important;
+    max-height: 100% !important;
     width: 100% !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
