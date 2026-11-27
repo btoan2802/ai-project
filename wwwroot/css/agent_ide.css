@@ -923,19 +923,25 @@ body.agent-ide-body {
 }
 
 /* 2.4. RIGHT SIDEBAR: ANTIGRAVITY AGENT PANEL (#181818) */
-.right-chat-panel {
+.right-chat-panel,
+#rightAgentPanel,
+#agentPanel,
+.ide-right-panel {
     width: 380px;
-    min-width: 300px;
-    height: 100%;
+    min-width: 320px;
+    height: 100% !important;
     background-color: var(--ide-bg-base);
     border-left: 1px solid var(--ide-border);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
     position: relative;
+    box-sizing: border-box;
 }
 
 .agent-panel-header {
+    flex: 0 0 auto !important;
+    width: 100% !important;
     height: 35px;
     padding: 0 12px;
     background-color: var(--ide-bg-base);
@@ -943,6 +949,7 @@ body.agent-ide-body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    box-sizing: border-box;
 }
 
 .agent-header-title {
@@ -953,13 +960,18 @@ body.agent-ide-body {
 }
 
 .chat-splash-area {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     padding: 24px 16px;
-    margin: auto 0;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box;
 }
 
 .copilot-sparkle-icon {
@@ -1005,13 +1017,50 @@ body.agent-ide-body {
     background-color: rgba(56, 189, 248, 0.2);
 }
 
-.agent-messages-container {
-    flex-grow: 1;
-    overflow-y: auto;
+.agent-messages-container,
+#agentMessagesContainer,
+#agentChatMessages,
+.agent-chat-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
     padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    box-sizing: border-box;
+}
+
+/* Chống tràn chuỗi đường dẫn/lỗi biên dịch dài trong bong bóng chat */
+.agent-message-bubble,
+.agent-messages-container > div,
+.agent-messages-container .d-flex,
+.agent-messages-container .p-2,
+.agent-thought-body,
+.agent-plan-card,
+.agent-diff-card,
+.agent-cli-scaffold-card,
+.agent-modified-files-card {
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    box-sizing: border-box;
+}
+
+/* Thẻ <pre> / <code> bên trong tin nhắn */
+.agent-messages-container pre,
+.agent-messages-container code,
+.agent-messages-container .font-mono,
+.agent-thought-body pre,
+.agent-thought-body code {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+    overflow-wrap: anywhere !important;
+    box-sizing: border-box;
 }
 
 /* Agent Plan Card */
@@ -1095,10 +1144,13 @@ body.agent-ide-body {
 
 /* Bottom Antigravity Prompt Box */
 .agent-prompt-wrapper {
+    flex: 0 0 auto !important;
+    width: 100% !important;
     padding: 10px;
     background-color: var(--ide-bg-base);
     border-top: 1px solid var(--ide-border);
     position: relative;
+    box-sizing: border-box;
 }
 
 .agent-prompt-box {
@@ -2106,6 +2158,7 @@ body.agent-ide-body {
     /* Agent tab */
     .vscode-main-container[data-mobile-tab="agent"] #rightAgentPanel {
         display: flex !important;
+        flex-direction: column !important;
         width: 100% !important;
         min-width: 100% !important;
         max-width: 100% !important;

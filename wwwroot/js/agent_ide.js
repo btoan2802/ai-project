@@ -1332,6 +1332,7 @@ function openRightAgentPanel() {
     if (!panel) return;
     panel.classList.remove("ide-panel-hidden", "d-none");
     panel.style.display = "flex";
+    panel.style.flexDirection = "column";
     if (panel.style.width === "0px" || panel.style.width === "0" || !panel.style.width) {
         panel.style.width = "380px";
     }
@@ -1346,6 +1347,9 @@ function toggleRightAgentPanel() {
     if (!panel) return;
     const isHidden = panel.style.display === "none";
     panel.style.display = isHidden ? "flex" : "none";
+    if (isHidden) {
+        panel.style.flexDirection = "column";
+    }
     if (resizer) resizer.style.display = isHidden ? "block" : "none";
     triggerEditorLayout();
 }
@@ -4419,7 +4423,7 @@ function initDraggableSplitters() {
 
         window.addEventListener("mousemove", (e) => {
             if (!isDragging) return;
-            const newW = Math.max(260, Math.min(800, window.innerWidth - e.clientX));
+            const newW = Math.max(320, Math.min(800, window.innerWidth - e.clientX));
             rightPanel.style.width = `${newW}px`;
             triggerEditorLayout();
         });
@@ -4522,6 +4526,7 @@ function initGlobalShortcuts() {
             const panel = document.getElementById("rightAgentPanel");
             if (panel && panel.style.display === "none") {
                 panel.style.display = "flex";
+                panel.style.flexDirection = "column";
                 triggerEditorLayout();
             }
             const agentInput = document.getElementById("agentTaskInput");
