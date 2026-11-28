@@ -327,11 +327,29 @@ body.dark-mode .quiz-card-footer,
   white-space: nowrap !important;
   min-width: 66px !important;
   height: 34px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 13px !important;
+  flex-shrink: 0 !important;
   box-sizing: border-box !important;
+}
+
+/* ====== GIAO DIỆN 🎓 HỌC TẬP CHÍNH GIỮA MÀN HÌNH KHÔNG CẦN CUỘN ====== */
+#learning-hub-screen,
+#learningHubSection,
+.learning-hub-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 180px);
+  width: 100%;
+  padding: 16px 24px 120px 24px;
+  margin: 0 auto;
 }
 
 /* ====== BẢNG BIẾN THIÊN (BBT) & ĐỒ THỊ SVG ====== */

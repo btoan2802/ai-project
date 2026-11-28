@@ -873,11 +873,27 @@ function streamBot(text, exportType = null) {
             content.textContent = cleanedCurrent;
         }
 
-        chatEl.scrollTop = chatEl.scrollHeight;
+        const isStreamBotQuiz = normalizedText.includes("[QUIZ_DATA]") || normalizedText.includes("[FLASHCARD_DATA]");
+        if (!isStreamBotQuiz) {
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
 
         if (i >= totalLen) {
             clearInterval(timer);
             isSending = false;
+
+            if (isStreamBotQuiz) {
+                const targetCard = bubble.querySelector(".quiz-card-container, .flashcard-deck-container") || bubble.closest(".msgrow") || bubble;
+                const scrollContainer = document.getElementById("chatScrollWrapper") || chatEl;
+                if (scrollContainer && targetCard) {
+                    setTimeout(() => {
+                        const cardRect = targetCard.getBoundingClientRect();
+                        const wrapperRect = scrollContainer.getBoundingClientRect();
+                        const targetTop = scrollContainer.scrollTop + (cardRect.top - wrapperRect.top) - 16;
+                        scrollContainer.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+                    }, 180);
+                }
+            }
 
             // Highlight syntax 1 lần duy nhất sau khi stream xong để tiết kiệm tài nguyên
             content.querySelectorAll("pre code").forEach(el => {
@@ -5320,13 +5336,24 @@ window.currentLearningMode = "notebook";
 
 function openLearningHub() {
     window._isViewingLearningHub = true;
-    const welcome = document.getElementById("welcome-screen");
-    const chat = document.getElementById("chat");
-    const hub = document.getElementById("learning-hub-screen");
+    const welcome = document.getElementById("welcome-screen") || document.getElementById("welcomeScreen");
+    const chat = document.getElementById("chat") || document.getElementById("chatMessagesContainer");
+    const hub = document.getElementById("learning-hub-screen") || document.getElementById("learningHubSection");
+    const configPanel = document.getElementById("learningConfigPanel");
 
     if (welcome) welcome.style.display = "none";
     if (chat) chat.style.display = "none";
-    if (hub) hub.style.display = "block";
+    if (configPanel) configPanel.style.display = "none";
+    if (hub) hub.style.display = "flex";
+
+    // Bắt buộc reset vị trí cuộn ngay lập tức về đỉnh
+    const scrollContainer = document.getElementById("chatScrollWrapper") || chat;
+    if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
 
     // Set sidebar active
     document.querySelectorAll(".sidebar-menu-nav .nav-item").forEach(el => el.classList.remove("active"));
@@ -5336,16 +5363,27 @@ function openLearningHub() {
 
 function closeLearningHub() {
     window._isViewingLearningHub = false;
-    const hub = document.getElementById("learning-hub-screen");
+    const hub = document.getElementById("learning-hub-screen") || document.getElementById("learningHubSection");
     if (hub) hub.style.display = "none";
 
-    const chat = document.getElementById("chat");
+    const configPanel = document.getElementById("learningConfigPanel");
+    if (configPanel) configPanel.style.display = "none";
+
+    const chat = document.getElementById("chat") || document.getElementById("chatMessagesContainer");
     if (chat && chat.children.length > 0) {
         chat.style.display = "block";
     } else {
-        const welcome = document.getElementById("welcome-screen");
+        const welcome = document.getElementById("welcome-screen") || document.getElementById("welcomeScreen");
         if (welcome) welcome.style.display = "flex";
     }
+
+    const scrollContainer = document.getElementById("chatScrollWrapper") || chat;
+    if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
 }
 
 function scrollLearningCarousel(dir) {

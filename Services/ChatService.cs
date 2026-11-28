@@ -143,14 +143,19 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
      4. Mọi công thức Toán/Lý/Hóa phải bọc trong $...$ hoặc $$...$$.
      5. Trong mảng ""options"", TUYỆT ĐỐI KHÔNG ghi tiền tố ""A."", ""B."", ""C."", ""D."" ở đầu chuỗi (hệ thống tự động hiển thị huy hiệu A, B, C, D).
 
-   * QUY TẮC CHƯƠNG TRÌNH GDPT 2018 MỚI (ĐỀ THI 2025–2026):
-     1. TUYỆT ĐỐI LOẠI BỎ 100% KIẾN THỨC VỀ SỐ PHỨC ($z = a + bi$). Không được ra bất kỳ câu hỏi nào liên quan đến số phức.
-     2. Cấu trúc đề Toán bám sát chương trình mới: Khảo sát hàm số (chú ý tiệm cận xiên), Mũ - Logarit, Nguyên hàm - Tích phân và ứng dụng thực tế, Hình học không gian tọa độ Oxyz (vectơ, mặt phẳng, đường thẳng, mặt cầu), Thống kê số liệu ghép nhóm (khoảng biến thiên, khoảng tứ phân vị, phương sai, độ lệch chuẩn), Xác suất cổ điển, xác suất có điều kiện và công thức Bayes / xác suất toàn phần.
-     3. BẮT BUỘC 35%–40% BÀI TOÁN THỰC TẾ: Phần II ít nhất 2/4 câu ứng dụng thực tế; Phần III ít nhất 4/6 câu bài toán thực tế (kinh tế, tối ưu hóa, chuyển động, y tế, vật lý, đời sống...).
+   * QUY TẮC CHƯƠNG TRÌNH GDPT 2018 MỚI CHO ĐỀ TOÁN THPTQG 2025–2026:
+     1. LOẠI BỎ HOÀN TOÀN SỐ PHỨC: Tuyệt đối KHÔNG ra bất kỳ câu hỏi nào liên quan đến số phức z = a + bi, môđun số phức, số phức liên hợp hay phương trình bậc hai trên tập số phức (chương trình GDPT 2018 mới đã bỏ hoàn toàn chuyên đề Số phức).
+     2. Bám sát 100% ma trận kiến thức Toán THPT 2025–2026:
+        - Giải tích: Ứng dụng đạo hàm khảo sát hàm số (đơn điệu, cực trị, GTLN-GTNN, tiệm cận đứng/ngang/xiên), hàm số mũ & logarit, nguyên hàm – tích phân & ứng dụng tính diện tích hình phẳng, thể tích vật thể tròn xoay.
+        - Hình học & Đo lường: Thể tích khối đa diện/khối tròn xoay, góc và khoảng cách trong không gian, phương pháp tọa độ trong không gian Oxyz (vectơ, mặt phẳng, đường thẳng, mặt cầu).
+        - Thống kê & Xác suất mới: Các số đặc trưng đo mức độ phân tán của mẫu số liệu ghép nhóm (khoảng biến thiên, khoảng tứ phân vị, phương sai, độ lệch chuẩn); xác suất có điều kiện, công thức xác suất toàn phần và công thức Bayes.
+     3. BẮT BUỘC có Toán thực tế (chiếm 35%–40% đề thi):
+        - Phần II (Đúng/Sai): Ít nhất 2/4 câu là bài toán thực tế (mô hình chuyển động vật lý v(t), a(t), bài toán tối ưu chi phí/doanh thu/diện tích, mô hình tăng trưởng mũ/lãi suất, hoặc xác suất Bayes trong y tế/sản xuất).
+        - Phần III (Trả lời ngắn): Ít nhất 4/6 câu là bài toán ứng dụng thực tiễn yêu cầu tính toán ra con số cụ thể (làm tròn theo đúng yêu cầu đề bài).
 
    * BẢNG BIẾN THIÊN (BBT) & ĐỒ THỊ SVG — CẤM CÂU HỎI THIẾU HÌNH (CÂU HỎI MA):
      1. Hỗ trợ trường ""variationTable"" (bảng biến thiên dạng HTML <table>...</table> hoặc object { ""x"": [...], ""yPrime"": [...], ""y"": [...] }) và trường ""svgGraph"" (mã SVG đồ thị hàm số Oxy hoàn chỉnh với thẻ <svg>).
-     2. NGUYÊN TẮC THÉP: TUYỆT ĐỐI CẤM ra câu hỏi có các câu như: 'Cho hàm số có đồ thị như hình bên', 'Dựa vào bảng biến thiên dưới đây', 'Cho bảng biến thiên như hình vẽ' NẾU KHÔNG KÈM THEO trường 'variationTable' hoặc 'svgGraph' trong JSON! Nếu không có hình vẽ hay bảng biến thiên, BẮT BUỘC phải cho biểu thức đại số tường minh của hàm số $y = f(x)$ hoặc đạo hàm $f'(x)$.
+     2. NGUYÊN TẮC THÉP: Nếu câu hỏi KHÔNG cung cấp kèm dữ liệu variationTable hoặc svgGraph hợp lệ trong JSON, AI TUYỆT ĐỐI KHÔNG ĐƯỢC dùng các cụm từ 'có bảng biến thiên như sau', 'có đồ thị như hình bên', 'dựa vào hình vẽ dưới đây' — bắt buộc phải cho biểu thức đại số tường minh của hàm số y = f(x) hoặc đạo hàm f'(x) để thí sinh tính toán trực tiếp.
 4. Chế độ 'Tạo thẻ thông tin' (Flashcards):
    - Khi người dùng muốn tạo flashcard, thẻ nhớ, thẻ học nhanh:
    - Viết 1 câu mở đầu, rồi BẮT BUỘC trả về dữ liệu thẻ ghi nhớ trong cặp thẻ:
