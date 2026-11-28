@@ -162,11 +162,11 @@ function syncSidebarChatTitle(arg1, arg2) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id: targetId, title: cleanTitle })
-            }).catch(() => {});
+            }).catch(() => { });
         }
         if (!found) {
             const activeTitleEl = document.querySelector('.chat-history-item.active .chat-title') ||
-                                  document.querySelector('.chat-history-item:first-child .chat-title');
+                document.querySelector('.chat-history-item:first-child .chat-title');
             if (activeTitleEl) {
                 activeTitleEl.innerText = cleanTitle;
             }
@@ -329,14 +329,14 @@ function userWantsExport(text = "") {
     if (explicitKeywords.some(k => t.includes(k))) return true;
 
     // Check if user confirmed after bot offered file creation
-    const isConfirm = t === "có" || t === "co" || t === "ok" || t === "ừ" || t === "u" || 
-                      t === "được" || t === "duoc" || t === "làm đi" || t === "xuất đi" || 
-                      t === "tạo đi" || t === "có nhé" || t === "xuất file đi" || t === "tạo file đi";
+    const isConfirm = t === "có" || t === "co" || t === "ok" || t === "ừ" || t === "u" ||
+        t === "được" || t === "duoc" || t === "làm đi" || t === "xuất đi" ||
+        t === "tạo đi" || t === "có nhé" || t === "xuất file đi" || t === "tạo file đi";
 
     const lastBot = String(lastAIAnswer || "").toLowerCase();
-    const botOffered = lastBot.includes("tạo file") || lastBot.includes("xuất file") || 
-                       lastBot.includes("file excel") || lastBot.includes("file word") || 
-                       lastBot.includes("bảng tính") || lastBot.includes("file pdf");
+    const botOffered = lastBot.includes("tạo file") || lastBot.includes("xuất file") ||
+        lastBot.includes("file excel") || lastBot.includes("file word") ||
+        lastBot.includes("bảng tính") || lastBot.includes("file pdf");
 
     return isConfirm && botOffered;
 }
@@ -4189,8 +4189,8 @@ function triggerKaTeX(el) {
     }
     if (typeof MathJax !== "undefined" && MathJax.typesetPromise) {
         try {
-            MathJax.typesetPromise(el ? [el] : undefined).catch(() => {});
-        } catch (e) {}
+            MathJax.typesetPromise(el ? [el] : undefined).catch(() => { });
+        } catch (e) { }
     }
 }
 
@@ -4627,11 +4627,17 @@ function gradeThptqgQuiz(qid) {
     // --- 1. CHẤM PHẦN I (0.25đ / câu) ---
     let p1Correct = 0;
     part1.forEach((q, idx) => {
-        const userChoice = data.p1Answers[idx];
-        let correctChoice = String(q.answer || "").trim().toUpperCase();
-        if (/^\d+$/.test(correctChoice)) {
-            correctChoice = String.fromCharCode(65 + parseInt(correctChoice, 10));
+        let optionsObj = q.options || {};
+        if (Array.isArray(optionsObj)) {
+            const map = {};
+            optionsObj.forEach((optText, i) => {
+                map[String.fromCharCode(65 + i)] = optText;
+            });
+            optionsObj = map;
         }
+
+        const userChoice = data.p1Answers[idx] ? String(data.p1Answers[idx]).trim().toUpperCase() : "";
+        const correctChoice = extractCorrectOptionKey(q, optionsObj);
 
         const container = document.getElementById(`thptqg_p1_${qid}_${idx}`);
         const expBox = document.getElementById(`thptqg_p1_exp_${qid}_${idx}`);
@@ -4640,7 +4646,7 @@ function gradeThptqgQuiz(qid) {
         if (container) {
             const labels = container.querySelectorAll(".quiz-option-btn, .quiz-option-label");
             labels.forEach(lbl => {
-                const optKey = lbl.getAttribute("data-key");
+                const optKey = (lbl.getAttribute("data-key") || "").toUpperCase();
                 lbl.classList.remove("selected");
                 if (optKey === correctChoice) {
                     lbl.classList.add("correct", "is-correct");
@@ -4650,7 +4656,7 @@ function gradeThptqgQuiz(qid) {
                 }
             });
         }
-        if (userChoice === correctChoice) {
+        if (userChoice && correctChoice && userChoice === correctChoice) {
             p1Correct++;
         }
     });
@@ -4668,7 +4674,8 @@ function gradeThptqgQuiz(qid) {
         statements.forEach((stmt, sIdx) => {
             const sKey = (stmt.key || stmt.label || stmt.letter || String.fromCharCode(97 + sIdx)).toLowerCase();
             const userVal = data.p2Answers[`${idx}_${sKey}`];
-            const correctVal = Boolean(stmt.answer !== undefined ? stmt.answer : (stmt.result !== undefined ? stmt.result : stmt.correct));
+            const rawAns = stmt.answer !== undefined ? stmt.answer : (stmt.result !== undefined ? stmt.result : stmt.correct);
+            const correctVal = parseBooleanAnswer(rawAns);
 
             const row = document.getElementById(`thptqg_p2_stmt_${qid}_${idx}_${sKey}`);
             const btnTrue = document.getElementById(`btn_tf_${qid}_${idx}_${sKey}_true`);
@@ -4713,8 +4720,9 @@ function gradeThptqgQuiz(qid) {
     const p3PointPerQ = struct.p3Point || (isMath ? 0.50 : 0.25);
 
     part3.forEach((q, idx) => {
-        const rawUser = String(data.p3Answers[idx] || "").trim().replace(",", ".");
-        const rawCorrect = String(q.answer || "").trim().replace(",", ".");
+        const rawUser = String(data.p3Answers[idx] || "").trim().replace(",", ".").replace(/\$/g, "");
+        const rawAns = q.answer !== undefined ? q.answer : (q.result !== undefined ? q.result : (q.correct !== undefined ? q.correct : ""));
+        const rawCorrect = String(rawAns || "").trim().replace(",", ".").replace(/\$/g, "");
 
         let isRight = false;
         if (rawUser && rawCorrect) {
@@ -4874,6 +4882,100 @@ function selectQuizOption(qid, qIndex, optionKey, el) {
     el.classList.add("selected");
 }
 
+// Helper: Chuyển đổi an toàn giá trị Boolean từ mọi dạng dữ liệu AI (tránh bug JS Boolean("false") === true)
+function parseBooleanAnswer(val) {
+    if (typeof val === "boolean") return val;
+    if (typeof val === "number") return val === 1;
+    if (typeof val === "string") {
+        const s = val.trim().toLowerCase();
+        if (s === "true" || s === "đúng" || s === "dung" || s === "1" || s === "t" || s === "đ" || s === "d") return true;
+        if (s === "false" || s === "sai" || s === "0" || s === "f" || s === "s") return false;
+    }
+    return Boolean(val);
+}
+
+// Helper: Trích xuất chính xác chữ cái đáp án đúng (A, B, C, D) từ mọi định dạng AI trả về
+function extractCorrectOptionKey(q, optionsObj) {
+    if (!q) return "";
+
+    // 1. Tìm trường đáp án đúng từ các biến thể phổ biến
+    let raw = q.answer !== undefined ? q.answer :
+              (q.correct !== undefined ? q.correct :
+              (q.correct_answer !== undefined ? q.correct_answer :
+              (q.correctAnswer !== undefined ? q.correctAnswer :
+              (q.correct_option !== undefined ? q.correct_option :
+              (q.correctOption !== undefined ? q.correctOption :
+              (q.key !== undefined ? q.key :
+              (q.solution_key !== undefined ? q.solution_key :
+              (q.result !== undefined ? q.result : ""))))))));
+
+    if (raw === null || raw === undefined) raw = "";
+
+    // Nếu là số nguyên 0, 1, 2, 3 hoặc "0", "1", "2", "3"
+    if (typeof raw === "number" || /^\d+$/.test(String(raw).trim())) {
+        const num = parseInt(raw, 10);
+        if (num >= 0 && num < 4) {
+            return String.fromCharCode(65 + num); // 0->A, 1->B, 2->C, 3->D
+        }
+        if (num >= 1 && num <= 4) {
+            return String.fromCharCode(65 + num - 1); // 1->A, 2->B, 3->C, 4->D
+        }
+    }
+
+    let str = String(raw).trim();
+
+    // 2. Nếu chỉ có duy nhất 1 ký tự A-D
+    if (/^[A-Da-d]$/.test(str)) {
+        return str.toUpperCase();
+    }
+
+    // Kiểm tra mẫu "A.", "A)", "A:", "A -", "(A)" ở đầu chuỗi
+    const leadMatch = str.match(/^\(?\s*([A-Da-d])\s*[\.\:\)\-\]\s]/);
+    if (leadMatch && leadMatch[1]) {
+        return leadMatch[1].toUpperCase();
+    }
+
+    // Kiểm tra "Đáp án A", "Câu A", "Option A", "Chọn A", "Phương án A"
+    const phraseMatch = str.match(/(?:đáp\s*án|phương\s*án|câu|option|chọn|mệnh\s*đề)\s*([A-Da-d])\b/i);
+    if (phraseMatch && phraseMatch[1]) {
+        return phraseMatch[1].toUpperCase();
+    }
+
+    // 3. NẾU AI TRẢ VỀ NỘI DUNG PHƯƠNG ÁN (TEXT/LATEX) THAY VÌ CHỮ CÁI:
+    // So sánh chuỗi với từng phương án trong optionsObj
+    if (optionsObj && typeof optionsObj === "object") {
+        const cleanRaw = str.replace(/[\$\s\\\{\}\(\)\,\.\:\;\-]/g, "").toLowerCase();
+        if (cleanRaw.length > 0) {
+            for (const [k, v] of Object.entries(optionsObj)) {
+                let kLetter = String(k).trim().toUpperCase();
+                if (/^\d+$/.test(kLetter)) {
+                    kLetter = String.fromCharCode(65 + parseInt(kLetter, 10));
+                }
+                const cleanV = String(v || "").replace(/[\$\s\\\{\}\(\)\,\.\:\;\-]/g, "").toLowerCase();
+                if (cleanV.length > 0 && (cleanV === cleanRaw || cleanRaw.includes(cleanV) || cleanV.includes(cleanRaw))) {
+                    if (/^[A-Z]$/.test(kLetter)) return kLetter;
+                }
+            }
+        }
+    }
+
+    // 4. Nếu vẫn chưa tìm thấy, thử trích xuất từ explanation: "chọn đáp án A" hoặc "do đó là A"
+    if (q.explanation) {
+        const expMatch = String(q.explanation).match(/(?:chọn|đáp\s*án|phương\s*án)\s*([A-Da-d])\b/i);
+        if (expMatch && expMatch[1]) {
+            return expMatch[1].toUpperCase();
+        }
+    }
+
+    // Cuối cùng fallback lấy ký tự chữ cái A-D đầu tiên tìm thấy trong chuỗi
+    const anyLetter = str.match(/([A-Da-d])/);
+    if (anyLetter && anyLetter[1]) {
+        return anyLetter[1].toUpperCase();
+    }
+
+    return "";
+}
+
 function gradeQuiz(qid) {
     const data = window.quizRegistry[qid];
     if (!data || !data.questions) return;
@@ -4883,11 +4985,17 @@ function gradeQuiz(qid) {
     const total = data.questions.length;
 
     data.questions.forEach((q, idx) => {
-        let userChoice = data.answers[idx];
-        let correctChoice = String(q.answer || "").trim().toUpperCase();
-        if (/^\d+$/.test(correctChoice)) {
-            correctChoice = String.fromCharCode(65 + parseInt(correctChoice, 10));
+        let optionsObj = q.options || {};
+        if (Array.isArray(optionsObj)) {
+            const map = {};
+            optionsObj.forEach((optText, i) => {
+                map[String.fromCharCode(65 + i)] = optText;
+            });
+            optionsObj = map;
         }
+
+        let userChoice = data.answers[idx] ? String(data.answers[idx]).trim().toUpperCase() : "";
+        let correctChoice = extractCorrectOptionKey(q, optionsObj);
 
         const qContainer = document.getElementById(`qitem_${qid}_${idx}`);
         const expBox = document.getElementById(`qexp_${qid}_${idx}`);
@@ -4897,7 +5005,7 @@ function gradeQuiz(qid) {
         if (qContainer) {
             const labels = qContainer.querySelectorAll(".quiz-option-btn, .quiz-option-label");
             labels.forEach(lbl => {
-                const optKey = lbl.getAttribute("data-key");
+                const optKey = (lbl.getAttribute("data-key") || "").toUpperCase();
                 lbl.classList.remove("selected");
                 if (optKey === correctChoice) {
                     lbl.classList.add("correct", "is-correct");
@@ -4908,7 +5016,7 @@ function gradeQuiz(qid) {
             });
         }
 
-        if (userChoice === correctChoice) {
+        if (userChoice && correctChoice && userChoice === correctChoice) {
             correctCount++;
         }
     });
@@ -5247,7 +5355,7 @@ function onLearningSubjectChanged() {
 
 window.onLearningSubjectChanged = onLearningSubjectChanged;
 
-window.onLearningCountSelectChanged = function() {
+window.onLearningCountSelectChanged = function () {
     const countSelect = document.getElementById("learningCountSelect");
     const hint = document.getElementById("thptqgStructureHint");
     if (!countSelect) return;
@@ -5320,7 +5428,7 @@ function closeLearningConfig() {
 // ====== FILE UPLOAD IN LEARNING HUB ======
 window._currentLearningFile = null;
 
-window.onLearningFileSelected = function(e) {
+window.onLearningFileSelected = function (e) {
     const file = e.target.files?.[0];
     if (!file) return;
     window._currentLearningFile = file;
@@ -5353,7 +5461,7 @@ window.onLearningFileSelected = function(e) {
     if (docSelect) docSelect.value = "";
 };
 
-window.removeLearningFile = function() {
+window.removeLearningFile = function () {
     window._currentLearningFile = null;
     const fileInput = document.getElementById("learningFileUpload");
     if (fileInput) fileInput.value = "";
@@ -5361,7 +5469,7 @@ window.removeLearningFile = function() {
     if (chip) chip.classList.add("d-none");
 };
 
-window.onLearningDocSelectChanged = function() {
+window.onLearningDocSelectChanged = function () {
     const docSelect = document.getElementById("learningDocSelect");
     if (docSelect && docSelect.value) {
         window.removeLearningFile();
@@ -5464,7 +5572,31 @@ QUY TẮC CÔNG THỨC TOÁN & KHOA HỌC:
 
 Trả về toàn bộ dữ liệu đề thi chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] với JSON exam_type: "THPTQG_2025" gồm title, subject: "${subjectText}", time: "${struct.time}", part1 (mảng ${struct.p1} câu), part2 (mảng ${struct.p2} câu), part3 (mảng ${struct.p3} câu).${fileContextInstruction}`;
             } else {
-                prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.${fileContextInstruction}`;
+                prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]
+Hãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}.
+
+QUY CÁCH BẮT BUỘC TRONG [QUIZ_DATA]:
+{
+  "title": "Kiểm tra ${subjectText}: ${topic}",
+  "questions": [
+    {
+      "id": 1,
+      "question": "Nội dung câu hỏi (công thức Toán/Lý bọc trong $...$)",
+      "options": ["Nội dung phương án A", "Nội dung phương án B", "Nội dung phương án C", "Nội dung phương án D"],
+      "answer": "A",
+      "explanation": "Lời giải chi tiết rõ ràng từng bước..."
+    }
+  ]
+}
+
+QUY TẮC CÔNG THỨC TOÁN & ĐÁP ÁN:
+- Trường "answer" BẮT BUỘC CHỈ GHI DUY NHẤT 1 CHỮ CÁI IN HOA ĐẠI DIỆN ĐÁP ÁN ĐÚNG: "A", "B", "C" hoặc "D" (TUYỆT ĐỐI KHÔNG ghi cả câu, không ghi thêm chữ khác).
+- Trong mảng "options", TUYỆT ĐỐI KHÔNG ghi lặp tiền tố "A.", "B.", "C.", "D." ở đầu chuỗi (hệ thống tự động hiển thị nút A, B, C, D).
+- Mọi công thức Toán/Lý/Hóa bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\\\ trong JSON (ví dụ \\\\frac{1}{2}, \\\\int \\\\cos x dx).
+- Bắt buộc đầy đủ cặp ngoặc nhọn: \\\\frac{1}{2}, \\\\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\\\frac12 hay frac12).
+- Luôn có dấu cách sau các toán tử: \\\\int \\\\cos(2x+1)\\\\,dx, \\\\sqrt{x^2+1}.
+
+Trả về toàn bộ dữ liệu bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.${fileContextInstruction}`;
             }
             break;
         case "flashcard":
@@ -5762,7 +5894,7 @@ async function loadSharedLinks() {
                 container.appendChild(item);
             });
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 async function revokeShareLink(token) {
