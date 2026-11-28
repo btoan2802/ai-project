@@ -4490,7 +4490,203 @@ function renderQuestionMedia(q) {
         }
     }
 
+    // 4. Tự động sinh Đồ thị SVG hoặc Bảng biến thiên nếu câu hỏi nhắc đến hình vẽ nhưng chưa có media trong JSON
+    if (!mediaHtml) {
+        const qText = String(q.question || q.context || "").toLowerCase();
+        const hasGraphRef = qText.includes("hình bên") || qText.includes("hình vẽ") || qText.includes("đồ thị là đường cong") || qText.includes("đồ thị như hình") || qText.includes("bảng biến thiên");
+        if (hasGraphRef) {
+            if (qText.includes("bảng biến thiên")) {
+                mediaHtml += generateAutoVariationTable(q);
+            } else {
+                mediaHtml += generateAutoFunctionGraphSvg(q);
+            }
+        }
+    }
+
     return mediaHtml;
+}
+
+// Hàm tự động dựng Đồ thị Toán học SVG chuẩn SGK khi câu hỏi nhắc đến hình bên
+function generateAutoFunctionGraphSvg(q) {
+    if (!q) return "";
+    const qText = String(q.question || q.context || "").toLowerCase();
+    
+    // Trích xuất đáp án để dựng đồ thị tương ứng chính xác
+    let ansKey = String(q.answer || "A").trim().toUpperCase();
+    let ansText = "";
+    if (q.options) {
+        if (Array.isArray(q.options)) {
+            let idx = ansKey.charCodeAt(0) - 65;
+            if (idx >= 0 && idx < q.options.length) ansText = String(q.options[idx]);
+        } else if (typeof q.options === "object") {
+            ansText = String(q.options[ansKey] || q.options[ansKey.toLowerCase()] || "");
+        }
+    }
+
+    const width = 340;
+    const height = 230;
+    const ox = 145;
+    const oy = 145;
+    const scaleX = 42;
+    const scaleY = 38;
+
+    function toSvg(x, y) {
+        return {
+            x: Math.round(ox + x * scaleX),
+            y: Math.round(oy - y * scaleY)
+        };
+    }
+
+    // 1. Dạng Tiệm cận hàm phân thức bậc 1 / bậc 1
+    const isAsymptote = qText.includes("tiệm cận") || qText.includes("ax+b") || qText.includes("cx+d");
+    if (isAsymptote) {
+        let asymX = -1;
+        let asymY = 1;
+        let mX = ansText.match(/x\s*=\s*(-?\d+(?:[.,]\d+)?)/) || ansText.match(/(-?\d+(?:[.,]\d+)?)/);
+        if (mX && (ansText.includes("x") || qText.includes("đứng"))) asymX = parseFloat(mX[1].replace(",", "."));
+        let mY = ansText.match(/y\s*=\s*(-?\d+(?:[.,]\d+)?)/) || ansText.match(/(-?\d+(?:[.,]\d+)?)/);
+        if (mY && (ansText.includes("y") || qText.includes("ngang"))) asymY = parseFloat(mY[1].replace(",", "."));
+
+        const svAsymX = toSvg(asymX, 0).x;
+        const svAsymY = toSvg(0, asymY).y;
+
+        return `
+            <div class="quiz-svg-graph-wrapper">
+                <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="background:transparent;">
+                    <defs>
+                        <marker id="arrowOxyAsym" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+                        </marker>
+                    </defs>
+                    <line x1="20" y1="${oy}" x2="${width - 15}" y2="${oy}" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrowOxyAsym)" />
+                    <line x1="${ox}" y1="${height - 15}" x2="${ox}" y2="20" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrowOxyAsym)" />
+                    <text x="${width - 12}" y="${oy + 14}" font-size="12" font-style="italic">x</text>
+                    <text x="${ox - 14}" y="18" font-size="12" font-style="italic">y</text>
+                    <text x="${ox - 12}" y="${oy + 14}" font-size="11">O</text>
+
+                    <!-- Tiệm cận -->
+                    <line x1="${svAsymX}" y1="20" x2="${svAsymX}" y2="${height - 20}" stroke="#ef4444" stroke-width="1.4" stroke-dasharray="4,3" />
+                    <line x1="20" y1="${svAsymY}" x2="${width - 20}" y2="${svAsymY}" stroke="#ef4444" stroke-width="1.4" stroke-dasharray="4,3" />
+                    <text x="${svAsymX - 16}" y="${oy + 14}" font-size="11" font-weight="bold" fill="#ef4444">${asymX}</text>
+                    <text x="${ox - 16}" y="${svAsymY - 4}" font-size="11" font-weight="bold" fill="#ef4444">${asymY}</text>
+
+                    <!-- Hai nhánh hyperbol -->
+                    <path d="M 25 ${svAsymY - 10} Q ${svAsymX - 16} ${svAsymY - 18} ${svAsymX - 10} 25" fill="none" stroke="#6366f1" stroke-width="2.4" stroke-linecap="round" />
+                    <path d="M ${svAsymX + 10} ${height - 25} Q ${svAsymX + 16} ${svAsymY + 18} ${width - 25} ${svAsymY + 10}" fill="none" stroke="#6366f1" stroke-width="2.4" stroke-linecap="round" />
+                </svg>
+            </div>
+        `;
+    }
+
+    // 2. Dạng Đồ thị Hàm số bậc ba (Cực trị & Đồng biến / Nghịch biến)
+    let ptMatch = ansText.match(/\(?\s*(-?\d+(?:[.,]\d+)?)\s*[;,]\s*(-?\d+(?:[.,]\d+)?)\s*\)?/);
+    let targetX = 1;
+    let targetY = 2;
+    if (ptMatch) {
+        targetX = parseFloat(ptMatch[1].replace(",", "."));
+        targetY = parseFloat(ptMatch[2].replace(",", "."));
+    }
+
+    const isCucDai = qText.includes("cực đại");
+    const isCucTieu = qText.includes("cực tiểu");
+    let pMax, pMin;
+
+    if (isCucDai) {
+        pMax = { x: targetX, y: targetY };
+        pMin = { x: targetX + 1.2, y: Math.max(-1, targetY - 2.5) };
+    } else if (isCucTieu) {
+        pMin = { x: targetX, y: targetY };
+        pMax = { x: targetX - 1.2, y: Math.min(3, targetY + 2.5) };
+    } else {
+        // Đồng biến / nghịch biến e.g. (-1; 1)
+        let intMatch = ansText.match(/\(?\s*(-?\d+(?:[.,]\d+)?)\s*[;,]\s*(-?\d+(?:[.,]\d+)?)\s*\)?/);
+        let x1 = intMatch ? parseFloat(intMatch[1].replace(",", ".")) : -1;
+        let x2 = intMatch ? parseFloat(intMatch[2].replace(",", ".")) : 1;
+        if (qText.includes("nghịch biến")) {
+            pMax = { x: x1, y: 2 };
+            pMin = { x: x2, y: -1.5 };
+        } else {
+            pMin = { x: x1, y: -1.5 };
+            pMax = { x: x2, y: 2 };
+        }
+    }
+
+    const svMax = toSvg(pMax.x, pMax.y);
+    const svMin = toSvg(pMin.x, pMin.y);
+
+    const pStart = toSvg(pMax.x - 1.1, pMax.y - 3.2);
+    const pEnd = toSvg(pMin.x + 1.1, pMin.y + 3.2);
+
+    const cp1 = { x: svMax.x - 28, y: svMax.y + 4 };
+    const cp2 = { x: svMax.x + 22, y: svMax.y + 4 };
+    const cp3 = { x: svMin.x - 22, y: svMin.y - 4 };
+    const cp4 = { x: svMin.x + 28, y: svMin.y - 4 };
+
+    const curvePath = `M ${pStart.x} ${pStart.y} C ${pStart.x + 18} ${svMax.y + 30}, ${cp1.x} ${svMax.y}, ${svMax.x} ${svMax.y} C ${cp2.x} ${svMax.y}, ${cp3.x} ${svMin.y}, ${svMin.x} ${svMin.y} C ${cp4.x} ${svMin.y}, ${pEnd.x - 18} ${svMin.y - 30}, ${pEnd.x} ${pEnd.y}`;
+
+    return `
+        <div class="quiz-svg-graph-wrapper">
+            <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="background:transparent;">
+                <defs>
+                    <marker id="arrowOxyCubic" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+                    </marker>
+                </defs>
+
+                <!-- Trục tọa độ Oxy -->
+                <line x1="25" y1="${oy}" x2="${width - 15}" y2="${oy}" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrowOxyCubic)" />
+                <line x1="${ox}" y1="${height - 15}" x2="${ox}" y2="20" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrowOxyCubic)" />
+                <text x="${width - 12}" y="${oy + 14}" font-size="12" font-style="italic">x</text>
+                <text x="${ox - 14}" y="18" font-size="12" font-style="italic">y</text>
+                <text x="${ox - 12}" y="${oy + 14}" font-size="11">O</text>
+
+                <!-- Đường gióng nét đứt cho điểm Cực đại -->
+                <line x1="${svMax.x}" y1="${oy}" x2="${svMax.x}" y2="${svMax.y}" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" />
+                <line x1="${ox}" y1="${svMax.y}" x2="${svMax.x}" y2="${svMax.y}" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" />
+                <text x="${svMax.x - 3}" y="${oy + 14}" font-size="11">${pMax.x}</text>
+                <text x="${ox - 16}" y="${svMax.y + 4}" font-size="11">${pMax.y}</text>
+                <circle cx="${svMax.x}" cy="${svMax.y}" r="3.5" fill="#4f46e5" stroke="#ffffff" stroke-width="1.5" />
+
+                <!-- Đường gióng nét đứt cho điểm Cực tiểu -->
+                <line x1="${svMin.x}" y1="${oy}" x2="${svMin.x}" y2="${svMin.y}" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" />
+                <line x1="${ox}" y1="${svMin.y}" x2="${svMin.x}" y2="${svMin.y}" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" />
+                <text x="${svMin.x - 3}" y="${oy + 14}" font-size="11">${pMin.x}</text>
+                <text x="${ox - 16}" y="${svMin.y + 4}" font-size="11">${pMin.y}</text>
+                <circle cx="${svMin.x}" cy="${svMin.y}" r="3.5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />
+
+                <!-- Đường cong đồ thị hàm số y = f(x) -->
+                <path d="${curvePath}" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" />
+            </svg>
+        </div>
+    `;
+}
+
+// Hàm tự động dựng Bảng biến thiên chuẩn SGK khi câu hỏi nhắc đến bảng biến thiên
+function generateAutoVariationTable(q) {
+    if (!q) return "";
+    const qText = String(q.question || q.context || "").toLowerCase();
+    
+    if (qText.includes("tiệm cận") || qText.includes("ax+b") || qText.includes("cx+d")) {
+        return `
+            <div class="quiz-variation-table-wrapper">
+                <table class="quiz-bbt-table">
+                    <tr class="bbt-row-x"><th class="bbt-label-col">x</th><td>-\\infty</td><td class="bbt-double-line"><span class="bbt-pipe-symbol">||</span></td><td>-2</td><td class="bbt-double-line"><span class="bbt-pipe-symbol">||</span></td><td>+\\infty</td></tr>
+                    <tr class="bbt-row-yprime"><th class="bbt-label-col">y'</th><td>-</td><td class="bbt-double-line"><span class="bbt-pipe-symbol">||</span></td><td>-</td><td class="bbt-double-line"><span class="bbt-pipe-symbol">||</span></td><td>-</td></tr>
+                    <tr class="bbt-row-y"><th class="bbt-label-col">y</th><td><div class="bbt-arrow-flow"><span class="bbt-val-from">1</span><span class="bbt-arrow bbt-arrow-down">↘</span><span class="bbt-val-to">-\\infty</span></div></td><td class="bbt-double-line"><span class="bbt-pipe-symbol">||</span></td><td colspan="2"><div class="bbt-arrow-flow"><span class="bbt-val-from">+\\infty</span><span class="bbt-arrow bbt-arrow-down">↘</span><span class="bbt-val-to">1</span></div></td></tr>
+                </table>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="quiz-variation-table-wrapper">
+            <table class="quiz-bbt-table">
+                <tr class="bbt-row-x"><th class="bbt-label-col">x</th><td>-\\infty</td><td>-1</td><td>1</td><td>+\\infty</td></tr>
+                <tr class="bbt-row-yprime"><th class="bbt-label-col">y'</th><td>+</td><td>0</td><td>-</td><td>0</td><td>+</td></tr>
+                <tr class="bbt-row-y"><th class="bbt-label-col">y</th><td><div class="bbt-arrow-flow"><span class="bbt-val-from">-\\infty</span><span class="bbt-arrow bbt-arrow-up">↗</span><span class="bbt-val-to">2</span></div></td><td colspan="2"><div class="bbt-arrow-flow"><span class="bbt-val-from">2</span><span class="bbt-arrow bbt-arrow-down">↘</span><span class="bbt-val-to">-2</span></div></td><td><div class="bbt-arrow-flow"><span class="bbt-val-from">-2</span><span class="bbt-arrow bbt-arrow-up">↗</span><span class="bbt-val-to">+\\infty</span></div></td></tr>
+            </table>
+        </div>
+    `;
 }
 
 // Làm sạch JSON chuỗi trắc nghiệm tránh hỏng escape sequence KaTeX
