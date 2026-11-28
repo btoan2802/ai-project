@@ -60,10 +60,83 @@ namespace BtoanAiNet.Controllers
             }
         }
 
+        private static bool _tablesCreated = false;
+        private async Task EnsureTablesCreatedAsync()
+        {
+            if (_tablesCreated) return;
+            try
+            {
+                string provider = _dbContext.Database.ProviderName ?? "";
+                if (provider.Contains("MySql", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _dbContext.Database.ExecuteSqlRawAsync(@"
+CREATE TABLE IF NOT EXISTS `LearningTopicStats` (
+    `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `UserId` INT NOT NULL,
+    `Subject` VARCHAR(120) NOT NULL,
+    `GradeLevel` VARCHAR(120) NOT NULL,
+    `TopicName` VARCHAR(255) NOT NULL,
+    `TotalQuestions` INT NOT NULL DEFAULT 0,
+    `CorrectQuestions` INT NOT NULL DEFAULT 0,
+    `MasteryPercent` DOUBLE NOT NULL DEFAULT 0,
+    `LastPracticedAt` VARCHAR(50) NOT NULL,
+    INDEX `IX_LearningTopicStats_User` (`UserId`, `Subject`)
+);
+CREATE TABLE IF NOT EXISTS `StudyRoadmaps` (
+    `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `UserId` INT NOT NULL,
+    `Title` VARCHAR(255) NOT NULL,
+    `Subject` VARCHAR(120) NOT NULL,
+    `GradeLevel` VARCHAR(120) NOT NULL,
+    `ExamDate` VARCHAR(50) NOT NULL,
+    `TargetScore` VARCHAR(50) NOT NULL,
+    `DailyMinutes` INT NOT NULL DEFAULT 60,
+    `SourceDocName` VARCHAR(255) NULL,
+    `PlanJson` LONGTEXT NOT NULL,
+    `CreatedAt` VARCHAR(50) NOT NULL,
+    `UpdatedAt` VARCHAR(50) NOT NULL,
+    INDEX `IX_StudyRoadmaps_User` (`UserId`)
+);");
+                }
+                else
+                {
+                    await _dbContext.Database.ExecuteSqlRawAsync(@"
+CREATE TABLE IF NOT EXISTS LearningTopicStats (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Subject TEXT NOT NULL,
+    GradeLevel TEXT NOT NULL,
+    TopicName TEXT NOT NULL,
+    TotalQuestions INTEGER NOT NULL DEFAULT 0,
+    CorrectQuestions INTEGER NOT NULL DEFAULT 0,
+    MasteryPercent REAL NOT NULL DEFAULT 0,
+    LastPracticedAt TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS StudyRoadmaps (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Title TEXT NOT NULL,
+    Subject TEXT NOT NULL,
+    GradeLevel TEXT NOT NULL,
+    ExamDate TEXT NOT NULL,
+    TargetScore TEXT NOT NULL,
+    DailyMinutes INTEGER NOT NULL DEFAULT 60,
+    SourceDocName TEXT NULL,
+    PlanJson TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    UpdatedAt TEXT NOT NULL
+);");
+                }
+                _tablesCreated = true;
+            }
+            catch { }
+        }
+
         // 1. POST /api/learning/record-result
         [HttpPost("record-result")]
         public async Task<IActionResult> RecordResult([FromBody] RecordResultRequest? request)
         {
+            await EnsureTablesCreatedAsync();
             int userId = CurrentUserId;
             if (userId <= 0)
             {
@@ -132,6 +205,7 @@ namespace BtoanAiNet.Controllers
         [HttpGet("radar")]
         public async Task<IActionResult> GetRadar([FromQuery] string? subject = null)
         {
+            await EnsureTablesCreatedAsync();
             int userId = CurrentUserId;
             if (userId <= 0)
             {
@@ -217,6 +291,7 @@ namespace BtoanAiNet.Controllers
         [HttpGet("roadmaps")]
         public async Task<IActionResult> GetRoadmaps()
         {
+            await EnsureTablesCreatedAsync();
             int userId = CurrentUserId;
             if (userId <= 0)
             {
@@ -286,6 +361,7 @@ namespace BtoanAiNet.Controllers
         [HttpPost("roadmaps/generate")]
         public async Task<IActionResult> GenerateRoadmap([FromBody] GenerateRoadmapRequest? request)
         {
+            await EnsureTablesCreatedAsync();
             int userId = CurrentUserId;
             if (userId <= 0)
             {

@@ -1041,6 +1041,33 @@ CREATE INDEX IF NOT EXISTS IDX_StudyRoadmaps_User ON StudyRoadmaps(UserId);
                         `Title` VARCHAR(200) NULL,
                         `IsRevoked` TINYINT NOT NULL DEFAULT 0,
                         `CreatedAt` DATETIME NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS `LearningTopicStats` (
+                        `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `UserId` INT NOT NULL,
+                        `Subject` VARCHAR(120) NOT NULL,
+                        `GradeLevel` VARCHAR(120) NOT NULL,
+                        `TopicName` VARCHAR(255) NOT NULL,
+                        `TotalQuestions` INT NOT NULL DEFAULT 0,
+                        `CorrectQuestions` INT NOT NULL DEFAULT 0,
+                        `MasteryPercent` DOUBLE NOT NULL DEFAULT 0,
+                        `LastPracticedAt` VARCHAR(50) NOT NULL,
+                        INDEX `IX_LearningTopicStats_User` (`UserId`, `Subject`)
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS `StudyRoadmaps` (
+                        `Id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        `UserId` INT NOT NULL,
+                        `Title` VARCHAR(255) NOT NULL,
+                        `Subject` VARCHAR(120) NOT NULL,
+                        `GradeLevel` VARCHAR(120) NOT NULL,
+                        `ExamDate` VARCHAR(50) NOT NULL,
+                        `TargetScore` VARCHAR(50) NOT NULL,
+                        `DailyMinutes` INT NOT NULL DEFAULT 60,
+                        `SourceDocName` VARCHAR(255) NULL,
+                        `PlanJson` LONGTEXT NOT NULL,
+                        `CreatedAt` VARCHAR(50) NOT NULL,
+                        `UpdatedAt` VARCHAR(50) NOT NULL,
+                        INDEX `IX_StudyRoadmaps_User` (`UserId`)
                     );"
                 };
                 foreach (var sqlStmt in settingsMySql)
