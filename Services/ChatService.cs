@@ -51,7 +51,7 @@ namespace BtoanAiNet.Services
 - Khi người dùng yêu cầu 'bỏ vào word đi', 'xuất file word', 'tạo file docx':
   1. Nếu cuộc trò chuyện đã có nội dung văn bản/tài liệu trước đó: BẮT BUỘC đưa 100% nội dung thực tế đó vào trong [ARTIFACT type=""docx"" title=""...""]...[/ARTIFACT].
   2. Nếu cuộc trò chuyện đang trống hoặc chưa có nội dung/chủ đề cụ thể: TUYỆT ĐỐI KHÔNG tự bịa nội dung mẫu giữ chỗ chung chung; hãy hỏi ngắn gọn người dùng muốn đưa nội dung hoặc chủ đề gì vào file Word.
-- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Mỗi câu hỏi BẮT BUỘC có trường 'topic'. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$.
+- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Mỗi câu hỏi BẮT BUỘC có trường 'topic'. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$. TUYỆT ĐỐI CẤM dùng 'như hình bên' / 'trong hình vẽ bên' khi không có hình; với khảo sát hàm số thì cho công thức tường minh y = f(x) hoặc xuất qua 'variationTable'. Luôn ngẫu nhiên hóa đề bài và toán thực tế (35%-40%).
 - Mô phỏng tương tác: Trả về khối [SIMULATION_DATA]{""title"": ""..."", ""subject"": ""..."", ""instructions"": ""..."", ""html"": ""<!DOCTYPE html>...""}[/SIMULATION_DATA].
 - Gia sư gợi mở (Socratic): Không đưa đáp án ngay, chia 3 phần: Phân tích nhanh, Gợi ý công thức, Câu hỏi tương tác.
 - Tạo thẻ flashcards: Trả về khối [FLASHCARD_DATA]{...}[/FLASHCARD_DATA].
@@ -591,8 +591,20 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             bool isLearningPrompt = isSocraticMode || isSimulationPrompt ||
                                    lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
                                    lowerQ.Contains("trắc nghiệm") || lowerQ.Contains("quiz") || 
-                                   lowerQ.Contains("flashcard") || (question != null && question.Contains("[HỌC TẬP"));
-            bool isThptqgPrompt = (question != null && (question.Contains("THPTQG_2025") || question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || question.Contains("THPTQG 2025–2026")));
+                                   lowerQ.Contains("flashcard") || lowerQ.Contains("đề thi") ||
+                                   lowerQ.Contains("tạo đề") || lowerQ.Contains("ra đề") ||
+                                   (question != null && question.Contains("[HỌC TẬP"));
+            bool isThptqgPrompt = (question != null && (
+                question.Contains("THPTQG_2025") || 
+                question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || 
+                question.Contains("THPTQG 2025–2026") ||
+                lowerQ.Contains("thptqg") ||
+                lowerQ.Contains("thpt 2025") ||
+                lowerQ.Contains("thpt 2026") ||
+                lowerQ.Contains("tốt nghiệp thpt") ||
+                lowerQ.Contains("gdpt 2018") ||
+                (lowerQ.Contains("đề thi") && (lowerQ.Contains("toán") || lowerQ.Contains("thpt")))
+            ));
 
             string currentSystemInstruction = (!isThinking && !isArtifactRequired && !isLearningPrompt) ? FastSystemInstructionText : SystemInstructionText;
 
@@ -1305,8 +1317,20 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             bool isLearningPrompt = isSocraticMode || isSimulationPrompt ||
                                    lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
                                    lowerQ.Contains("trắc nghiệm") || lowerQ.Contains("quiz") || 
-                                   lowerQ.Contains("flashcard") || (question != null && question.Contains("[HỌC TẬP"));
-            bool isThptqgPrompt = (question != null && (question.Contains("THPTQG_2025") || question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || question.Contains("THPTQG 2025–2026")));
+                                   lowerQ.Contains("flashcard") || lowerQ.Contains("đề thi") ||
+                                   lowerQ.Contains("tạo đề") || lowerQ.Contains("ra đề") ||
+                                   (question != null && question.Contains("[HỌC TẬP"));
+            bool isThptqgPrompt = (question != null && (
+                question.Contains("THPTQG_2025") || 
+                question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || 
+                question.Contains("THPTQG 2025–2026") ||
+                lowerQ.Contains("thptqg") ||
+                lowerQ.Contains("thpt 2025") ||
+                lowerQ.Contains("thpt 2026") ||
+                lowerQ.Contains("tốt nghiệp thpt") ||
+                lowerQ.Contains("gdpt 2018") ||
+                (lowerQ.Contains("đề thi") && (lowerQ.Contains("toán") || lowerQ.Contains("thpt")))
+            ));
 
             string currentSystemInstruction = (!isThinking && !isArtifactRequired && !isLearningPrompt) ? FastSystemInstructionText : SystemInstructionText;
 
