@@ -142,6 +142,15 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
      3. BẮT BUỘC có dấu cách sau toán tử: ví dụ \\int \\cos(2x+1)\\,dx, cấm dính liền \\intcos.
      4. Mọi công thức Toán/Lý/Hóa phải bọc trong $...$ hoặc $$...$$.
      5. Trong mảng ""options"", TUYỆT ĐỐI KHÔNG ghi tiền tố ""A."", ""B."", ""C."", ""D."" ở đầu chuỗi (hệ thống tự động hiển thị huy hiệu A, B, C, D).
+
+   * QUY TẮC CHƯƠNG TRÌNH GDPT 2018 MỚI (ĐỀ THI 2025–2026):
+     1. TUYỆT ĐỐI LOẠI BỎ 100% KIẾN THỨC VỀ SỐ PHỨC ($z = a + bi$). Không được ra bất kỳ câu hỏi nào liên quan đến số phức.
+     2. Cấu trúc đề Toán bám sát chương trình mới: Khảo sát hàm số (chú ý tiệm cận xiên), Mũ - Logarit, Nguyên hàm - Tích phân và ứng dụng thực tế, Hình học không gian tọa độ Oxyz (vectơ, mặt phẳng, đường thẳng, mặt cầu), Thống kê số liệu ghép nhóm (khoảng biến thiên, khoảng tứ phân vị, phương sai, độ lệch chuẩn), Xác suất cổ điển, xác suất có điều kiện và công thức Bayes / xác suất toàn phần.
+     3. BẮT BUỘC 35%–40% BÀI TOÁN THỰC TẾ: Phần II ít nhất 2/4 câu ứng dụng thực tế; Phần III ít nhất 4/6 câu bài toán thực tế (kinh tế, tối ưu hóa, chuyển động, y tế, vật lý, đời sống...).
+
+   * BẢNG BIẾN THIÊN (BBT) & ĐỒ THỊ SVG — CẤM CÂU HỎI THIẾU HÌNH (CÂU HỎI MA):
+     1. Hỗ trợ trường ""variationTable"" (bảng biến thiên dạng HTML <table>...</table> hoặc object { ""x"": [...], ""yPrime"": [...], ""y"": [...] }) và trường ""svgGraph"" (mã SVG đồ thị hàm số Oxy hoàn chỉnh với thẻ <svg>).
+     2. NGUYÊN TẮC THÉP: TUYỆT ĐỐI CẤM ra câu hỏi có các câu như: 'Cho hàm số có đồ thị như hình bên', 'Dựa vào bảng biến thiên dưới đây', 'Cho bảng biến thiên như hình vẽ' NẾU KHÔNG KÈM THEO trường 'variationTable' hoặc 'svgGraph' trong JSON! Nếu không có hình vẽ hay bảng biến thiên, BẮT BUỘC phải cho biểu thức đại số tường minh của hàm số $y = f(x)$ hoặc đạo hàm $f'(x)$.
 4. Chế độ 'Tạo thẻ thông tin' (Flashcards):
    - Khi người dùng muốn tạo flashcard, thẻ nhớ, thẻ học nhanh:
    - Viết 1 câu mở đầu, rồi BẮT BUỘC trả về dữ liệu thẻ ghi nhớ trong cặp thẻ:

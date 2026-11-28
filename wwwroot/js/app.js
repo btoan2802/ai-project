@@ -953,7 +953,21 @@ function renderStreamingFinalBubble(bubble, text, exportType = null) {
         bubble.appendChild(createMessageActions({ text, exportType }));
     }
 
-    scrollToBottom();
+    const isQuizOrCard = text.includes("[QUIZ_DATA]") || text.includes("[FLASHCARD_DATA]") || bubble.querySelector(".quiz-card-container, .flashcard-deck-container");
+    if (isQuizOrCard) {
+        const targetCard = bubble.querySelector(".quiz-card-container, .flashcard-deck-container") || bubble.closest(".msgrow") || bubble;
+        const scrollContainer = document.getElementById("chatScrollWrapper") || chatEl;
+        if (scrollContainer && targetCard) {
+            setTimeout(() => {
+                const cardRect = targetCard.getBoundingClientRect();
+                const wrapperRect = scrollContainer.getBoundingClientRect();
+                const targetTop = scrollContainer.scrollTop + (cardRect.top - wrapperRect.top) - 16;
+                scrollContainer.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+            }, 180);
+        }
+    } else {
+        scrollToBottom();
+    }
     isSending = false;
 }
 
@@ -1461,7 +1475,10 @@ async function send() {
                     chatEl.appendChild(liveBotRow);
                 }
                 liveBotBubble.innerHTML = renderMarkdownWithMath(fullText);
-                scrollToBottom();
+                const isStreamingQuizOrCard = fullText.includes("[QUIZ_DATA]") || fullText.includes("[FLASHCARD_DATA]");
+                if (!isStreamingQuizOrCard) {
+                    scrollToBottom();
+                }
             });
 
             // If stream completed but text was empty, automatically fallback to JSON callGemini
@@ -4210,10 +4227,104 @@ function stripOptionPrefix(rawVal) {
     return str.trim();
 }
 
+// Helper: Tự động phát hiện và bọc $...$ cho các công thức, phương trình, tập hợp, vector, số mũ...
+function ensureMathDelimiters(text) {
+    if (!text || typeof text !== "string") return text;
+    let str = text.trim();
+
+    // Nếu đã được bọc hoàn toàn trong $...$ hoặc $$...$$ thì giữ nguyên
+    if (/^\${1,2}[\s\S]+\${1,2}$/.test(str)) return str;
+
+    // Nhận diện ký hiệu toán học phổ biến (vector, phân số, tập hợp, căn bậc, góc...)
+    const hasMathIndicators = /\\(frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|theta|sigma|infty|times|cdot|pm|le|ge|ne)\b|[\^_]\{?[\w\d]+\}?|\\\{|\^\\?circ|\b[a-zA-Z]\^[0-9]|\b[a-zA-Z]_[0-9]|\bS\s*=|\\vec/.test(str);
+
+    // Nếu không chứa bất kỳ dấu $ nào và có chỉ dấu toán học
+    if (!str.includes("$") && hasMathIndicators) {
+        const isShortOrPureMath = !/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(str) || str.length < 60;
+        if (isShortOrPureMath) {
+            return `$${str}$`;
+        }
+    }
+
+    // Tự động bọc $...$ cho các biểu thức toán cục bộ bị quên dấu $:
+    // 1. Tập hợp S = \{ ... \}
+    str = str.replace(/(?<!\$)\b([a-zA-Z]\s*=\s*(?:\\mathbb\{[A-Z]\}|\\?\{[^$}\n]+\}))(?![\$\w])/g, '$$$1$$');
+    // 2. Vector: \vec{u} = (x; y; z) hoặc \vec{u}_1 = (2; -1; 3)
+    str = str.replace(/(?<!\$)((?:\\vec\{[^{}]+\}|\\?[a-zA-Z])(?:_[0-9a-zA-Z]+)?\s*=\s*\([^$)\n]+\))(?![\$\w])/g, '$$$1$$');
+    // 3. Góc độ: 30^{\circ}, 45^\circ, 60^{\circ}
+    str = str.replace(/(?<!\$)\b(\d+[\^]\{?\\?circ\}?)(?![\$\w])/g, '$$$1$$');
+    // 4. Tập xác định: \mathbb{R} \setminus \{...\}
+    str = str.replace(/(?<!\$)((?:\\mathbb\{[A-Z]\}|R)\s*\\setminus\s*\\?\{[^$}\n]+\})(?![\$\w])/g, '$$$1$$');
+    // 5. Đơn thức lũy thừa như 2a^3, a^3\sqrt{2}, x^2, y^3
+    str = str.replace(/(?<![\$\w\\])(\d*[a-zA-Z]\^[0-9a-zA-Z]+(?:\s*\\sqrt\{\d+\})?)(?![\$\w])/g, '$$$1$$');
+
+    return str;
+}
+
+// Helper: Hiển thị Bảng biến thiên (BBT) & Đồ thị SVG dưới đề bài
+function renderQuestionMedia(q) {
+    if (!q) return "";
+    let mediaHtml = "";
+
+    // 1. Variation Table (Bảng biến thiên)
+    const vt = q.variationTable || q.variation_table || q.bbt || q.bang_bien_thien;
+    if (vt) {
+        if (typeof vt === "string") {
+            if (vt.includes("<table")) {
+                mediaHtml += `<div class="quiz-variation-table-wrapper">${vt}</div>`;
+            } else {
+                mediaHtml += `<div class="quiz-variation-table-wrapper">${formatQuizMathText(vt)}</div>`;
+            }
+        } else if (typeof vt === "object") {
+            let xRow = "";
+            let yPrimeRow = "";
+            let yRow = "";
+            const xVals = vt.x || [];
+            const yPrimeVals = vt.yPrime || vt.y_prime || vt.fPrime || [];
+            const yVals = vt.y || vt.f || [];
+
+            xVals.forEach(val => {
+                xRow += `<th>${formatQuizMathText(String(val))}</th>`;
+            });
+            yPrimeVals.forEach(val => {
+                yPrimeRow += `<td>${formatQuizMathText(String(val))}</td>`;
+            });
+            yVals.forEach(val => {
+                const textVal = typeof val === "object" ? (val.val || val.text || "") : String(val);
+                yRow += `<td>${formatQuizMathText(textVal)}</td>`;
+            });
+
+            mediaHtml += `
+                <div class="quiz-variation-table-wrapper">
+                    <table class="variation-table">
+                        <tr><th style="width: 50px;">x</th>${xRow}</tr>
+                        <tr><th>y'</th>${yPrimeRow}</tr>
+                        <tr><th>y</th>${yRow}</tr>
+                    </table>
+                </div>
+            `;
+        }
+    }
+
+    // 2. SVG Graph (Đồ thị Oxy)
+    const svg = q.svgGraph || q.svg_graph || q.svg || q.do_thi_svg;
+    if (svg && typeof svg === "string") {
+        let cleanSvg = svg.trim().replace(/<script[\s\S]*?<\/script>/gi, "");
+        if (cleanSvg.includes("<svg")) {
+            mediaHtml += `<div class="quiz-svg-graph-wrapper">${cleanSvg}</div>`;
+        }
+    }
+
+    return mediaHtml;
+}
+
 // Helper: Chuẩn hóa và sửa triệt để lỗi vỡ công thức LaTeX (frac12, intcos, \sin, ...)
 function normalizeMathLatex(text) {
     if (!text) return "";
     let str = String(text);
+
+    // Tự động bảo vệ và bọc dấu $ cho biểu thức toán học
+    str = ensureMathDelimiters(str);
 
     // 1. Phục hồi phân số bị dính số hoặc mất ngoặc nhọn: frac12 -> \frac{1}{2}, frac13 -> \frac{1}{3}, \frac12 -> \frac{1}{2}
     str = str.replace(/(^|[^\\a-zA-Z])frac(\d)(\d)(?!\d)/g, '$1\\frac{$2}{$3}');
@@ -4242,7 +4353,7 @@ function normalizeMathLatex(text) {
         "rightarrow", "leftarrow", "leftrightarrow", "Rightarrow", "Leftarrow", "Leftrightarrow",
         "partial", "vec", "left", "right"
     ];
-    const kwRegex = new RegExp("(?<!\\\\)\\b(" + mathKeywords.join("|") + ")\\b", "g");
+    const kwRegex = new RegExp("(?<!\\\\)\b(" + mathKeywords.join("|") + ")\b", "g");
     str = str.replace(kwRegex, "\\$1");
 
     // 4. Chèn dấu cách sau các toán tử nếu dính liền với biến hoặc ngoặc
@@ -4255,10 +4366,8 @@ function normalizeMathLatex(text) {
         }
     }
 
-    // Escape HTML an toàn
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return str;
 }
-
 function formatQuizMathText(text) {
     return normalizeMathLatex(text);
 }
@@ -4354,6 +4463,7 @@ function renderStandardQuizWidget(qid, data) {
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
                     <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
                 </div>
+                ${renderQuestionMedia(q)}
                 <div class="quiz-options-group">${optionsHtml}</div>
                 <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="qexp_${qid}_${idx}" style="display:none;">
                     <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
@@ -4438,6 +4548,7 @@ function renderThptqgQuizWidget(qid, data) {
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
                     <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
                 </div>
+                ${renderQuestionMedia(q)}
                 <div class="quiz-options-group">${optionsHtml}</div>
                 <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="thptqg_p1_exp_${qid}_${idx}" style="display:none;">
                     <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
@@ -4462,10 +4573,10 @@ function renderThptqgQuizWidget(qid, data) {
                         <span>${formatQuizMathText(stmt.text)}</span>
                     </div>
                     <div class="thptqg-tf-actions d-flex gap-1.5 flex-shrink-0">
-                        <button type="button" class="btn btn-sm btn-outline-success btn-true-false px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_true" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', true, this)">
+                        <button type="button" class="btn btn-sm btn-outline-success btn-true-false tf-btn px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_true" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', true, this)">
                             Đúng
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-danger btn-true-false px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_false" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', false, this)">
+                        <button type="button" class="btn btn-sm btn-outline-danger btn-true-false tf-btn px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_false" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', false, this)">
                             Sai
                         </button>
                     </div>
@@ -4478,6 +4589,7 @@ function renderThptqgQuizWidget(qid, data) {
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
                     <span class="badge bg-success me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.context || q.question || "")}
                 </div>
+                ${renderQuestionMedia(q)}
                 <div class="thptqg-statements-group mb-2">${stmtsHtml}</div>
                 <div class="quiz-explanation-box p-3 rounded-3 mt-2" id="thptqg_p2_exp_${qid}_${idx}" style="display:none;">
                     <div class="fw-bold text-indigo extra-small mb-1">💡 GIẢI THÍCH CHI TIẾT:</div>
@@ -4495,6 +4607,7 @@ function renderThptqgQuizWidget(qid, data) {
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
                     <span class="badge bg-warning text-dark me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
                 </div>
+                ${renderQuestionMedia(q)}
                 <div class="d-flex align-items-center gap-2.5 mt-2">
                     <label class="small fw-semibold text-secondary flex-shrink-0">Điền đáp số:</label>
                     <input type="text" class="form-control form-control-sm thptqg-short-input rounded-3" style="max-width: 220px;" placeholder="Ví dụ: 2.5 hoặc -10" oninput="recordThptqgP3Answer('${qid}', ${idx}, this.value)" id="thptqg_p3_input_${qid}_${idx}">
@@ -4896,9 +5009,19 @@ function parseBooleanAnswer(val) {
 
 // Helper: Trích xuất chính xác chữ cái đáp án đúng (A, B, C, D) từ mọi định dạng AI trả về
 function extractCorrectOptionKey(q, optionsObj) {
-    if (!q) return "";
+    if (!q) return "A";
 
-    // 1. Tìm trường đáp án đúng từ các biến thể phổ biến
+    // 1. Kiểm tra nếu trong mảng options có đánh dấu isCorrect / correct: true
+    if (Array.isArray(q.options)) {
+        for (let i = 0; i < q.options.length; i++) {
+            const opt = q.options[i];
+            if (opt && typeof opt === "object" && (opt.isCorrect || opt.is_correct || opt.correct || opt.dung)) {
+                return String.fromCharCode(65 + i);
+            }
+        }
+    }
+
+    // 2. Tìm trường đáp án đúng từ các biến thể phổ biến (cả tiếng Anh lẫn tiếng Việt)
     let raw = q.answer !== undefined ? q.answer :
               (q.correct !== undefined ? q.correct :
               (q.correct_answer !== undefined ? q.correct_answer :
@@ -4907,24 +5030,33 @@ function extractCorrectOptionKey(q, optionsObj) {
               (q.correctOption !== undefined ? q.correctOption :
               (q.key !== undefined ? q.key :
               (q.solution_key !== undefined ? q.solution_key :
-              (q.result !== undefined ? q.result : ""))))))));
+              (q.result !== undefined ? q.result :
+              (q.dap_an !== undefined ? q.dap_an :
+              (q.dapan !== undefined ? q.dapan :
+              (q.dapAn !== undefined ? q.dapAn :
+              (q.ket_qua !== undefined ? q.ket_qua :
+              (q.ketqua !== undefined ? q.ketqua :
+              (q.right_answer !== undefined ? q.right_answer :
+              (q.true_answer !== undefined ? q.true_answer : "")))))))))))))));
 
     if (raw === null || raw === undefined) raw = "";
 
-    // Nếu là số nguyên 0, 1, 2, 3 hoặc "0", "1", "2", "3"
+    // 3. Nếu là số nguyên 0, 1, 2, 3 hoặc "0", "1", "2", "3"
     if (typeof raw === "number" || /^\d+$/.test(String(raw).trim())) {
         const num = parseInt(raw, 10);
-        if (num >= 0 && num < 4) {
+        if (num === 0) return "A";
+        if (num === 4) return "D";
+        if (num >= 0 && num <= 3) {
             return String.fromCharCode(65 + num); // 0->A, 1->B, 2->C, 3->D
         }
         if (num >= 1 && num <= 4) {
-            return String.fromCharCode(65 + num - 1); // 1->A, 2->B, 3->C, 4->D
+            return String.fromCharCode(65 + num - 1);
         }
     }
 
     let str = String(raw).trim();
 
-    // 2. Nếu chỉ có duy nhất 1 ký tự A-D
+    // 4. Nếu chỉ có duy nhất 1 ký tự A-D
     if (/^[A-Da-d]$/.test(str)) {
         return str.toUpperCase();
     }
@@ -4935,14 +5067,13 @@ function extractCorrectOptionKey(q, optionsObj) {
         return leadMatch[1].toUpperCase();
     }
 
-    // Kiểm tra "Đáp án A", "Câu A", "Option A", "Chọn A", "Phương án A"
-    const phraseMatch = str.match(/(?:đáp\s*án|phương\s*án|câu|option|chọn|mệnh\s*đề)\s*([A-Da-d])\b/i);
+    // Kiểm tra "Đáp án A", "Câu A", "Option A", "Chọn A", "Phương án A", "Mệnh đề A"
+    const phraseMatch = str.match(/(?:đáp\s*án|phương\s*án|câu|option|chọn|mệnh\s*đề)\s*[:\-\s]*([A-Da-d])\b/i);
     if (phraseMatch && phraseMatch[1]) {
         return phraseMatch[1].toUpperCase();
     }
 
-    // 3. NẾU AI TRẢ VỀ NỘI DUNG PHƯƠNG ÁN (TEXT/LATEX) THAY VÌ CHỮ CÁI:
-    // So sánh chuỗi với từng phương án trong optionsObj
+    // 5. NẾU AI TRẢ VỀ NỘI DUNG PHƯƠNG ÁN (TEXT/LATEX) THAY VÌ CHỮ CÁI:
     if (optionsObj && typeof optionsObj === "object") {
         const cleanRaw = str.replace(/[\$\s\\\{\}\(\)\,\.\:\;\-]/g, "").toLowerCase();
         if (cleanRaw.length > 0) {
@@ -4959,9 +5090,10 @@ function extractCorrectOptionKey(q, optionsObj) {
         }
     }
 
-    // 4. Nếu vẫn chưa tìm thấy, thử trích xuất từ explanation: "chọn đáp án A" hoặc "do đó là A"
-    if (q.explanation) {
-        const expMatch = String(q.explanation).match(/(?:chọn|đáp\s*án|phương\s*án)\s*([A-Da-d])\b/i);
+    // 6. Trích xuất từ explanation, giai_thich hoặc solution
+    const expText = q.explanation || q.giai_thich || q.solution || "";
+    if (expText) {
+        const expMatch = String(expText).match(/(?:chọn|đáp\s*án|phương\s*án|kết\s*quả)\s*[:\-\s]*([A-Da-d])\b/i);
         if (expMatch && expMatch[1]) {
             return expMatch[1].toUpperCase();
         }
@@ -4973,7 +5105,7 @@ function extractCorrectOptionKey(q, optionsObj) {
         return anyLetter[1].toUpperCase();
     }
 
-    return "";
+    return "A"; // Safe fallback
 }
 
 function gradeQuiz(qid) {
@@ -5564,10 +5696,14 @@ ${struct.p1 > 0 ? `- PHẦN I: Trắc nghiệm 4 lựa chọn (${struct.p1} câu
 ${struct.p2 > 0 ? `- PHẦN II: Trắc nghiệm Đúng/Sai (${struct.p2} câu; mỗi câu có ngữ cảnh và 4 mệnh đề a, b, c, d; tính điểm lũy tiến: đúng 1 ý = 0.1đ, đúng 2 ý = 0.25đ, đúng 3 ý = 0.5đ, đúng cả 4 ý = 1.0đ).` : ''}
 ${struct.p3 > 0 ? `- PHẦN III: Trắc nghiệm trả lời ngắn (${struct.p3} câu; mỗi câu đúng được ${struct.p3Point}đ; thí sinh điền kết quả dạng số thực/nguyên).` : ''}
 
-QUY TẮC CÔNG THỨC TOÁN & KHOA HỌC:
-- Mọi công thức Toán/Lý/Hóa/Sinh bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\\\ trong JSON (ví dụ \\\\frac{1}{2}, \\\\int \\\\cos x dx).
-- Bắt buộc đầy đủ cặp ngoặc nhọn: \\\\frac{1}{2}, \\\\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\\\frac12 hay frac12).
-- Luôn có dấu cách sau các toán tử: \\\\int \\\\cos(2x+1)\\\\,dx, \\\\sqrt{x^2+1}.
+QUY TẮC CHƯƠNG TRÌNH GDPT 2018 MỚI (ĐỀ THI 2025–2026):
+- TUYỆT ĐỐI LOẠI BỎ 100% KIẾN THỨC SỐ PHỨC ($z=a+bi$). Cấm ra bất kỳ câu nào về số phức!
+- Cấu trúc bám sát ma trận mới: Khảo sát hàm số (tiệm cận xiên), Mũ - Logarit, Tích phân & ứng dụng, Hình học Oxyz, Thống kê số liệu ghép nhóm, Xác suất Bayes / xác suất toàn phần.
+- BẮT BUỘC 35%–40% BÀI TOÁN THỰC TẾ: Phần II có ít nhất 2 câu ứng dụng thực tế; Phần III có ít nhất 4 câu ứng dụng thực tế.
+- BẢNG BIẾN THIÊN & ĐỒ THỊ SVG (CẤM CÂU HỎI THIẾU HÌNH): Nếu câu hỏi dùng đồ thị hoặc bảng biến thiên, BẮT BUỘC cung cấp trường "variationTable" (bảng HTML/CSS 3 hàng) hoặc "svgGraph" (mã SVG đồ thị Oxy). NẾU KHÔNG CÓ, TUYỆT ĐỐI CẤM dùng câu 'như hình bên', 'dựa vào bảng biến thiên' mà phải cho công thức đại số tường minh của $y=f(x)$ hoặc $f'(x)$.
+- Mọi công thức Toán/Lý/Hóa/Sinh bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\ trong JSON (ví dụ \\frac{1}{2}, \\int \\cos x dx).
+- Bắt buộc đầy đủ cặp ngoặc nhọn: \\frac{1}{2}, \\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\frac12 hay frac12).
+- Luôn có dấu cách sau các toán tử: \\int \\cos(2x+1)\\,dx, \\sqrt{x^2+1}.
 - Trong phương án trắc nghiệm, TUYỆT ĐỐI KHÔNG lặp lại ký tự "A.", "B.", "C.", "D." ở đầu chuỗi (ví dụ: viết "x = 2", KHÔNG viết "A. x = 2").
 
 Trả về toàn bộ dữ liệu đề thi chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] với JSON exam_type: "THPTQG_2025" gồm title, subject: "${subjectText}", time: "${struct.time}", part1 (mảng ${struct.p1} câu), part2 (mảng ${struct.p2} câu), part3 (mảng ${struct.p3} câu).${fileContextInstruction}`;

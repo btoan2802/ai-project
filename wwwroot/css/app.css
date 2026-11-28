@@ -320,3 +320,73 @@ body.dark-mode .quiz-card-footer,
 .chat-scroll-wrapper {
   padding-bottom: 200px !important;
 }
+
+/* ====== KHÓA CỨNG NÚT ĐÚNG/SAI CHỐNG RỚT CHỮ 'G' ====== */
+.btn-true-false,
+.tf-btn {
+  white-space: nowrap !important;
+  min-width: 66px !important;
+  height: 34px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  box-sizing: border-box !important;
+}
+
+/* ====== BẢNG BIẾN THIÊN (BBT) & ĐỒ THỊ SVG ====== */
+.quiz-variation-table-wrapper {
+  overflow-x: auto;
+  margin: 14px 0;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px;
+}
+body.dark-mode .quiz-variation-table-wrapper,
+[data-theme="dark"] .quiz-variation-table-wrapper {
+  background: #181920;
+  border-color: #2f3241;
+}
+
+.variation-table {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: center;
+}
+.variation-table th,
+.variation-table td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+}
+body.dark-mode .variation-table th,
+body.dark-mode .variation-table td,
+[data-theme="dark"] .variation-table th,
+[data-theme="dark"] .variation-table td {
+  border-color: #3b3f52;
+  color: #f8fafc;
+}
+
+.quiz-svg-graph-wrapper {
+  max-width: 480px;
+  margin: 14px auto;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+body.dark-mode .quiz-svg-graph-wrapper,
+[data-theme="dark"] .quiz-svg-graph-wrapper {
+  background: #181920;
+  border-color: #2f3241;
+}
+.quiz-svg-graph-wrapper svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
