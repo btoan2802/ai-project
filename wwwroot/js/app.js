@@ -2918,7 +2918,7 @@ document.addEventListener("click", function (e) {
 
     // đóng sidebar
     if (sidebar && sidebar.classList.contains("open")) {
-        if (!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+        if (!sidebar.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
             sidebar.classList.remove("open")
         }
     }
@@ -4513,7 +4513,7 @@ function renderQuestionMedia(q) {
 function generateAutoFunctionGraphSvg(q) {
     if (!q) return "";
     const qText = String(q.question || q.context || "").toLowerCase();
-    
+
     // Trích xuất đáp án để dựng đồ thị tương ứng chính xác
     let ansKey = String(q.answer || "A").trim().toUpperCase();
     let ansText = "";
@@ -4668,7 +4668,7 @@ function generateAutoFunctionGraphSvg(q) {
 function generateAutoVariationTable(q) {
     if (!q) return "";
     const qText = String(q.question || q.context || "").toLowerCase();
-    
+
     if (qText.includes("tiệm cận") || qText.includes("ax+b") || qText.includes("cx+d")) {
         return `
             <div class="quiz-variation-table-wrapper">
@@ -5301,7 +5301,7 @@ function gradeThptqgQuiz(qid) {
                 gradeLevel: "THPT",
                 items: recordItems
             })
-        }).catch(() => {});
+        }).catch(() => { });
     } catch (e) { }
 
     const retryBtn = document.createElement("button");
@@ -5409,21 +5409,21 @@ function extractCorrectOptionKey(q, optionsObj) {
 
     // 2. Tìm trường đáp án đúng từ các biến thể phổ biến (cả tiếng Anh lẫn tiếng Việt)
     let raw = q.answer !== undefined ? q.answer :
-              (q.correct !== undefined ? q.correct :
-              (q.correct_answer !== undefined ? q.correct_answer :
-              (q.correctAnswer !== undefined ? q.correctAnswer :
-              (q.correct_option !== undefined ? q.correct_option :
-              (q.correctOption !== undefined ? q.correctOption :
-              (q.key !== undefined ? q.key :
-              (q.solution_key !== undefined ? q.solution_key :
-              (q.result !== undefined ? q.result :
-              (q.dap_an !== undefined ? q.dap_an :
-              (q.dapan !== undefined ? q.dapan :
-              (q.dapAn !== undefined ? q.dapAn :
-              (q.ket_qua !== undefined ? q.ket_qua :
-              (q.ketqua !== undefined ? q.ketqua :
-              (q.right_answer !== undefined ? q.right_answer :
-              (q.true_answer !== undefined ? q.true_answer : "")))))))))))))));
+        (q.correct !== undefined ? q.correct :
+            (q.correct_answer !== undefined ? q.correct_answer :
+                (q.correctAnswer !== undefined ? q.correctAnswer :
+                    (q.correct_option !== undefined ? q.correct_option :
+                        (q.correctOption !== undefined ? q.correctOption :
+                            (q.key !== undefined ? q.key :
+                                (q.solution_key !== undefined ? q.solution_key :
+                                    (q.result !== undefined ? q.result :
+                                        (q.dap_an !== undefined ? q.dap_an :
+                                            (q.dapan !== undefined ? q.dapan :
+                                                (q.dapAn !== undefined ? q.dapAn :
+                                                    (q.ket_qua !== undefined ? q.ket_qua :
+                                                        (q.ketqua !== undefined ? q.ketqua :
+                                                            (q.right_answer !== undefined ? q.right_answer :
+                                                                (q.true_answer !== undefined ? q.true_answer : "")))))))))))))));
 
     if (raw === null || raw === undefined) raw = "";
 
@@ -5569,7 +5569,7 @@ function gradeQuiz(qid) {
                 gradeLevel: data.gradeLevel || "THPT",
                 items: recordItems
             })
-        }).catch(() => {});
+        }).catch(() => { });
     } catch (e) { }
 
     const actionBox = document.getElementById(`quizActionBar_${qid}`);
@@ -5729,7 +5729,7 @@ function updateFlashcardUI(fcid) {
                 ],
                 throwOnError: false
             });
-        } catch (e) {}
+        } catch (e) { }
     }
 }
 
@@ -5757,7 +5757,7 @@ function markMastered(fcid) {
                 gradeLevel: "THPT",
                 items: [{ topic: card.topic || card.front || "Flashcard", isCorrect: true }]
             })
-        }).catch(() => {});
+        }).catch(() => { });
     }
     navFlashcard(fcid, 1);
 }
@@ -5776,7 +5776,7 @@ function markReview(fcid) {
                 gradeLevel: "THPT",
                 items: [{ topic: card.topic || card.front || "Flashcard", isCorrect: false }]
             })
-        }).catch(() => {});
+        }).catch(() => { });
     }
     navFlashcard(fcid, 1);
 }
@@ -6072,7 +6072,7 @@ function selectLearningCard(modeKey) {
         setTimeout(() => {
             try {
                 configPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            } catch (e) {}
+            } catch (e) { }
             const input = document.getElementById("learningTopicInput");
             if (input) input.focus();
         }, 80);
@@ -6564,8 +6564,8 @@ async function loadRoadmapsData() {
 
                         <div class="roadmap-tasks-list d-flex flex-column gap-2" id="rmTaskList_${r.id}">
                             ${plan.map(task => {
-                                const isDone = Boolean(task.completed);
-                                return `
+                    const isDone = Boolean(task.completed);
+                    return `
                                 <div class="roadmap-task-item p-2.5 rounded-3 border d-flex align-items-center justify-content-between gap-2.5 ${isDone ? 'is-completed bg-body-secondary' : 'bg-body'}" id="rmTaskRow_${r.id}_${task.id}">
                                     <div class="d-flex align-items-center gap-2.5 text-truncate">
                                         <input class="form-check-input cursor-pointer fs-6 m-0" type="checkbox" id="chk_${r.id}_${task.id}" ${isDone ? 'checked' : ''} onchange="toggleStudyTask(${r.id}, '${task.id}', this.checked)">
@@ -6586,7 +6586,7 @@ async function loadRoadmapsData() {
                                     </div>
                                 </div>
                                 `;
-                            }).join("")}
+                }).join("")}
                         </div>
                     </div>
                 </div>
