@@ -1155,25 +1155,35 @@ body.dark-mode .topic-mastery-bar,
 }
 
 /* ====== BẢO VỆ LEARNING CONFIG PANEL VÀ TẤT CẢ Ô NHẬP LIỆU ====== */
+#learningConfigPanel {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%) !important;
+  border: 1px solid rgba(99,102,241,0.3) !important;
+  color: #ffffff !important;
+  position: relative !important;
+  z-index: 100 !important;
+  pointer-events: auto !important;
+}
+
 .learning-config-panel {
   position: relative !important;
   z-index: 100 !important;
   pointer-events: auto !important;
 }
 
-.learning-config-panel select,
-.learning-config-panel textarea,
-.learning-config-panel input,
-.learning-config-panel button,
-.learning-config-panel label {
-  position: relative !important;
-  z-index: 101 !important;
-  pointer-events: auto !important;
+/* Labels luôn trắng */
+#learningConfigPanel label,
+#learningConfigPanel .form-label {
+  color: #e2e8f0 !important;
 }
 
+/* Select / Textarea / Input: nền trắng, chữ đen — luôn đọc được */
+#learningConfigPanel select,
+#learningConfigPanel textarea,
+#learningConfigPanel input[type="text"],
+#learningConfigPanel input[type="file"],
+.learning-config-panel select,
 .learning-config-panel textarea,
-.learning-config-panel input[type="text"],
-.learning-config-panel select {
+.learning-config-panel input[type="text"] {
   color: #0f172a !important;
   background-color: #ffffff !important;
   border: 1px solid #cbd5e1 !important;
@@ -1181,29 +1191,65 @@ body.dark-mode .topic-mastery-bar,
   user-select: text !important;
   -webkit-user-select: text !important;
   color-scheme: light !important;
+  -webkit-text-fill-color: #0f172a !important;
+  position: relative !important;
+  z-index: 101 !important;
+  pointer-events: auto !important;
 }
 
+#learningConfigPanel select,
 .learning-config-panel select {
   cursor: pointer !important;
   -webkit-appearance: auto !important;
   appearance: auto !important;
 }
 
-/* Force light color-scheme cho tất cả form controls trong config panel */
+/* Force light cho Bootstrap form-select / form-control */
+#learningConfigPanel .form-select,
+#learningConfigPanel .form-control,
 .learning-config-panel .form-select,
 .learning-config-panel .form-control {
   background-color: #ffffff !important;
   color: #0f172a !important;
   color-scheme: light !important;
   -webkit-text-fill-color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
 }
 
+/* Upload box */
+#learningConfigPanel .learning-upload-box {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.2) !important;
+}
+
+/* Socratic toggle bg */
+#learningConfigPanel .form-check {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(99,102,241,0.4) !important;
+}
+
+/* Focus ring */
+#learningConfigPanel select:focus,
+#learningConfigPanel textarea:focus,
+#learningConfigPanel input[type="text"]:focus,
+.learning-config-panel select:focus,
 .learning-config-panel textarea:focus,
-.learning-config-panel input[type="text"]:focus,
-.learning-config-panel select:focus {
-  border-color: #6366f1 !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+.learning-config-panel input[type="text"]:focus {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35) !important;
   outline: none !important;
+}
+
+/* Divider line */
+#learningConfigPanel .border-top {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+
+/* Button Hủy trong panel */
+#learningConfigPanel .btn-light {
+  background: rgba(255,255,255,0.15) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,0.25) !important;
 }
 
 /* ======================================================
