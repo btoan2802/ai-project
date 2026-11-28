@@ -1,4 +1,4 @@
-
+﻿
 function dataURLToBlob(dataurl) {
     if (!dataurl) return new Blob([], { type: 'image/jpeg' });
     const arr = dataurl.split(',');
@@ -4319,14 +4319,17 @@ function cleanAndFormatMath(rawText, isOption = false) {
     str = str.replace(/--\\?infty/g, "-\\infty");
 
     // Phục hồi phân số cơ bản bị mất dấu gạch chéo: frac{a}{b} -> \frac{a}{b}
-    str = str.replace(/(?<!\\)frac\{/g, "\\frac{");
-    str = str.replace(/(?<!\\)frac(\d)(\d)(?!\d)/g, "\\frac{$1}{$2}");
+    // Dùng capture group thay lookbehind để tương thích mọi browser
+    str = str.replace(/(^|[^\\])frac\{/g, (m, pre) => pre + "\\frac{");
+    str = str.replace(/(^|[^\\])frac(\d)(\d)(?!\d)/g, (m, pre, a, b) => pre + "\\frac{" + a + "}{" + b + "}");
 
     // Chỉ phục hồi lệnh LaTeX BÊN TRONG các cặp $...$ hoặc $$...$$ đã tồn tại, tuyệt đối không đụng vào chữ tiếng Việt bên ngoài
     str = str.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (match) => {
         let math = match;
         math = math.replace(/-\s*-\s*\\?infty/g, "-\\infty");
-        math = math.replace(/(?<!\\)\b(frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|delta|theta|sigma|infty|times|cdot|pm|le|ge|ne|approx|sum|lim|to|in)\b/g, (m, p1) => "\\" + p1);
+        // Phục hồi lệnh LaTeX bên trong $...$: frac, sqrt, ... chưa có dấu \
+        // Dùng capture group (^|[^\\]) thay lookbehind cho tương thích mọi browser
+        math = math.replace(/(^|[^\\])\b(frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|delta|theta|sigma|infty|times|cdot|pm|le|ge|ne|approx|sum|lim|to|in)\b/g, (m, pre, p1) => pre + "\\" + p1);
         math = math.replace(/\\?intcos\b/g, "\\int \\cos ");
         math = math.replace(/\\?intsin\b/g, "\\int \\sin ");
         math = math.replace(/\\?intdx\b/g, "\\int dx");
@@ -4700,8 +4703,8 @@ function cleanQuizJsonString(rawStr) {
     // Sửa các ký tự điều khiển ASCII sinh ra do \f (form feed) và \b (backspace) trong JSON spec
     clean = clean.replace(/\u000c/g, "\\\\f").replace(/\u0008/g, "\\\\b");
 
-    // Chỉ nhân đôi backslash đơn độc lập (chưa được escape), KHÔNG chạm vào các backslash đã nhân đôi (\\\\):
-    clean = clean.replace(/(?<!\\)((?:\\\\)*)\\(?!["\\\/bfnrtu])/g, "$1\\\\");
+    // Nhan doi backslash don chua duoc escape (khong dung lookbehind cho tuong thich browser):
+    clean = clean.replace(/\\(?!(\\|"|\/|b|f|n|r|t|u))/g, "\\\\\\\\");
 
     return clean;
 }
