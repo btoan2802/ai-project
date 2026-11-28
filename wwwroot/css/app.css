@@ -1193,3 +1193,176 @@ body.dark-mode .topic-mastery-bar,
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
   outline: none !important;
 }
+
+/* ======================================================
+   MOBILE RESPONSIVE — LEARNING HUB (max-width: 480px)
+   ====================================================== */
+@media (max-width: 480px) {
+
+  /* Header học tập nhỏ gọn hơn */
+  .learning-hub-title {
+    font-size: 1.3rem !important;
+  }
+  .learning-hub-subtitle {
+    font-size: 0.8rem !important;
+    padding: 0 8px !important;
+  }
+  .learning-hero-badge {
+    font-size: 0.75rem !important;
+  }
+
+  /* Sub-nav tabs: stack hoặc scroll ngang */
+  .learning-subnav-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    justify-content: flex-start !important;
+    padding: 0 8px !important;
+  }
+  .learning-subnav {
+    flex-wrap: nowrap !important;
+    white-space: nowrap !important;
+  }
+  .learning-tab-btn {
+    font-size: 0.72rem !important;
+    padding: 4px 10px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Carousel cards: 1 card full width */
+  .learning-carousel-wrapper {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .learning-card-item {
+    min-width: 85vw !important;
+    max-width: 85vw !important;
+  }
+  .carousel-nav-btn {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* Config panel: full width, no horizontal scroll */
+  .learning-config-panel {
+    max-width: 100% !important;
+    padding: 16px 12px !important;
+    margin: 0 !important;
+    border-radius: 12px !important;
+  }
+  .learning-config-panel .row.g-3 > [class*="col-"] {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  /* Chế độ / Số lượng & Độ khó: stack thành 2 cột vừa */
+  #learningExtraOptions .col-6 {
+    width: 50% !important;
+  }
+  #learningExtraOptions .row.g-2 {
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+  }
+  #learningCountSelect,
+  #learningDifficultySelect {
+    font-size: 0.75rem !important;
+    padding: 6px 24px 6px 8px !important;
+  }
+
+  /* Textarea Chủ đề: chiều cao nhỏ hơn */
+  #learningTopicInput {
+    rows: 2 !important;
+    min-height: 60px !important;
+    font-size: 0.85rem !important;
+  }
+
+  /* Nút Hủy / Bắt đầu: full width trên mobile */
+  .learning-config-panel .col-12.d-flex.justify-content-end {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .learning-config-panel .col-12.d-flex.justify-content-end .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Upload box nhỏ gọn */
+  .learning-upload-box {
+    padding: 8px !important;
+  }
+  .learning-upload-box .btn {
+    font-size: 0.75rem !important;
+    padding: 4px 8px !important;
+  }
+
+  /* Sim suggestion chips: scroll ngang */
+  #simSuggestionsChips {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 4px !important;
+  }
+  #simSuggestionsChips .btn {
+    white-space: nowrap !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Toàn bộ learning hub screen: padding nhỏ hơn */
+  .learning-hub-screen {
+    padding: 12px 6px !important;
+  }
+
+  /* Form labels: nhỏ hơn */
+  .learning-config-panel label.form-label {
+    font-size: 0.78rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Học tập screen tiêu đề */
+  #selectedModeTitle {
+    font-size: 0.95rem !important;
+  }
+}
+
+/* ======================================================
+   MOBILE RESPONSIVE — CHAT & QUIZ CARDS (max-width: 480px)
+   ====================================================== */
+@media (max-width: 480px) {
+
+  /* Quiz card header smaller */
+  .quiz-part-header {
+    font-size: 0.75rem !important;
+    padding: 8px 10px !important;
+  }
+  .quiz-part-header .part-score {
+    font-size: 0.7rem !important;
+  }
+
+  /* Câu hỏi text */
+  .quiz-question-text {
+    font-size: 0.88rem !important;
+    line-height: 1.5 !important;
+  }
+
+  /* TF row: nhỏ gọn hơn */
+  .tf-row {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+  .tf-statement-text {
+    font-size: 0.82rem !important;
+  }
+  .tf-btn {
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+    height: 30px !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Short answer input */
+  .quiz-short-answer-input {
+    font-size: 1rem !important;
+    padding: 8px 10px !important;
+  }
+}

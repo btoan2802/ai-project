@@ -1,4 +1,4 @@
-﻿
+
 function dataURLToBlob(dataurl) {
     if (!dataurl) return new Blob([], { type: 'image/jpeg' });
     const arr = dataurl.split(',');
@@ -4703,8 +4703,9 @@ function cleanQuizJsonString(rawStr) {
     // Sửa các ký tự điều khiển ASCII sinh ra do \f (form feed) và \b (backspace) trong JSON spec
     clean = clean.replace(/\u000c/g, "\\\\f").replace(/\u0008/g, "\\\\b");
 
-    // Nhan doi backslash don chua duoc escape (khong dung lookbehind cho tuong thich browser):
-    clean = clean.replace(/\\(?!(\\|"|\/|b|f|n|r|t|u))/g, "\\\\\\\\");
+    // KHÔNG double-escape backslash - AI đã trả về \\frac đúng JSON format
+    // Chỉ xử lý ký tự điều khiển thực sự gây lỗi JSON (tab, newline thực)
+    // (đã xử lý \u000c và \u0008 ở trên)
 
     return clean;
 }
