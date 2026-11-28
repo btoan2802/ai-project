@@ -51,10 +51,10 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
 
   <!-- 4. CSS Local -->
-  <link rel="stylesheet" href="css/style.css?v=20261128_v56">
-  <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261128_v56">
-  <link rel="stylesheet" href="css/main_style.css?v=20261128_v56">
-  <link rel="stylesheet" href="css/app.css?v=20261128_v56">
+  <link rel="stylesheet" href="css/style.css?v=20261128_v59">
+  <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261128_v59">
+  <link rel="stylesheet" href="css/main_style.css?v=20261128_v59">
+  <link rel="stylesheet" href="css/app.css?v=20261128_v59">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -632,7 +632,7 @@
           <!-- NEW CHAT BUTTON -->
           <button class="new-chat-btn w-100 d-flex align-items-center justify-content-center gap-2 py-2.5 px-3 rounded-pill fw-semibold shadow-sm mb-3 text-nowrap" onclick="newChat()" title="Chat mới">
             <i class="bi bi-plus-lg fs-5"></i>
-            <span>+ Chat mới</span>
+            <span>Chat mới</span>
           </button>
 
           <!-- NAV MENU (STUDIO IDE, LEARNING HUB, KNOWLEDGE) -->
@@ -650,7 +650,7 @@
             <a href="javascript:void(0)" onclick="openLearningHub()" class="nav-item d-flex align-items-center justify-content-between px-3 py-2 rounded-3 text-decoration-none" id="sidebarLearningBtn">
               <div class="d-flex align-items-center gap-2.5">
                 <i class="bi bi-mortarboard-fill text-success fs-5"></i>
-                <span class="fw-semibold small sidebar-item-title">🎓 Học tập</span>
+                <span class="fw-semibold small sidebar-item-title">Học tập</span>
               </div>
               <span class="badge bg-success text-white extra-small px-2 py-0.5 rounded-pill">NEW</span>
             </a>
@@ -658,7 +658,7 @@
             <!-- 3. KNOWLEDGE BASE -->
             <a href="javascript:void(0)" class="nav-item d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none" onclick="openKnowledgeModal()">
               <i class="bi bi-journal-text text-indigo fs-5"></i>
-              <span class="fw-semibold small sidebar-item-title">📄 Kho tri thức &amp; Tài liệu</span>
+              <span class="fw-semibold small sidebar-item-title">Kho tri thức &amp; Tài liệu</span>
             </a>
           </div>
         </div>
@@ -1444,21 +1444,14 @@
             <i class="bi bi-shield-check"></i>
             <span>Dữ liệu &amp; Quyền riêng tư</span>
           </button>
-          @if (isAdmin)
-          {
-            <div class="settings-nav-divider my-2"></div>
-            <button type="button" id="setTabBtn-admin" class="settings-nav-item text-warning" onclick="switchSettingsGroup('admin')">
-              <i class="bi bi-shield-lock-fill"></i>
-              <span>Quản trị viên</span>
-            </button>
-          }
+          <div id="setAdminDivider" class="settings-nav-divider my-2 @(isAdmin ? "" : "d-none")"></div>
+          <button type="button" id="setTabBtn-admin" class="settings-nav-item text-warning @(isAdmin ? "" : "d-none")" onclick="switchSettingsGroup('admin')">
+            <i class="bi bi-shield-lock-fill"></i>
+            <span>Quản trị viên</span>
+          </button>
         </nav>
 
-        <div class="settings-sidebar-footer mt-auto pt-3 border-top border-secondary-subtle">
-          <button type="button" class="btn btn-outline-secondary btn-sm w-100 rounded-pill extra-small py-1.5" onclick="closeSettingsModal()">
-            <i class="bi bi-arrow-left me-1"></i>Đóng
-          </button>
-        </div>
+
       </aside>
 
       <!-- RIGHT CONTENT PANE (flex: 1) -->
@@ -1503,7 +1496,7 @@
 
             <div>
               <div class="d-flex justify-content-between extra-small mb-1 text-secondary">
-                <span>Lượt tạo ảnh AI chân thực:</span>
+                <span>Lượt Học tập &amp; Luyện đề AI:</span>
                 <span id="usageImageLabel" class="fw-semibold text-white">3 / 20 ảnh</span>
               </div>
               <div class="progress" style="height: 6px; background: #3c4043;">
@@ -1523,15 +1516,15 @@
             </p>
             <div class="row g-2 mb-3">
               <div class="col-6">
-                <div class="p-2.5 rounded-3" style="background: #1e1f20; border: 1px solid #3c4043;">
-                  <div class="fw-semibold small text-white">Gói Free</div>
-                  <div class="extra-small text-secondary">100 chat/ngày, 30 build IDE</div>
+                <div class="p-2.5 rounded-3 plan-card-free">
+                  <div class="fw-semibold small plan-title">Gói Free</div>
+                  <div class="extra-small plan-desc">100 chat/ngày, 30 build IDE</div>
                 </div>
               </div>
               <div class="col-6">
-                <div class="p-2.5 rounded-3 border-primary" style="background: rgba(99,102,241,0.1); border: 1px solid #6366f1;">
-                  <div class="fw-semibold small text-indigo">Gói Pro VIP ⚡</div>
-                  <div class="extra-small text-secondary">Không giới hạn chat, IDE tốc độ cao</div>
+                <div class="p-2.5 rounded-3 plan-card-pro">
+                  <div class="fw-semibold small plan-title">Gói Pro VIP ⚡</div>
+                  <div class="extra-small plan-desc">Không giới hạn chat, IDE tốc độ cao</div>
                 </div>
               </div>
             </div>
@@ -1687,8 +1680,6 @@
           </div>
         </div>
 
-        @if (isAdmin)
-        {
           <!-- GROUP 4: QUẢN TRỊ VIÊN (ADMIN) -->
           <div id="setGroup-admin" class="settings-group-pane" style="display:none;">
             <!-- 1. Hộp thư Phản hồi (Feedback Inbox) -->
@@ -1771,16 +1762,15 @@
               </div>
             </div>
           </div>
-        }
 
         </div>
 
         <!-- Content Footer -->
-        <div class="settings-content-footer pt-3 mt-auto border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+        <div class="settings-content-footer">
           <div id="settingsAlertMsg" class="extra-small text-success fw-semibold"></div>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" onclick="closeSettingsModal()">Đóng</button>
-            <button type="button" class="btn btn-primary btn-sm rounded-pill px-4 fw-semibold" onclick="saveSettingsPreferences()">
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeSettingsModal()">Đóng</button>
+            <button type="button" class="btn btn-primary btn-sm fw-semibold" onclick="saveSettingsPreferences()">
               <i class="bi bi-check-lg me-1"></i>Lưu thay đổi
             </button>
           </div>
@@ -1799,7 +1789,7 @@
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
   <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
-  <script src="js/app.js?v=20261128_v56"></script>
+  <script src="js/app.js?v=20261128_v59"></script>
 
   <!-- E. CURSOR AI CODING AGENT MODAL -->
   <div id="agentModal" class="profile-modal" style="display:none">

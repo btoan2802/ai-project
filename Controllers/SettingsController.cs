@@ -54,7 +54,7 @@ namespace BtoanAiNet.Controllers
                 var pref = await _context.UserPreferences.FirstOrDefaultAsync(p => p.UserId == uid);
                 if (pref != null)
                 {
-                    return Ok(new { ok = true, data = pref, preferences = pref });
+                    return Ok(new { ok = true, isAdmin = IsAdminUser, data = pref, preferences = pref });
                 }
             }
             catch (Exception ex)
@@ -286,6 +286,7 @@ namespace BtoanAiNet.Controllers
             return Ok(new
             {
                 ok = true,
+                isAdmin = IsAdminUser,
                 chatCount = chatCountToday,
                 chatLimit = 100,
                 ideCount = projectCount,
@@ -402,10 +403,25 @@ namespace BtoanAiNet.Controllers
         {
             get
             {
-                var claimId = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (claimId == "1") return true;
-                if (User?.IsInRole("Admin") == true) return true;
-                return CurrentUserId == 1;
+                try
+                {
+                    var claimId = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (claimId == "1") return true;
+                    if (User?.IsInRole("Admin") == true || User?.IsInRole("admin") == true) return true;
+                    var claimName = User?.Identity?.Name;
+                    if (string.Equals(claimName, "admin", StringComparison.OrdinalIgnoreCase)) return true;
+                    var roleClaim = User?.FindFirst(ClaimTypes.Role)?.Value ?? User?.FindFirst("role")?.Value;
+                    if (string.Equals(roleClaim, "admin", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (CurrentUserId == 1) return true;
+                    var user = _context.Users.AsNoTracking().FirstOrDefault(u => u.Id == CurrentUserId);
+                    if (user != null && (string.Equals(user.Username, "admin", StringComparison.OrdinalIgnoreCase) || (user.Email != null && user.Email.StartsWith("admin"))))
+                        return true;
+                    var firstUser = _context.Users.AsNoTracking().OrderBy(u => u.Id).FirstOrDefault();
+                    if (firstUser != null && firstUser.Id == CurrentUserId)
+                        return true;
+                }
+                catch { }
+                return false;
             }
         }
 

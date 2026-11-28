@@ -5232,9 +5232,9 @@ function registerFlashcardData(jsonStr) {
 
         const widgetHtml = `
             <div class="flashcards-interactive-container" id="fcWidget_${fcid}">
-                <div class="d-flex align-items-center justify-content-between mb-2 border-bottom border-secondary pb-2">
-                    <h6 class="fw-bold text-white mb-0">🎴 ${escapeHtml(data.title || "Bộ thẻ ghi nhớ Flashcards")}</h6>
-                    <span class="badge bg-dark-subtle text-warning border border-secondary px-2.5 py-1 extra-small" id="fcCounter_${fcid}">
+                <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                    <h6 class="fw-bold mb-0">🎴 ${escapeHtml(data.title || "Bộ thẻ ghi nhớ Flashcards 3D")}</h6>
+                    <span class="badge bg-secondary-subtle text-secondary px-2.5 py-1 extra-small" id="fcHeaderCounter_${fcid}">
                         Thẻ 1 / ${cards.length}
                     </span>
                 </div>
@@ -5254,21 +5254,31 @@ function registerFlashcardData(jsonStr) {
                     </div>
                 </div>
 
-                <div class="d-flex align-items-center justify-content-between mt-3">
-                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="navFlashcard('${fcid}', -1)">
-                        <i class="bi bi-chevron-left me-1"></i>Trước
-                    </button>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-warning btn-sm rounded-pill px-3" onclick="markReview('${fcid}')">
-                            <i class="bi bi-arrow-repeat me-1"></i>Ôn lại
+                <!-- 2 HÀNG ĐIỀU KHIỂN TÁCH BIỆT -->
+                <div class="flashcard-controls d-flex flex-column gap-2 mt-3">
+                    <!-- HÀNG 1: ĐÁNH GIÁ MỨC ĐỘ GHI NHỚ (50% / 50%) -->
+                    <div class="d-flex gap-2 w-100">
+                        <button type="button" class="btn btn-fc-review flex-fill" onclick="markReview('${fcid}')">
+                            <i class="bi bi-arrow-repeat me-1"></i>↻ Cần ôn lại
                         </button>
-                        <button type="button" class="btn btn-success btn-sm rounded-pill px-3 fw-semibold" onclick="markMastered('${fcid}')">
-                            <i class="bi bi-check-lg me-1"></i>Đã thuộc
+                        <button type="button" class="btn btn-fc-mastered flex-fill" onclick="markMastered('${fcid}')">
+                            <i class="bi bi-check-lg me-1"></i>✓ Đã thuộc
                         </button>
                     </div>
-                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="navFlashcard('${fcid}', 1)">
-                        Tiếp<i class="bi bi-chevron-right ms-1"></i>
-                    </button>
+
+                    <!-- HÀNG 2: ĐIỀU HƯỚNG (3 PHẦN TỬ CĂN GIỮA) -->
+                    <div class="d-flex align-items-center justify-content-between w-100">
+                        <button type="button" class="btn btn-fc-nav" onclick="navFlashcard('${fcid}', -1)">
+                            <i class="bi bi-chevron-left me-1"></i>‹ Thẻ trước
+                        </button>
+                        <div class="fc-status-badge text-center" id="fcCounter_${fcid}">
+                            <span class="fc-index-text fw-semibold">Thẻ 1 / ${cards.length}</span>
+                            <span class="badge bg-success-subtle text-success ms-1 extra-small" id="fcMasteredBadge_${fcid}">Đã thuộc: 0</span>
+                        </div>
+                        <button type="button" class="btn btn-fc-nav" onclick="navFlashcard('${fcid}', 1)">
+                            Thẻ tiếp ›<i class="bi bi-chevron-right ms-1"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -5298,12 +5308,31 @@ function updateFlashcardUI(fcid) {
     const frontEl = document.getElementById(`frontText_${fcid}`);
     const backEl = document.getElementById(`backText_${fcid}`);
     const counterEl = document.getElementById(`fcCounter_${fcid}`);
+    const headerCounterEl = document.getElementById(`fcHeaderCounter_${fcid}`);
 
     if (frontEl) frontEl.innerText = card.front;
     if (backEl) backEl.innerText = card.back;
+    if (headerCounterEl) {
+        headerCounterEl.innerText = `Thẻ ${state.index + 1} / ${state.cards.length}`;
+    }
     if (counterEl) {
-        const masteredPercent = Math.round((state.mastered.size / state.cards.length) * 100);
-        counterEl.innerText = `Thẻ ${state.index + 1} / ${state.cards.length} (${masteredPercent}% đã thuộc)`;
+        counterEl.innerHTML = `
+            <span class="fc-index-text fw-semibold">Thẻ ${state.index + 1} / ${state.cards.length}</span>
+            <span class="badge bg-success-subtle text-success ms-1 extra-small" id="fcMasteredBadge_${fcid}">Đã thuộc: ${state.mastered.size}</span>
+        `;
+    }
+    if (window.renderMathInElement && stage) {
+        try {
+            window.renderMathInElement(stage, {
+                delimiters: [
+                    { left: "$$", right: "$$", display: true },
+                    { left: "$", right: "$", display: false },
+                    { left: "\\(", right: "\\)", display: false },
+                    { left: "\\[", right: "\\]", display: true }
+                ],
+                throwOnError: false
+            });
+        } catch (e) {}
     }
 }
 
@@ -5785,15 +5814,24 @@ Trả về toàn bộ dữ liệu bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] đ
     }
 
     // Thiết lập tóm tắt đẹp cho bong bóng người dùng thay vì toàn bộ văn bản tài liệu dài
+    const unitName = (window.currentLearningMode === "flashcard") ? "thẻ" : "câu";
     let summaryText = `🎓 ${modeTitle} — Môn ${subjectText} (${gradeText})`;
     if (isThptqgExam) {
         summaryText = `🎓 🏆 Đề chuẩn Bộ GD&ĐT THPTQG 2025–2026 — Môn ${subjectText} (${difficulty})`;
         if (attachedFileName) summaryText += `\n📎 Tài liệu: ${attachedFileName}`;
         else summaryText += `\n🎯 Chủ đề: ${topic}`;
+    } else if (window.currentLearningMode === "flashcard") {
+        const cleanTopic = (!topicInput?.value?.trim() && !attachedFileName) ? "Trọng tâm kiến thức & bài tập" : topic;
+        if (attachedFileName) {
+            summaryText += `\n📎 Tài liệu: ${attachedFileName} (${count} thẻ • ${difficulty})`;
+        } else {
+            summaryText += `: ${cleanTopic} (${count} thẻ • ${difficulty})`;
+        }
     } else if (attachedFileName) {
-        summaryText += `\n📎 Tài liệu: ${attachedFileName} (${count} câu • ${difficulty})`;
+        summaryText += `\n📎 Tài liệu: ${attachedFileName} (${count} ${unitName} • ${difficulty})`;
     } else {
-        summaryText += `: ${topic} (${count} câu • ${difficulty})`;
+        const cleanTopic = (!topicInput?.value?.trim() && !attachedFileName) ? "Trọng tâm kiến thức & bài tập" : topic;
+        summaryText += `: ${cleanTopic} (${count} ${unitName} • ${difficulty})`;
     }
     window._pendingUserDisplaySummary = summaryText;
 
@@ -5816,10 +5854,41 @@ Trả về toàn bộ dữ liệu bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] đ
 }
 
 // 4. Advanced Settings Controller
+function checkAndShowAdminTab(serverIsAdmin) {
+    const adminTabBtn = document.getElementById("setTabBtn-admin");
+    const adminDivider = document.getElementById("setAdminDivider");
+    if (!adminTabBtn) return;
+
+    let isAdmin = Boolean(
+        serverIsAdmin === true ||
+        window.currentUser?.role === "Admin" ||
+        window.currentUser?.role === "admin" ||
+        window.currentUser?.id === 1 ||
+        window.currentUser?.username === "admin" ||
+        localStorage.getItem("user_role") === "Admin" ||
+        localStorage.getItem("user_role") === "admin" ||
+        localStorage.getItem("is_admin") === "true" ||
+        localStorage.getItem("user_id") === "1"
+    );
+
+    if (isAdmin) {
+        adminTabBtn.classList.remove("d-none");
+        adminTabBtn.style.display = "flex";
+        if (adminDivider) {
+            adminDivider.classList.remove("d-none");
+            adminDivider.style.display = "block";
+        }
+    }
+}
+
 function openSettingsModal() {
     const modal = document.getElementById("settingsModal");
     if (!modal) return;
     modal.style.display = "flex";
+
+    // Kiểm tra và hiển thị tab Admin cho tài khoản có quyền Admin
+    checkAndShowAdminTab();
+
     switchSettingsGroup("account");
     loadSettingsUsage();
     loadSettingsPreferences();
@@ -5862,6 +5931,9 @@ async function loadSettingsUsage() {
         const res = await fetch("/api/settings/usage");
         const data = await res.json();
         if (data.ok) {
+            if (data.isAdmin || data.is_admin) {
+                checkAndShowAdminTab(true);
+            }
             const chatLbl = document.getElementById("usageChatLabel");
             const chatBar = document.getElementById("usageChatBar");
             const ideLbl = document.getElementById("usageIdeLabel");
