@@ -5589,7 +5589,10 @@ function openLearningHub() {
     const configPanel = document.getElementById("learningConfigPanel");
 
     if (welcome) welcome.style.display = "none";
-    if (chat) chat.style.display = "none";
+    if (chat) {
+        chat.classList.add("d-none");
+        chat.style.setProperty("display", "none", "important");
+    }
     if (configPanel) configPanel.style.display = "none";
     if (hub) {
         hub.classList.remove("d-none");
@@ -5633,6 +5636,7 @@ function closeLearningHub() {
 
     const chat = document.getElementById("chat") || document.getElementById("chatMessagesContainer");
     if (chat && chat.children.length > 0) {
+        chat.classList.remove("d-none");
         chat.style.display = "block";
     } else {
         const welcome = document.getElementById("welcome-screen") || document.getElementById("welcomeScreen");
@@ -5862,8 +5866,13 @@ function selectLearningCard(modeKey) {
 
     if (configPanel) {
         configPanel.style.display = "block";
-        const input = document.getElementById("learningTopicInput");
-        if (input) input.focus();
+        setTimeout(() => {
+            try {
+                configPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (e) {}
+            const input = document.getElementById("learningTopicInput");
+            if (input) input.focus();
+        }, 80);
     }
 }
 

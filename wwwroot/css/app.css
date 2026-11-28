@@ -1005,3 +1005,58 @@ body.dark-mode .topic-mastery-bar,
 .roadmap-task-item.is-completed .task-title {
   text-decoration: line-through;
 }
+
+/* ====== KHÓA ẨN CHỐNG CHẶN CON TRỎ CHUỘT (POINTER-EVENTS) KHI ĐANG Ở HỌC TẬP ====== */
+#chat.d-none,
+#chat[style*="display: none"],
+.chat-viewport.d-none,
+.chat-viewport[style*="display: none"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+/* ====== BẢO VỆ LEARNING CONFIG PANEL VÀ TẤT CẢ Ô NHẬP LIỆU ====== */
+.learning-config-panel {
+  position: relative !important;
+  z-index: 100 !important;
+  pointer-events: auto !important;
+}
+
+.learning-config-panel select,
+.learning-config-panel textarea,
+.learning-config-panel input,
+.learning-config-panel button,
+.learning-config-panel label {
+  position: relative !important;
+  z-index: 101 !important;
+  pointer-events: auto !important;
+}
+
+.learning-config-panel textarea,
+.learning-config-panel input[type="text"],
+.learning-config-panel select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  cursor: text !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.learning-config-panel select {
+  cursor: pointer !important;
+}
+
+.learning-config-panel textarea:focus,
+.learning-config-panel input[type="text"]:focus,
+.learning-config-panel select:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+  outline: none !important;
+}
