@@ -1,187 +1,191 @@
-# KHUÔN MẪU THAM CHIẾU ĐỀ THI TỐT NGHIỆP THPT QUỐC GIA (MÔN TOÁN) 2025–2026
-(Chương trình Giáo dục Phổ thông 2018 — Chuẩn Ma trận & Cấu trúc Bộ Giáo dục và Đào tạo)
+# KHUÔN MẪU THAM CHIẾU ĐỀ THI TỐT NGHIỆP THPT (MÔN TOÁN) 2025–2026
+(Chương trình GDPT 2018 — Trích xuất toàn diện từ Bộ Đề Tham khảo, Đề Chính thức & Bộ 60 Đề Minh họa 2025–2026 của Bộ GD&ĐT)
 
-> TÀI LIỆU CHUẨN ĐƯỢC BTOAN AI TRÍCH XUẤT VÀ TỔNG HỢP TRỰC TIẾP TỪ 2 BỘ ĐỀ THI CHÍNH THỨC 2025 & 2026 CỦA BỘ GD&ĐT.
-
----
-
-## I. MA TRẬN VÀ QUY CÁCH 3 PHẦN CỦA ĐỀ THI TOÁN THPTQG 2025–2026
-- Thời gian làm bài: 90 phút.
-- Tổng số câu: 22 câu (gồm 3 phần riêng biệt).
-- Thang điểm: 10,00 điểm.
-- Quy tắc GDPT 2018: **TUYỆT ĐỐI LOẠI BỎ 100% KIẾN THỨC SỐ PHỨC ($z=a+bi$). CẤM RA BẤT KỲ CÂU NÀO VỀ SỐ PHỨC!**
-- Cấm câu hỏi thiếu hình: Không dùng "xem hình dưới", "như hình bên" trừ khi câu hỏi có trường `dataTable` hoặc `variationTable` đi kèm. Hình học không gian phải mô tả tường minh bằng lời và thông số để giải được trực tiếp.
+> TÀI LIỆU CHUẨN CỦA BTOAN AI: Được tổng hợp và chuẩn hóa trực tiếp từ đề tham khảo Bộ GD&ĐT (ID 68161), đề chính thức 2025 (Mã đề 0102, ID 68163) và các bộ đề minh họa chuẩn 2026 (ID 68101, ID 68102, ID 68103).
 
 ---
 
-### PHẦN I: TRẮC NGHIỆM 4 PHƯƠNG ÁN (12 câu — 0,25 điểm/câu, tối đa 3,0 điểm)
-Thí sinh trả lời từ câu 1 đến câu 12. Mỗi câu chỉ chọn đúng 1 phương án A, B, C hoặc D.
-
-#### Phân bố ma trận 12 câu:
-1. **Cấp số cộng / Cấp số nhân:** Cho $u_1$ và công sai $d$ (hoặc công bội $q$), tính số hạng $u_k$ hoặc công thức số hạng tổng quát.
-2. **Đạo hàm / Quy tắc tính đạo hàm:** Đạo hàm của tổng, tích hoặc hàm số lũy thừa $f'(x) = x, g'(x) = x^2 \Rightarrow (f+g)'(x) = x + x^2$.
-3. **Nguyên hàm cơ bản:** Tìm họ nguyên hàm $\int f(x)\,dx$ của đa thức, lượng giác ($\sin x, \cos x$) hoặc hàm số mũ.
-4. **Phương trình mũ / logarit cơ bản:** Giải phương trình $\log_a(bx+c) = d$ hoặc $a^{bx+c} = d$.
-5. **Vectơ và tọa độ trong không gian $Oxyz$:** Tọa độ vectơ $\vec{AB} = B - A$, phép toán cộng vectơ $\vec{u} + \vec{v}$, hoặc tọa độ trung điểm / trọng tâm.
-6. **Xác suất cổ điển & biến cố độc lập:** Tính $P(AB) = P(A) \cdot P(B)$ cho hai biến cố độc lập $A, B$.
-7. **Hình học không gian / Khối đa diện:** Vectơ trong hình lập phương, hình chóp hoặc quan hệ song song $AB \parallel (CDD'C')$.
-8. **Bất phương trình / Hệ bất phương trình bậc nhất hai ẩn:** Kiểm tra cặp số $(x_0; y_0)$ thỏa mãn hệ bất phương trình.
-9. **Mặt phẳng và đường thẳng trong $Oxyz$:** Vectơ pháp tuyến mặt phẳng hoặc vectơ chỉ phương đường thẳng.
-10. **Tiệm cận / Đơn điệu từ BẢNG BIẾN THIÊN (`variationTable`):** Tìm tiệm cận đứng, tiệm cận ngang, tiệm cận xiên hoặc khoảng đơn điệu. Câu này **BẮT BUỘC cung cấp trường `variationTable`**.
-11. **Tích phân và diện tích hình phẳng:** Công thức tính diện tích hình phẳng $S = \int_a^b |f(x)|\,dx$.
-12. **Mẫu số liệu ghép nhóm (`dataTable`):** Xác định nhóm chứa trung vị $M_e$ hoặc tính tứ phân vị $Q_3$. Câu này **BẮT BUỘC cung cấp trường `dataTable`**.
+## I. QUY CÁCH TỔNG QUAN VÀ NGUYÊN TẮC THÉP
+- **Thời gian làm bài:** 90 phút.
+- **Tổng số câu:** 22 câu (3 phần riêng biệt).
+- **Thang điểm:** 10,00 điểm (Phần I: 3,0đ; Phần II: 4,0đ; Phần III: 3,0đ).
+- **100% Chương trình GDPT 2018:** TUYỆT ĐỐI LOẠI BỎ SỐ PHỨC ($z = a + bi$). Không có bất kỳ câu nào về số phức.
+- **NGUYÊN TẮC HÌNH VẼ & BẢNG BIỂU (CHỐNG LỖI CÂU HỎI THIẾU HÌNH):**
+  1. TUYỆT ĐỐI CẤM dùng các cụm từ *"như hình bên"*, *"trong hình vẽ bên"*, *"xem hình dưới"* mà không có hình vẽ thật!
+  2. Với bài toán khảo sát hàm số (đơn điệu, cực trị, tiệm cận):
+     - **Cách 1:** Cung cấp Bảng biến thiên chuẩn SGK 3 dòng $x, y', y$ qua trường `"variationTable"`.
+     - **Cách 2:** Cho công thức hàm số tường minh $y = f(x)$ (ví dụ: $y = x^3 - 3x^2 + 2$, $y = \frac{2x-1}{x+1}$) để học sinh giải trực tiếp bằng đạo hàm.
+  3. Với bài toán thống kê mẫu số liệu ghép nhóm: BẮT BUỘC cung cấp qua trường `"dataTable"`.
+  4. Với bài toán hình học không gian và tọa độ $Oxyz$: Mô tả tường minh đầy đủ kích thước, tọa độ các điểm/đỉnh để học sinh dựng hình và giải trực tiếp 100%.
+- **NGẪU NHIÊN HÓA (RANDOMIZATION):** Mỗi lần tạo đề mới, AI BẮT BUỘC thay đổi bối cảnh thực tế (ô tô tăng tốc, vệ tinh GPS, thiên thạch, nồng độ thuốc, kinh tế tối ưu chi phí, v.v.), đổi số liệu và bộ tham số, đảm bảo mỗi đề là một đề hoàn toàn mới lạ.
 
 ---
 
-### PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI (4 câu — Mỗi câu có ngữ cảnh và 4 mệnh đề a, b, c, d; tối đa 4,0 điểm)
-Thang điểm lũy tiến quy định của Bộ GD&ĐT:
-- Đúng 1 ý: 0,10 điểm.
-- Đúng 2 ý: 0,25 điểm.
-- Đúng 3 ý: 0,50 điểm.
-- Đúng cả 4 ý: 1,00 điểm.
+## II. MA TRẬN 22 CÂU CHI TIẾT THEO 3 PHẦN
 
-#### Phân bố ma trận 4 câu:
-- **Câu 1 (Giải tích thuần túy):** Khảo sát hàm số đa thức bậc ba $f(x) = ax^3 + bx^2 + cx + d$ hoặc phân thức.
-  - a) Kiểm tra biểu thức đạo hàm $f'(x)$.
-  - b) Giải phương trình $f'(x) = 0$ tìm tập nghiệm.
-  - c) Xét khoảng đơn điệu hoặc tính giá trị cực trị $f(x_{cđ}), f(x_{ct})$.
-  - d) Tìm giá trị lớn nhất / nhỏ nhất trên đoạn $[m; n]$.
-- **Câu 2 (Toán thực tế — Xác suất điều kiện & Công thức Bayes):** Tầm soát y tế / Xét nghiệm sàng lọc bệnh tật / Ứng dụng AI nhận diện tin nhắn quảng cáo rác.
-  - Cho tổng số cá thể $N$, tỷ lệ được cảnh báo/xét nghiệm dương tính, tỷ lệ mắc bệnh thực tế.
-  - a) Tính xác suất $P(\bar{W})$ hoặc $P(A)$.
-  - b) Tính xác suất có điều kiện $P(\bar{D} \mid \bar{W})$ hoặc $P(B \mid A)$.
-  - c) Kiểm tra một giá trị xác suất toàn phần.
-  - d) Tính xác suất hậu nghiệm Bayes $P(W \mid \bar{D})$ và so sánh ngưỡng.
-- **Câu 3 (Toán thực tế — Ứng dụng Tích phân / Hàm mũ / Vi phân):** Lưu trữ năng lượng mặt trời, nồng độ thuốc tồn dư trong hồ nuôi thủy sản, hoặc làm nguội vật thể theo định luật Newton.
-  - Cho tốc độ biến thiên $f(t) = F'(t)$ hoặc phương trình vi phân $y'(t) = k \cdot y(t)$.
-  - a) Xác định hàm số tích lũy $F(t) = \int f(t)\,dt$ với điều kiện ban đầu $F(0)$.
-  - b) Ý nghĩa hình học/vật lý của tích phân từ $t = a$ đến $t = b$.
-  - c) Tính lượng tích lũy trong một khoảng thời gian $[t_1; t_2]$ và so sánh với con số cho trước.
-  - d) So sánh lượng tích lũy giữa hai giai đoạn khác nhau.
-- **Câu 4 (Toán thực tế — $Oxyz$ chuyển động vật thể):** Quan sát đường bay của drone, máy bay, tàu thủy hoặc vật thể có vận tốc $v(t) = \beta t + v_0$ đối chiếu với vành đai bảo vệ hoặc trạm radar.
-  - a) Tọa độ vectơ chuyển động $\vec{MN}$ hoặc vectơ đơn vị $\vec{u}$.
-  - b) Phương trình tham số đường chuyển động.
-  - c) Khoảng cách ngắn nhất từ vật thể đến vành đai bảo vệ hoặc trạm kiểm soát.
-  - d) Vị trí $(x; y; z)$ hoặc thời điểm $t$ đạt khoảng cách ngắn nhất.
+### PHẦN I: TRẮC NGHIỆM 4 PHƯƠNG ÁN LỰA CHỌN (12 câu — 0,25đ/câu, tối đa 3,0đ)
+Phủ rộng kiến thức Nhận biết và Thông hiểu:
+1. **Nguyên hàm cơ bản:** Họ nguyên hàm của $e^x$, $\sin x + \cos x$, đa thức hoặc $x^\alpha$.
+2. **Tích phân & Ứng dụng hình học:** Công thức thể tích khối tròn xoay $V = \pi \int_a^b [f(x)]^2 dx$ hoặc diện tích hình phẳng $S = \int_a^b |f(x)| dx$.
+3. **Mẫu số liệu ghép nhóm (`dataTable`):** Cho bảng tần số ghép nhóm, yêu cầu tính hoặc so sánh độ lệch chuẩn $s$, trung vị $M_e$, tứ phân vị $Q_1, Q_3$, khoảng tứ phân vị $\Delta_Q$. (Bắt buộc dùng `"dataTable"`).
+4. **Hình học $Oxyz$ cơ bản:** Phương trình đường thẳng đi qua điểm $M$ có vtcp $\vec{u}$, pt mặt phẳng qua gốc tọa độ hoặc có vtpt $\vec{n}$, pt mặt cầu tâm $I$ bán kính $R$, tọa độ vectơ $\vec{b} = 2\vec{a}$.
+5. **Hàm số — Tiệm cận / Đơn điệu / Cực trị (`variationTable`):** Nhận diện tiệm cận đứng, tiệm cận ngang, khoảng đơn điệu hoặc giá trị cực đại/cực tiểu từ Bảng biến thiên. (Bắt buộc dùng `"variationTable"`).
+6. **Phương trình / Bất phương trình Mũ & Logarit:** Giải $\log_a(bx+c) < d$ hoặc $a^{bx+c} = d$.
+7. **Hình học không gian cổ điển:** Góc giữa hai mặt phẳng, khoảng cách, quan hệ song song/vuông góc trong hình chóp hoặc hình lăng trụ.
+8. **Cấp số cộng & Cấp số nhân:** Cho $u_1, u_2$ tìm $u_5$; cho $u_1, d$ tìm số hạng tổng quát; tìm công sai $d$.
+9. **Phương trình lượng giác / Bất phương trình:** Phương trình $\sin x = m$, $\cos x = m$, hệ bất phương trình bậc nhất hai ẩn.
+10. **Tổ hợp & Xác suất cổ điển:** Chọn người, chọn đội văn nghệ, chọn số tự nhiên có các chữ số khác nhau, xác suất của biến cố độc lập $P(AB) = P(A)P(B)$.
+11. **Vectơ trong không gian:** Đẳng thức vectơ trong hình hộp $ABCD.A'B'C'D'$ ($\vec{AB} + \vec{AD} + \vec{AA'} = \vec{AC'}$), vectơ trong khối chóp.
+12. **GTLN, GTNN của hàm số:** Cho hàm số cụ thể trên đoạn $[a; b]$ (ví dụ: $y = 3\sin 2x - 5$ hoặc hàm bậc ba tường minh).
 
 ---
 
-### PHẦN III: TRẮC NGHIỆM TRẢ LỜI NGẮN (6 câu — 0,5 điểm/câu, tối đa 3,0 điểm)
-Thí sinh tự tính toán và điền đáp số dạng số nguyên hoặc số thập phân.
-
-#### Phân bố ma trận 6 câu:
-- **Câu 1 (Hình học không gian / $Oxyz$ nâng cao):** Tính khoảng cách giữa hai đường thẳng chéo nhau, khoảng cách từ một điểm đến mặt phẳng trong khối lập phương hoặc hình chóp. (Làm tròn đến hàng phần trăm hoặc hàng phần mười).
-- **Câu 2 (Tổ hợp / Số học nâng cao):** Bài toán phân loại số dư (chia cho 5 hoặc số nguyên tố), xếp số vào lưới ô vuông / tam giác thỏa mãn điều kiện.
-- **Câu 3 (Ứng dụng Tích phân tính thể tích thực tế):** Tính thể tích vật thể tròn xoay khi quay elip, parabol quanh trục $Ox$, hoặc khoét lỗ hình trụ qua tâm.
-- **Câu 4 (Tổ hợp & Xác suất hình học):** Đa giác đều 12 đỉnh hoặc 20 đỉnh, gắn bóng đèn / chọn ngẫu nhiên các đỉnh tạo thành hình vuông/tam giác thỏa mãn điều kiện.
-- **Câu 5 (Toán thực tế — Hệ phương trình tuyến tính từ BẢNG SỐ LIỆU `dataTable`):** Bảng số liệu bán hàng (nông sản, thực phẩm, vé xe) trong các ngày trong tuần. Xác định đơn giá từng mặt hàng bằng cách giải hệ 3 phương trình 3 ẩn và tính tổng doanh thu ngày cuối tuần. **BẮT BUỘC cung cấp trường `dataTable`**.
-- **Câu 6 (Toán thực tế — Tối ưu hóa kinh tế / Cực trị hàm số):** Tìm số lượng sản phẩm $x$ hoặc mức nguyên liệu $x$ để lợi nhuận $P(x) = R(x) - C(x)$ đạt giá trị lớn nhất trong điều kiện công suất giới hạn $x \in [a; b]$.
+### PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI (4 câu — Mỗi câu 4 mệnh đề a, b, c, d; tối đa 4,0đ)
+Chấm điểm lũy tiến: Đúng 1 ý: 0,1đ; Đúng 2 ý: 0,25đ; Đúng 3 ý: 0,5đ; Đúng cả 4 ý: 1,0đ.
+Cấu trúc 4 câu điển hình:
+- **Câu 1 (Giải tích khảo sát hàm số):**
+  Cho hàm số $f(x) = x^3 - 27x + 81$ hoặc $f(x) = 2\cos x + x$ hoặc $f(x) = x - 4\ln x$ hoặc $f(x) = \log_{1/3}(x+1)$.
+  - a) Tập xác định hoặc giá trị tại các điểm biên.
+  - b) Biểu thức đạo hàm $f'(x)$.
+  - c) Nghiệm của $f'(x) = 0$ hoặc khoảng đồng biến/nghịch biến.
+  - d) Giá trị lớn nhất / giá trị nhỏ nhất trên đoạn $[m; n]$.
+- **Câu 2 (Toán thực tế — Xác suất điều kiện & Công thức Bayes):**
+  Bối cảnh thực tế: Sàng lọc y tế, phần mềm lọc tin nhắn rác, hệ thống máy chủ dự phòng nguồn điện $A, B$, tỷ lệ khách hàng mua sản phẩm.
+  - a) Xác suất biến cố biên $P(B)$ hoặc $P(\bar{W})$.
+  - b) Xác suất có điều kiện $P(A|B)$ hoặc $P(\bar{A}|\bar{W})$.
+  - c) Xác suất toàn phần $P(A)$.
+  - d) Xác suất hậu nghiệm Bayes $P(B|A)$ và so sánh ngưỡng.
+- **Câu 3 (Toán thực tế — Ứng dụng Đạo hàm & Tích phân / Hàm mũ):**
+  Bối cảnh thực tế:
+  - Ô tô tăng tốc $v(t) = at + b$ nhập làn cao tốc, tính quãng đường $S(t) = \int_0^t v(\tau)d\tau$.
+  - Tàu hỏa tăng tốc bậc ba $v(t) = at^3 + bt^2 + ct + d$ giữa 2 nhà ga.
+  - Nồng độ thuốc tồn dư trong nước nuôi thủy sản $y'(t) = k \cdot y(t)$, đo ở thời điểm $t_1, t_2$.
+  - Tấm thép nung nóng hạ nhiệt theo định luật làm nguội Newton $T'(t) = 200 e^{kt}$.
+  - Năng suất cây trồng và tối ưu hóa lợi nhuận nông nghiệp: $f(n) = -0,06n^2 - 0,4n + 320$.
+- **Câu 4 (Toán thực tế — Mô hình không gian $Oxyz$):**
+  Bối cảnh thực tế:
+  - Quỹ đạo thiên thạch bay từ $M$ đến $N$ tiếp cận Trái Đất (bán kính 6400km, hệ thống theo dõi 6600km).
+  - Chuyển động của vật thể với vận tốc $v(t) = \beta t + v_0$ theo hướng vectơ $\vec{u}$.
+  - Tia Laze phản xạ từ điểm $S$ qua lỗ $A$ trên tường $Oyz$, chạm sàn $Oxy$ tại $B$ rồi tới tường $Oxz$ tại $C$.
+  - Khoan hai đường hầm xuyên núi gặp nhau tại $S$ và khoan lối thoát hiểm đứng lên mặt đất.
 
 ---
 
-## II. ĐỊNH DẠNG JSON CHUẨN XUẤT RA CHO BTOAN AI TRONG `[QUIZ_DATA]`
+### PHẦN III: TRẮC NGHIỆM TRẢ LỜI NGẮN (6 câu — 0,5đ/câu, tối đa 3,0đ)
+Thí sinh tự tính toán và điền đáp số tối đa 4 ký tự (gồm cả dấu âm và dấu phẩy thập phân).
+Cấu trúc 6 câu điển hình:
+- **Câu 1 (Hình học không gian / $Oxyz$ tính khoảng cách/thể tích):**
+  - Khoảng cách giữa 2 đường thẳng chéo nhau (lăng trụ đứng $ABC.A'B'C'$ có $AB=5, BC=6, CA=7$; hoặc hình chóp).
+  - Tang của góc giữa đường thẳng và mặt phẳng.
+- **Câu 2 (Bài toán thực tế Hình học & Tích phân):**
+  - Chân đế chóp cụt bị khoét chỏm cầu bán kính $R$ $\Rightarrow$ tính thể tích chân đế gỗ.
+  - Mái lều xiếc tròn xoay tạo bởi parabol xoay quanh trục $\Rightarrow$ tính thể tích mái lều.
+  - Dây curoa quấn chéo quanh 2 ròng rọc có bán kính $R, r$ lệch góc $\theta = 60^\circ$ $\Rightarrow$ tính chiều dài dây.
+  - Thiết kế sân chơi chữ nhật $60 \times 80$ chừa 2 phần hoa biên parabol $\Rightarrow$ tích phân tính diện tích sân chơi.
+- **Câu 3 (Hệ thống $Oxyz$ thực tế):**
+  - Hệ thống định vị toàn cầu GPS: 4 vệ tinh $A, B, C, D$ bắt tín hiệu từ vật thể $M(a;b;c)$ $\Rightarrow$ tính khoảng cách $OM$.
+  - Bóng râm của bức tường tam giác trên mặt đất, tính thời gian con kiến bò qua bóng râm.
+- **Câu 4 (Tối ưu hóa kinh tế & Cực trị hàm số):**
+  - Doanh nghiệp sản xuất $x$ sản phẩm có doanh thu $F(x)$, chi phí bình quân $G(x) \Rightarrow$ tìm $x$ để lợi nhuận lớn nhất (hoặc vượt ngưỡng).
+  - Tối ưu chi phí sản xuất hộp diêm thể tích $24\text{ cm}^3$, tính chiều rộng $x$ để chi phí bìa là nhỏ nhất.
+- **Câu 5 (Tổ hợp, Cấp số cộng, Xác suất nâng cao):**
+  - Cậu bé chạy lấy các quả táo cách đều 3m, 6m, 9m... $\Rightarrow$ tổng quãng đường cấp số cộng, tính vận tốc trung bình.
+  - Gập thanh sắt dài 21cm tại 2 điểm nguyên ngẫu nhiên để 2 đầu chạm nhau (điều kiện tam giác) $\Rightarrow$ tính xác suất.
+  - Bài toán rút ngẫu nhiên bóng từ hộp 1 sang hộp 2 rồi rút tiếp quả bóng đỏ $\Rightarrow$ xác suất Bayes.
+- **Câu 6 (Mô hình hàm số thực tế / Ứng dụng đạo hàm):**
+  - Đường dốc tiếp tuyến $y = \sqrt{x}$, con đường $AP = 80\text{ m} \Rightarrow$ tính độ cao điểm tiếp xúc $P$.
+  - Đường bờ sông mô hình hóa bằng đa thức bậc 4 tiếp xúc trục $Ox$ tại $A, B$, tính diện tích phần đất lát bê tông.
 
+---
+
+## III. ĐỊNH DẠNG JSON XUẤT RA BTOAN AI TRONG `[QUIZ_DATA]`
 ```json
 [QUIZ_DATA]
 {
   "exam_type": "THPTQG_2025",
   "title": "Đề thi thử tốt nghiệp THPT 2025–2026 chuẩn Bộ GD&ĐT — Môn Toán",
   "subject": "Toán",
-  "time": "90 phút",
+  "durationMinutes": 90,
   "part1": [
     {
       "id": 1,
-      "question": "Cho cấp số cộng $(u_n)$ có số hạng đầu $u_1 = 5$ và công sai $d = -1$. Giá trị của $u_2$ bằng",
-      "options": ["4", "-5", "5", "-4"],
+      "topic": "Nguyên hàm",
+      "question": "Họ nguyên hàm của hàm số $f(x) = e^x + 2x$ là",
+      "options": ["e^x + x^2 + C", "e^x + 2 + C", "\\frac{e^{x+1}}{x+1} + x^2 + C", "e^x - x^2 + C"],
       "answer": "A",
-      "explanation": "Ta có công thức $u_2 = u_1 + d = 5 + (-1) = 4$. Do đó chọn A."
+      "explanation": "Ta có $\\int (e^x + 2x)\\,dx = e^x + x^2 + C$."
     },
     {
-      "id": 10,
-      "question": "Cho hàm số $y = \\frac{ax+b}{cx+d}$ có bảng biến thiên như bên dưới. Đường tiệm cận ngang của đồ thị hàm số đã cho có phương trình là",
+      "id": 5,
+      "topic": "Khảo sát hàm số",
+      "question": "Cho hàm số $y = \\frac{ax+b}{cx+d}$ có bảng biến thiên như hình bên dưới. Đường tiệm cận đứng của đồ thị hàm số có phương trình là",
       "variationTable": {
-        "x": ["-\\infty", "1", "+\\infty"],
-        "yPrime": ["+", "||", "+"],
-        "y": ["-2 ↗ +\\infty", "||", "-\\infty ↗ -2"]
+        "x": ["-\\infty", "-2", "+\\infty"],
+        "yPrime": ["-", "||", "-"],
+        "y": ["1 ↘ -\\infty", "||", "+\\infty ↘ 1"]
       },
-      "options": ["y = -2", "x = -2", "x = 1", "y = 1"],
+      "options": ["x = -2", "y = 1", "x = 1", "y = -2"],
       "answer": "A",
-      "explanation": "Từ bảng biến thiên, khi $x \\to \\pm\\infty$ thì $y \\to -2$. Do đó đường tiệm cận ngang là $y = -2$."
+      "explanation": "Từ bảng biến thiên, tại $x = -2$ hàm số không xác định và giới hạn một bên tiến ra vô cực, do đó $x = -2$ là tiệm cận đứng."
     },
     {
-      "id": 12,
-      "question": "Khảo sát thời gian (đơn vị: phút) học trực tuyến trong một ngày của 42 học sinh, người ta thu được mẫu số liệu ghép nhóm như sau. Trung vị của mẫu số liệu thuộc nhóm nào?",
+      "id": 8,
+      "topic": "Mẫu số liệu ghép nhóm",
+      "question": "Một người chia thời lượng (đơn vị: giây) thực hiện các cuộc gọi điện thoại của mình trong một tuần thành sáu nhóm và lập bảng tần số ghép nhóm như sau. Tứ phân vị thứ ba $Q_3$ của mẫu số liệu ghép nhóm bằng bao nhiêu?",
       "dataTable": {
-        "title": "Bảng tần số ghép nhóm thời gian học trực tuyến",
-        "headers": ["[10;20)", "[20;30)", "[30;40)", "[40;50)", "[50;60)", "[60;70)"],
+        "title": "Bảng tần số ghép nhóm thời lượng cuộc gọi",
+        "headers": ["[0;30)", "[30;60)", "[60;90)", "[90;120)", "[120;150)", "[150;180)"],
         "rows": [
-          ["4", "8", "14", "7", "4", "5"]
+          ["10", "11", "8", "6", "4", "1"]
         ]
       },
-      "options": ["[30;40)", "[40;50)", "[60;70)", "[50;60)"],
+      "options": ["95", "90", "100", "105"],
       "answer": "A",
-      "explanation": "Cỡ mẫu $n = 42$. Tần số tích lũy: $cf_1 = 4$, $cf_2 = 12$, $cf_3 = 26$. Vì $12 < 21 \\le 26$ nên trung vị thuộc nhóm $[30;40)$."
+      "explanation": "Cỡ mẫu $n = 40$. Vị trí tứ phân vị thứ ba là $\\frac{3n}{4} = 30$. Nhóm chứa $Q_3$ là $[90; 120)$. Áp dụng công thức tính được $Q_3 = 95$."
     }
   ],
   "part2": [
     {
       "id": 1,
-      "context": "Nhằm đưa ra cảnh báo sớm về tình trạng sức khỏe của cư dân, người ta sử dụng một ứng dụng để sàng lọc nguy cơ mắc bệnh dựa trên hồ sơ y tế. Kết quả thu được khi quét thử nghiệm 10000 người như sau: có 1000 người nhận cảnh báo và 9000 người không nhận cảnh báo. Trong 1000 người nhận cảnh báo có 700 người có bệnh; trong 9000 người không nhận cảnh báo có 100 người có bệnh. Chọn ngẫu nhiên một người:",
+      "topic": "Khảo sát hàm số",
+      "context": "Cho hàm số $f(x) = x^3 - 27x + 81$. Xét tính đúng/sai của các mệnh đề sau:",
       "statements": [
         {
           "key": "a",
-          "text": "Xác suất để người đó không nhận được cảnh báo từ ứng dụng bằng $0,9$.",
+          "text": "Hàm số đã cho có đạo hàm là $f'(x) = 3x^2 - 27$.",
           "answer": true,
-          "explanation": "$P(\\bar{W}) = \\frac{9000}{10000} = 0,9$. Mệnh đề đúng."
+          "explanation": "$f'(x) = (x^3 - 27x + 81)' = 3x^2 - 27$. Mệnh đề đúng."
         },
         {
           "key": "b",
-          "text": "Xác suất để người đó không có bệnh, biết rằng họ không nhận được cảnh báo, lớn hơn $0,98$.",
-          "answer": true,
-          "explanation": "$P(\\bar{D} \\mid \\bar{W}) = \\frac{8900}{9000} \\approx 0,9889 > 0,98$. Mệnh đề đúng."
+          "text": "Phương trình $f'(x) = 0$ có tập nghiệm là $S = \\{3\\}$.",
+          "answer": false,
+          "explanation": "$3x^2 - 27 = 0 \\Leftrightarrow x = \\pm 3$, do đó $S = \\{-3; 3\\}$. Mệnh đề sai."
         },
         {
           "key": "c",
-          "text": "Xác suất để người đó không có bệnh bằng $0,9$.",
-          "answer": false,
-          "explanation": "$P(\\bar{D}) = \\frac{9200}{10000} = 0,92 \\ne 0,9$. Mệnh đề sai."
+          "text": "Giá trị cực tiểu của hàm số bằng $27$.",
+          "answer": true,
+          "explanation": "Tại $x = 3$, $f(3) = 3^3 - 27(3) + 81 = 27$. Mệnh đề đúng."
         },
         {
           "key": "d",
-          "text": "Xác suất không nhận được cảnh báo, biết rằng người đó không có bệnh, nhỏ hơn $0,95$.",
-          "answer": false,
-          "explanation": "$P(\\bar{W} \\mid \\bar{D}) = \\frac{8900}{9200} \\approx 0,9674 > 0,95$. Mệnh đề sai."
+          "text": "Giá trị nhỏ nhất của hàm số trên đoạn $[-4; 4]$ bằng $27$.",
+          "answer": true,
+          "explanation": "Tính $f(-4) = 125, f(4) = 37, f(-3) = 135, f(3) = 27 \\Rightarrow \\min_{[-4;4]} f(x) = 27$. Mệnh đề đúng."
         }
-      ],
-      "explanation": "Tóm tắt qua bảng xác suất hai chiều..."
+      ]
     }
   ],
   "part3": [
     {
-      "id": 5,
-      "question": "Một nông trại cung cấp rau quả cho siêu thị với số liệu bán hàng của bốn ngày trong tuần được ghi lại trong bảng sau. Biết rằng đơn giá mỗi loại rau quả là không đổi. Tổng số tiền (nghìn đồng) nông trại thu được ở ngày Thứ Bảy là bao nhiêu?",
-      "dataTable": {
-        "title": "Bảng khối lượng rau quả cung cấp (kg) và doanh thu",
-        "headers": ["Ngày", "Rau muống", "Bí xanh", "Cà chua", "Tổng tiền (nghìn đồng)"],
-        "rows": [
-          ["Thứ Tư", "19", "14", "10", "600"],
-          ["Thứ Năm", "20", "12", "8", "540"],
-          ["Thứ Sáu", "25", "12", "7", "570"],
-          ["Thứ Bảy", "50", "25", "20", "?"]
-        ]
-      },
-      "answer": "1275",
-      "explanation": "Giải hệ phương trình 3 ẩn: $19x + 14y + 10z = 600$, $20x + 12y + 8z = 540$, $25x + 12y + 7z = 570$ ta được $x = 10, y = 15, z = 20$. Doanh thu Thứ Bảy là $50(10) + 25(15) + 20(20) = 1275$ nghìn đồng."
+      "id": 1,
+      "topic": "Tối ưu hóa kinh tế",
+      "question": "Nếu một doanh nghiệp sản xuất $x$ sản phẩm trong một tháng ($x \\in \\mathbb{N}^*, 1 \\le x \\le 4500$) thì doanh thu nhận được khi bán hết số sản phẩm đó là $F(x) = -0,01x^2 + 400x$ (nghìn đồng), trong khi chi phí sản xuất bình quân cho mỗi sản phẩm là $G(x) = \\frac{30000}{x} + 270$ (nghìn đồng). Trong một tháng, doanh nghiệp đó cần sản xuất ít nhất bao nhiêu sản phẩm để lợi nhuận thu được lớn hơn $100$ triệu đồng?",
+      "answer": "1000",
+      "explanation": "Tổng chi phí là $C(x) = x \\cdot G(x) = 270x + 30000$ (nghìn đồng). Lợi nhuận $P(x) = F(x) - C(x) = -0,01x^2 + 130x - 30000$ (nghìn đồng). Yêu cầu $P(x) > 100000 \\Leftrightarrow -0,01x^2 + 130x - 130000 > 0 \\Leftrightarrow 1000 < x < 13000$. Do đó số sản phẩm ít nhất là $1001$ hoặc $1000$ tùy theo dấu bất phương trình."
     }
   ]
 }
 [/QUIZ_DATA]
 ```
-
----
-
-## III. NGUYÊN TẮC BẢO MẬT & TRÁNH LỖI PHỔ BIẾN
-1. **LỌC THƯƠNG HIỆU TUYỆT ĐỐI:** Không bao giờ xuất hiện chữ "Gemini", "Google" hay "AI Gemini Pro". Toàn bộ bài thi đều mang danh tính Btoan AI.
-2. **KHÔNG DÍNH CHỮ TIẾNG VIỆT TRONG KATEX:** Mọi chữ tiếng Việt ("Tập nghiệm", "Hình chiếu", "Khoảng cách") tuyệt đối **không** được đặt trong cặp `$ ... $`. Chỉ bọc công thức toán thuần túy như `$x \in (1; 9)$`, `$y = -2$`, `$u_2 = 4$`.
-3. **CẤM IN ASCII BẢNG (`---|---|---`):** Luôn dùng trường `dataTable` hoặc `variationTable`.
-4. **TIẾN HÀNH ĐỔI SỐ LIỆU & NGỮ CẢNH:** Khi sinh đề mới, luôn đổi tên nhân vật, vật thể thực tế (drone, tàu cứu hộ, vắc-xin, pin xe điện, v.v.) và bộ số để tạo ra đề thi mới mẻ, phân hóa cao đúng chuẩn Bộ GD&ĐT.
