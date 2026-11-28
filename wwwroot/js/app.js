@@ -4194,25 +4194,44 @@ function triggerKaTeX(el) {
     }
 }
 
+// Helper: Tự động xóa ký hiệu A., B., C., D. bị lặp ở đầu phương án (kể cả khi nằm trong $ ... $)
+function stripOptionPrefix(rawVal) {
+    if (!rawVal) return "";
+    let str = String(rawVal).trim();
+    // 1. Nếu bắt đầu bằng $ A. hoặc $A. hoặc $ (A) hoặc $(A)
+    str = str.replace(/^(\s*\$\s*)[A-Da-d][\.\)\:\-]\s*/, '$1');
+    str = str.replace(/^(\s*\$\s*)\([A-Da-d]\)\s*/, '$1');
+    // 2. Nếu bắt đầu bằng A. hoặc A) hoặc (A) hoặc A: hoặc A - ngoài $
+    str = str.replace(/^\s*\([A-Da-d]\)\s*/, '');
+    str = str.replace(/^\s*[A-Da-d][\.\)\:\-]\s*/, '');
+    // 3. Nếu có tiền tố số thứ tự "1. A. " hoặc "Câu 1: A. "
+    str = str.replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, '');
+    str = str.replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, '');
+    return str.trim();
+}
+
 // Helper: Chuẩn hóa và sửa triệt để lỗi vỡ công thức LaTeX (frac12, intcos, \sin, ...)
 function normalizeMathLatex(text) {
     if (!text) return "";
     let str = String(text);
 
     // 1. Phục hồi phân số bị dính số hoặc mất ngoặc nhọn: frac12 -> \frac{1}{2}, frac13 -> \frac{1}{3}, \frac12 -> \frac{1}{2}
-    str = str.replace(/\\?frac(\d)(\d)/g, "\\frac{$1}{$2}");
-    str = str.replace(/\\?frac\{/g, "\\frac{");
-    str = str.replace(/(?<!\\)frac\b/g, "\\frac");
+    str = str.replace(/(^|[^\\a-zA-Z])frac(\d)(\d)(?!\d)/g, '$1\\frac{$2}{$3}');
+    str = str.replace(/(^|[^\\a-zA-Z])frac\{/g, '$1\\frac{');
+    str = str.replace(/\\?frac(\d)(\d)(?!\d)/g, "\\frac{$1}{$2}");
 
-    // 2. Phục hồi các toán tử dính chữ với toán tử hoặc biến khác (intcos -> \int \cos, intsin -> \int \sin, intdx -> \int dx)
-    str = str.replace(/(?<!\\)intcos/g, "\\int \\cos ");
-    str = str.replace(/(?<!\\)intsin/g, "\\int \\sin ");
-    str = str.replace(/(?<!\\)intdx/g, "\\int dx");
-    str = str.replace(/\\intcos/g, "\\int \\cos ");
-    str = str.replace(/\\intsin/g, "\\int \\sin ");
-    str = str.replace(/\\intdx/g, "\\int dx");
+    // 2. Khôi phục dấu \ cho các toán tử và hàm toán học phổ biến nếu bị mất
+    str = str.replace(/(^|[^\\a-zA-Z])(int|pi|sin|cos|tan|cot|ln|log|sqrt|lim|sum|infty|alpha|beta|gamma|Delta|vec|left|right|le|ge|ne|approx|cdot|times)(?=[_\^\{\(\|\[\s0-9a-zA-Z])/g, '$1\\$2');
 
-    // 3. Khôi phục dấu \ cho các toán tử và hàm toán học phổ biến nếu bị mất
+    // Phục hồi dính toán tử: intcos -> \int \cos, intsin -> \int \sin, intdx -> \int dx
+    str = str.replace(/(?<!\\)intcos\b/g, "\\int \\cos ");
+    str = str.replace(/(?<!\\)intsin\b/g, "\\int \\sin ");
+    str = str.replace(/(?<!\\)intdx\b/g, "\\int dx");
+    str = str.replace(/\\intcos\b/g, "\\int \\cos ");
+    str = str.replace(/\\intsin\b/g, "\\int \\sin ");
+    str = str.replace(/\\intdx\b/g, "\\int dx");
+
+    // 3. Khôi phục dấu \ cho các toán tử và hàm toán học phổ biến khác
     const mathKeywords = [
         "frac", "sqrt", "int", "iint", "iiint", "oint", "sum", "prod", "lim",
         "sin", "cos", "tan", "cot", "arcsin", "arccos", "arctan",
@@ -4319,11 +4338,7 @@ function renderStandardQuizWidget(qid, data) {
                 keyLetter = String.fromCharCode(65 + optIndex);
             }
 
-            let cleanVal = String(rawVal || "")
-                .replace(/^(\s*[\$\(]?\s*)[A-Da-d][\.\)\:\-]\s*/i, "")
-                .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, "")
-                .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
-                .trim();
+            let cleanVal = stripOptionPrefix(rawVal);
 
             optionsHtml += `
                 <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-idx="${idx}" data-key="${keyLetter}" onclick="selectQuizOption('${qid}', ${idx}, '${keyLetter}', this)">
@@ -4407,11 +4422,7 @@ function renderThptqgQuizWidget(qid, data) {
                 keyLetter = String.fromCharCode(65 + optIndex);
             }
 
-            let cleanVal = String(rawVal || "")
-                .replace(/^(\s*[\$\(]?\s*)[A-Da-d][\.\)\:\-]\s*/i, "")
-                .replace(/^(\d+\s*[\.\)\:\-]\s*)?([A-Da-d]\s*[\.\)\:\-]\s*)?/i, "")
-                .replace(/^[0-9A-Za-z][\.\)\:\-]\s*/, "")
-                .trim();
+            let cleanVal = stripOptionPrefix(rawVal);
 
             optionsHtml += `
                 <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-part="p1" data-idx="${idx}" data-key="${keyLetter}" onclick="selectThptqgP1Option('${qid}', ${idx}, '${keyLetter}', this)">
@@ -4643,7 +4654,9 @@ function gradeThptqgQuiz(qid) {
             p1Correct++;
         }
     });
-    const p1Score = p1Correct * 0.25;
+    const struct = getThptqgStructureInfo(data.subject || data.title || "");
+    const p1PointPerQ = struct.p1Point || 0.25;
+    const p1Score = p1Correct * p1PointPerQ;
 
     // --- 2. CHẤM PHẦN II (LŨY TIẾN: 1 ý=0.1đ, 2 ý=0.25đ, 3 ý=0.5đ, 4 ý=1.0đ) ---
     let p2Score = 0;
@@ -4697,7 +4710,7 @@ function gradeThptqgQuiz(qid) {
     let p3Correct = 0;
     // Điểm mỗi câu Phần III (Toán: 6 câu = 0.5đ/câu; KHTN/KHXH: 6 câu = 0.25đ/câu)
     const isMath = /toán/i.test(data.subject || data.title || "");
-    const p3PointPerQ = isMath ? 0.50 : 0.25;
+    const p3PointPerQ = struct.p3Point || (isMath ? 0.50 : 0.25);
 
     part3.forEach((q, idx) => {
         const rawUser = String(data.p3Answers[idx] || "").trim().replace(",", ".");
@@ -5142,6 +5155,79 @@ function onLearningGradeChanged() {
     if (customWrapper) customWrapper.style.display = "none";
 }
 
+// Helper: Cấu trúc đề thi THPTQG 2025–2026 chuẩn Bộ GD&ĐT theo từng môn
+function getThptqgStructureInfo(subject) {
+    const s = String(subject || "").toLowerCase();
+    if (s.includes("toán")) {
+        return {
+            name: "Toán",
+            time: "90 phút",
+            totalQ: 22,
+            p1: 12, p1Point: 0.25,
+            p2: 4,
+            p3: 6, p3Point: 0.50,
+            desc: "22 câu (90 phút): Phần I (12 câu, 0.25đ) • Phần II (4 câu Đúng/Sai, lũy tiến tối đa 1.0đ) • Phần III (6 câu trả lời ngắn, 0.5đ)"
+        };
+    } else if (s.includes("vật lí") || s.includes("vật lý") || s.includes("hóa") || s.includes("sinh") || s.includes("địa")) {
+        return {
+            name: subject,
+            time: "50 phút",
+            totalQ: 28,
+            p1: 18, p1Point: 0.25,
+            p2: 4,
+            p3: 6, p3Point: 0.25,
+            desc: "28 câu (50 phút): Phần I (18 câu, 0.25đ) • Phần II (4 câu Đúng/Sai, lũy tiến tối đa 1.0đ) • Phần III (6 câu trả lời ngắn, 0.25đ)"
+        };
+    } else if (s.includes("sử") || s.includes("kinh tế") || s.includes("pháp luật") || s.includes("tin") || s.includes("công nghệ") || s.includes("gdkt")) {
+        return {
+            name: subject,
+            time: "50 phút",
+            totalQ: 28,
+            p1: 24, p1Point: 0.25,
+            p2: 4,
+            p3: 0, p3Point: 0,
+            desc: "28 câu (50 phút): Phần I (24 câu, 0.25đ) • Phần II (4 câu Đúng/Sai, lũy tiến tối đa 1.0đ)"
+        };
+    } else if (s.includes("tiếng anh") || s.includes("ngoại ngữ") || s.includes("tiếng pháp") || s.includes("tiếng trung") || s.includes("tiếng nhật")) {
+        return {
+            name: subject,
+            time: "50 phút",
+            totalQ: 40,
+            p1: 40, p1Point: 0.25,
+            p2: 0,
+            p3: 0, p3Point: 0,
+            desc: "40 câu (50 phút): Phần I (40 câu trắc nghiệm 4 lựa chọn, 0.25đ / câu)"
+        };
+    }
+    return {
+        name: subject,
+        time: "50 phút",
+        totalQ: 28,
+        p1: 18, p1Point: 0.25,
+        p2: 4,
+        p3: 6, p3Point: 0.25,
+        desc: "28 câu (50 phút): Phần I (18 câu, 0.25đ) • Phần II (4 câu Đúng/Sai, lũy tiến tối đa 1.0đ) • Phần III (6 câu trả lời ngắn, 0.25đ)"
+    };
+}
+
+function updateThptqgHint() {
+    const hint = document.getElementById("thptqgStructureHint");
+    if (!hint) return;
+    const subjectSelect = document.getElementById("learningSubjectSelect");
+    const subject = subjectSelect?.value || "Toán";
+    const struct = getThptqgStructureInfo(subject);
+    hint.innerHTML = `
+        <div class="p-2.5 rounded-3 bg-primary-subtle text-primary border border-primary-subtle extra-small">
+            <div class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-1"></i>Cấu trúc Đề thi THPTQG 2025–2026 môn ${escapeHtml(subject)} (${struct.time}):</div>
+            <ul class="mb-0 ps-3">
+                ${struct.p1 > 0 ? `<li><strong>Phần I:</strong> Trắc nghiệm 4 lựa chọn (${struct.p1} câu; ${struct.p1Point}đ / câu).</li>` : ''}
+                ${struct.p2 > 0 ? `<li><strong>Phần II:</strong> Trắc nghiệm Đúng/Sai (${struct.p2} câu; lũy tiến 1 ý=0.1đ, 2 ý=0.25đ, 3 ý=0.5đ, 4 ý=1.0đ).</li>` : ''}
+                ${struct.p3 > 0 ? `<li><strong>Phần III:</strong> Trắc nghiệm trả lời ngắn (${struct.p3} câu; ${struct.p3Point}đ / câu).</li>` : ''}
+            </ul>
+        </div>
+    `;
+}
+
 function onLearningSubjectChanged() {
     const subjectSelect = document.getElementById("learningSubjectSelect");
     const customWrapper = document.getElementById("learningCustomSubjectWrapper");
@@ -5153,14 +5239,23 @@ function onLearningSubjectChanged() {
     } else {
         customWrapper.style.display = "none";
     }
+    const countSelect = document.getElementById("learningCountSelect");
+    if (countSelect && countSelect.value === "THPTQG_2025") {
+        updateThptqgHint();
+    }
 }
+
+window.onLearningSubjectChanged = onLearningSubjectChanged;
 
 window.onLearningCountSelectChanged = function() {
     const countSelect = document.getElementById("learningCountSelect");
     const hint = document.getElementById("thptqgStructureHint");
     if (!countSelect) return;
     if (countSelect.value === "THPTQG_2025") {
-        if (hint) hint.style.display = "block";
+        if (hint) {
+            hint.style.display = "block";
+            updateThptqgHint();
+        }
         // Nếu đang ở cấp học khác, tự động chọn cấp THPT
         const gradeSelect = document.getElementById("learningGradeSelect");
         if (gradeSelect && gradeSelect.value !== "thpt") {
@@ -5351,7 +5446,23 @@ async function startLearningSession() {
             break;
         case "quiz":
             if (isThptqgExam) {
-                prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026]\nHãy tạo ĐỀ THI THỬ TỐT NGHIỆP THPT QG 2025–2026 chuẩn cấu trúc 3 PHẦN của Bộ Giáo dục & Đào tạo cho môn ${subjectText} về chủ đề "${topic}".\nĐộ khó: ${difficulty}.\n\nCẤU TRÚC BẮT BUỘC:\n- PHẦN I: Trắc nghiệm 4 lựa chọn (Toán 12 câu, Lý/Hóa/Sinh/Sử/Địa/GD 18 câu...; mỗi câu 0.25đ).\n- PHẦN II: Trắc nghiệm Đúng/Sai (Toán 4 câu, KHTN/KHXH 4 câu; mỗi câu có ngữ cảnh và 4 mệnh đề a, b, c, d; tính điểm lũy tiến: 1 ý=0.1đ, 2 ý=0.25đ, 3 ý=0.5đ, 4 ý=1.0đ).\n- PHẦN III: Trắc nghiệm trả lời ngắn (Toán 6 câu, KHTN/KHXH 6 câu; thí sinh điền kết quả dạng số thực/nguyên).\n\nQUY TẮC CÔNG THỨC TOÁN & KHOA HỌC:\n- Mọi công thức Toán/Lý/Hóa bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\\\ trong JSON.\n- Bắt buộc đầy đủ cặp ngoặc nhọn: \\\\frac{1}{2}, \\\\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\\\frac12).\n- Luôn có dấu cách sau các toán tử: \\\\int \\\\cos(2x+1)\\\\,dx, \\\\sqrt{x^2+1}.\n\nTrả về toàn bộ dữ liệu đề thi chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] với JSON exam_type: "THPTQG_2025" gồm part1, part2, part3.${fileContextInstruction}`;
+                const struct = getThptqgStructureInfo(subjectText);
+                prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026]
+Hãy tạo ĐỀ THI THỬ TỐT NGHIỆP THPT QG 2025–2026 chuẩn cấu trúc của Bộ Giáo dục & Đào tạo cho môn ${subjectText} về chủ đề "${topic}".
+Thời gian làm bài: ${struct.time}. Tổng số câu: ${struct.totalQ} câu. Thang điểm: 10.00. Độ khó: ${difficulty}.
+
+CẤU TRÚC BẮT BUỘC THEO QUY CHẾ BỘ GD&ĐT CHO MÔN ${subjectText.toUpperCase()}:
+${struct.p1 > 0 ? `- PHẦN I: Trắc nghiệm 4 lựa chọn (${struct.p1} câu; mỗi câu đúng được ${struct.p1Point}đ).` : ''}
+${struct.p2 > 0 ? `- PHẦN II: Trắc nghiệm Đúng/Sai (${struct.p2} câu; mỗi câu có ngữ cảnh và 4 mệnh đề a, b, c, d; tính điểm lũy tiến: đúng 1 ý = 0.1đ, đúng 2 ý = 0.25đ, đúng 3 ý = 0.5đ, đúng cả 4 ý = 1.0đ).` : ''}
+${struct.p3 > 0 ? `- PHẦN III: Trắc nghiệm trả lời ngắn (${struct.p3} câu; mỗi câu đúng được ${struct.p3Point}đ; thí sinh điền kết quả dạng số thực/nguyên).` : ''}
+
+QUY TẮC CÔNG THỨC TOÁN & KHOA HỌC:
+- Mọi công thức Toán/Lý/Hóa/Sinh bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\\\ trong JSON (ví dụ \\\\frac{1}{2}, \\\\int \\\\cos x dx).
+- Bắt buộc đầy đủ cặp ngoặc nhọn: \\\\frac{1}{2}, \\\\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\\\frac12 hay frac12).
+- Luôn có dấu cách sau các toán tử: \\\\int \\\\cos(2x+1)\\\\,dx, \\\\sqrt{x^2+1}.
+- Trong phương án trắc nghiệm, TUYỆT ĐỐI KHÔNG lặp lại ký tự "A.", "B.", "C.", "D." ở đầu chuỗi (ví dụ: viết "x = 2", KHÔNG viết "A. x = 2").
+
+Trả về toàn bộ dữ liệu đề thi chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] với JSON exam_type: "THPTQG_2025" gồm title, subject: "${subjectText}", time: "${struct.time}", part1 (mảng ${struct.p1} câu), part2 (mảng ${struct.p2} câu), part3 (mảng ${struct.p3} câu).${fileContextInstruction}`;
             } else {
                 prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - TỰ KIỂM TRA KIẾN THỨC]\nHãy tạo bộ đề thi trắc nghiệm tương tác ${count} câu về chủ đề "${topic}" với độ khó ${difficulty}. Các câu hỏi và đáp án nếu có công thức phải viết bằng LaTeX chuẩn ($...$). Trả về cấu trúc JSON chuẩn xác bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] để hệ thống hiển thị giao diện làm bài và chấm điểm tự động.${fileContextInstruction}`;
             }
