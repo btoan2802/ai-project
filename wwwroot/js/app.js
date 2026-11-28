@@ -4442,10 +4442,11 @@ function renderQuestionMedia(q) {
                     const left = val.left || val.from || "";
                     const arrow = val.arrow || "↗";
                     const right = val.right || val.to || "";
+                    const arrowCls = (arrow === "↘" || arrow.includes("searrow")) ? "bbt-arrow-down" : "bbt-arrow-up";
                     cellContent = `
                         <div class="bbt-arrow-flow">
                             <span class="bbt-val-from">${formatQuizMathText(String(left))}</span>
-                            <span class="bbt-arrow">${arrow}</span>
+                            <span class="bbt-arrow ${arrowCls}">${arrow}</span>
                             <span class="bbt-val-to">${formatQuizMathText(String(right))}</span>
                         </div>
                     `;
@@ -4687,16 +4688,16 @@ function renderThptqgQuizWidget(qid, data) {
         statements.forEach((stmt, sIdx) => {
             const sKey = (stmt.key || stmt.label || stmt.letter || String.fromCharCode(97 + sIdx)).toLowerCase();
             stmtsHtml += `
-                <div class="thptqg-statement-row d-flex align-items-center justify-content-between p-2.5 rounded-3 mb-2" id="thptqg_p2_stmt_${qid}_${idx}_${sKey}">
-                    <div class="thptqg-statement-text pe-3">
+                <div class="thptqg-statement-row tf-row d-flex align-items-center justify-content-between p-2.5 rounded-3 mb-2" id="thptqg_p2_stmt_${qid}_${idx}_${sKey}">
+                    <div class="thptqg-statement-text tf-statement-text pe-3">
                         <strong class="text-primary me-1">${sKey})</strong>
                         <span>${formatQuizMathText(stmt.text)}</span>
                     </div>
-                    <div class="thptqg-tf-actions d-flex gap-1.5 flex-shrink-0">
-                        <button type="button" class="btn btn-sm btn-outline-success btn-true-false tf-btn px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_true" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', true, this)">
+                    <div class="thptqg-tf-actions tf-btn-group d-flex gap-2 flex-shrink-0">
+                        <button type="button" class="btn btn-sm btn-outline-success btn-true-false tf-btn rounded-3 fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_true" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', true, this)">
                             Đúng
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-danger btn-true-false tf-btn px-3 rounded-pill fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_false" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', false, this)">
+                        <button type="button" class="btn btn-sm btn-outline-danger btn-true-false tf-btn rounded-3 fw-semibold" id="btn_tf_${qid}_${idx}_${sKey}_false" onclick="selectThptqgP2Option('${qid}', ${idx}, '${sKey}', false, this)">
                             Sai
                         </button>
                     </div>
