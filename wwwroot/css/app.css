@@ -1180,10 +1180,22 @@ body.dark-mode .topic-mastery-bar,
   cursor: text !important;
   user-select: text !important;
   -webkit-user-select: text !important;
+  color-scheme: light !important;
 }
 
 .learning-config-panel select {
   cursor: pointer !important;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+}
+
+/* Force light color-scheme cho tất cả form controls trong config panel */
+.learning-config-panel .form-select,
+.learning-config-panel .form-control {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  color-scheme: light !important;
+  -webkit-text-fill-color: #0f172a !important;
 }
 
 .learning-config-panel textarea:focus,
