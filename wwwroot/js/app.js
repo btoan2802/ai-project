@@ -2915,10 +2915,12 @@ document.addEventListener("click", function (e) {
 
     const sidebar = document.getElementById("sidebar")
     const menuBtn = document.querySelector(".menu-btn")
+    const openSidebarBtn = document.getElementById("openSidebarBtn")
 
     // đóng sidebar
     if (sidebar && sidebar.classList.contains("open")) {
-        if (!sidebar.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
+        const clickedToggle = (menuBtn && menuBtn.contains(e.target)) || (openSidebarBtn && openSidebarBtn.contains(e.target))
+        if (!sidebar.contains(e.target) && !clickedToggle) {
             sidebar.classList.remove("open")
         }
     }

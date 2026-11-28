@@ -54,7 +54,7 @@
   <link rel="stylesheet" href="css/style.css?v=20261128_learning_pro_v2">
   <link rel="stylesheet" href="login/SignUp_LogIn_Form.css?v=20261128_learning_pro_v2">
   <link rel="stylesheet" href="css/main_style.css?v=20261128_layout_fullscreen_v1">
-  <link rel="stylesheet" href="css/app.css?v=20261128_mobile_responsive_v6">
+  <link rel="stylesheet" href="css/app.css?v=20261129_sidebar_fix_v7">
   <style>
     /* ARTIFACT STUDIO & SPLIT PANE */
     .main-app-wrapper.has-artifact .main-content-container {
@@ -1022,7 +1022,7 @@
                     <label class="form-label small fw-semibold text-white">4. Tài liệu ôn tập / Đề cương (Tải từ máy hoặc chọn từ Kho tri thức):</label>
                     
                     <!-- Direct File Upload Box -->
-                    <div class="learning-upload-box mb-2 p-2 rounded-3 border border-secondary border-dashed bg-dark d-flex flex-column gap-2">
+                    <div class="learning-upload-box mb-2 p-2 rounded-3 border border-secondary border-dashed d-flex flex-column gap-2" style="background: rgba(255,255,255,0.05);">
                       <input type="file" id="learningFileUpload" accept=".pdf,.docx,.doc,.txt,.md,.csv,.jpg,.jpeg,.png,.webp" style="display:none;" onchange="onLearningFileSelected(event)" />
                       <button type="button" class="btn btn-sm btn-outline-info d-flex align-items-center justify-content-center gap-2 py-1.5" onclick="document.getElementById('learningFileUpload').click()">
                         <i class="bi bi-paperclip"></i>
@@ -2039,7 +2039,7 @@
   <script src="https://unpkg.com/docx@7.7.0/build/index.js"></script>
   <script src="login/SignUp_LogIn_Form.js?v=20261125_noface_v4"></script>
   <script src="js/artifact_studio.js?v=20261127_docxcard_v7"></script>
-  <script src="js/app.js?v=20261128_mobile_responsive_v6"></script>
+  <script src="js/app.js?v=20261129_sidebar_fix_v7"></script>
 
   <!-- MODAL FULLSCREEN SIMULATION -->
   <div class="modal fade" id="modalFullscreenSimulation" tabindex="-1" aria-hidden="true">
