@@ -197,11 +197,15 @@ namespace BtoanAiNet.Services
 
                 var modelPayload = payload.DeepClone() as JsonObject ?? new JsonObject();
                 // Strip custom non-Gemini properties that client or middleware might include
-                modelPayload.Remove("mode");
-                modelPayload.Remove("question");
-                modelPayload.Remove("user_id");
-                modelPayload.Remove("conversation_id");
-                modelPayload.Remove("intent");
+                var allowedGeminiKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "contents", "systemInstruction", "generationConfig", "tools", "toolConfig", "safetySettings", "cachedContent"
+                };
+                var keysToRemove = modelPayload.Select(kv => kv.Key).Where(k => !allowedGeminiKeys.Contains(k)).ToList();
+                foreach (var k in keysToRemove)
+                {
+                    modelPayload.Remove(k);
+                }
 
                 // Strip thinkingConfig only for models known to reject it (e.g. legacy flash-latest or flash-lite)
                 if (currentModel.Contains("flash-latest") || currentModel.Contains("flash-lite-latest") || currentModel.Contains("lite"))
@@ -359,11 +363,15 @@ namespace BtoanAiNet.Services
             foreach (var currentModel in candidateModels)
             {
                 var modelPayload = payload.DeepClone() as JsonObject ?? new JsonObject();
-                modelPayload.Remove("mode");
-                modelPayload.Remove("question");
-                modelPayload.Remove("user_id");
-                modelPayload.Remove("conversation_id");
-                modelPayload.Remove("intent");
+                var allowedGeminiKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "contents", "systemInstruction", "generationConfig", "tools", "toolConfig", "safetySettings", "cachedContent"
+                };
+                var keysToRemove = modelPayload.Select(kv => kv.Key).Where(k => !allowedGeminiKeys.Contains(k)).ToList();
+                foreach (var k in keysToRemove)
+                {
+                    modelPayload.Remove(k);
+                }
 
                 if (currentModel.Contains("flash-latest") || currentModel.Contains("flash-lite-latest") || currentModel.Contains("lite"))
                 {

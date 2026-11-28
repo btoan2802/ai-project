@@ -9,6 +9,7 @@ namespace BtoanAiNet.ViewModels
         public int? User_Id { get; set; }
         public int? Conversation_Id { get; set; }
         public string? Intent { get; set; }
+        public bool? SocraticMode { get; set; }
         public List<ChatAttachmentModel>? Attachments { get; set; }
 
         public int UserId { get => User_Id ?? 0; set => User_Id = value; }

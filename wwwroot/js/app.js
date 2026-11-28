@@ -1068,7 +1068,8 @@ async function streamGeminiChat(userText, images, files, onChunk) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             model: mode === "thinking" ? "gemini-2.5-flash" : "gemini-2.5-flash",
-            payload: { ...payload, mode: mode, socraticMode: !!window._isSocraticActive, socratic: !!window._isSocraticActive },
+            socraticMode: !!window._isSocraticActive,
+            payload: { ...payload, mode: mode },
             user_id: localStorage.getItem("user_id") || "1",
             conversation_id: conversation_id,
             intent: "chat"
@@ -1258,11 +1259,10 @@ async function callGemini(userText, images, files) {
             },
             body: JSON.stringify({
                 model: mode === "thinking" ? "gemini-2.5-flash" : "gemini-2.5-flash",
+                socraticMode: !!window._isSocraticActive,
                 payload: {
                     ...payload,
-                    mode: mode,
-                    socraticMode: !!window._isSocraticActive,
-                    socratic: !!window._isSocraticActive
+                    mode: mode
                 },
                 user_id: localStorage.getItem("user_id"),
                 conversation_id: conversation_id,

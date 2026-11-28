@@ -580,9 +580,12 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string lowerQ = (question ?? "").ToLowerInvariant();
-            bool isSocraticMode = (payload.ContainsKey("socraticMode") && (payload["socraticMode"]?.ToString() == "true" || payload["socraticMode"]?.GetValue<bool>() == true))
+            bool isSocraticMode = requestModel.SocraticMode == true
+                               || (payload.ContainsKey("socraticMode") && (payload["socraticMode"]?.ToString() == "true" || payload["socraticMode"]?.GetValue<bool>() == true))
                                || (payload.ContainsKey("socratic") && (payload["socratic"]?.ToString() == "true" || payload["socratic"]?.GetValue<bool>() == true))
                                || lowerQ.Contains("[socratic]") || lowerQ.Contains("gia sư gợi mở") || lowerQ.Contains("gia sư socratic");
+            payload.Remove("socraticMode");
+            payload.Remove("socratic");
             bool isSimulationPrompt = lowerQ.Contains("[mô phỏng") || lowerQ.Contains("[simulation") || lowerQ.Contains("mô phỏng tương tác") || lowerQ.Contains("stem lab");
 
             bool isLearningPrompt = isSocraticMode || isSimulationPrompt ||
@@ -1291,9 +1294,12 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string lowerQ = (question ?? "").ToLowerInvariant();
-            bool isSocraticMode = (payload.ContainsKey("socraticMode") && (payload["socraticMode"]?.ToString() == "true" || payload["socraticMode"]?.GetValue<bool>() == true))
+            bool isSocraticMode = requestModel.SocraticMode == true
+                               || (payload.ContainsKey("socraticMode") && (payload["socraticMode"]?.ToString() == "true" || payload["socraticMode"]?.GetValue<bool>() == true))
                                || (payload.ContainsKey("socratic") && (payload["socratic"]?.ToString() == "true" || payload["socratic"]?.GetValue<bool>() == true))
                                || lowerQ.Contains("[socratic]") || lowerQ.Contains("gia sư gợi mở") || lowerQ.Contains("gia sư socratic");
+            payload.Remove("socraticMode");
+            payload.Remove("socratic");
             bool isSimulationPrompt = lowerQ.Contains("[mô phỏng") || lowerQ.Contains("[simulation") || lowerQ.Contains("mô phỏng tương tác") || lowerQ.Contains("stem lab");
 
             bool isLearningPrompt = isSocraticMode || isSimulationPrompt ||
