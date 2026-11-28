@@ -34,6 +34,8 @@ npm-debug.log*
 
 ## Dynamic & User-Generated Content
 App_Data/
+!App_Data/ExamTemplates/
+!App_Data/ExamTemplates/**
 App_Data/**
 App_Data_Backup/
 App_Data_Backup/**

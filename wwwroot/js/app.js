@@ -4243,46 +4243,101 @@ function stripOptionPrefix(rawVal) {
     return str.trim();
 }
 
-// Helper: Tự động phát hiện và bọc $...$ cho các công thức, phương trình, tập hợp, vector, số mũ...
-function ensureMathDelimiters(text) {
-    if (!text || typeof text !== "string") return text;
-    let str = text.trim();
+// Helper: Chuẩn hóa và làm sạch công thức toán an toàn 3 bước (chống dính chữ tiếng Việt và KaTeX)
+function cleanAndFormatMath(rawText, isOption = false) {
+    if (!rawText) return "";
+    let str = String(rawText);
 
-    // Nếu đã được bọc hoàn toàn trong $...$ hoặc $$...$$ thì giữ nguyên
-    if (/^\${1,2}[\s\S]+\${1,2}$/.test(str)) return str;
+    // Bước 1: Sửa lỗi lặp dấu trừ vô cực (ví dụ --\infty hoặc - -\infty)
+    str = str.replace(/-\s*-\s*\\?infty/g, "-\\infty");
+    str = str.replace(/--\\?infty/g, "-\\infty");
 
-    // Nhận diện ký hiệu toán học phổ biến (vector, phân số, tập hợp, căn bậc, góc...)
-    const hasMathIndicators = /\\(frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|theta|sigma|infty|times|cdot|pm|le|ge|ne)\b|[\^_]\{?[\w\d]+\}?|\\\{|\^\\?circ|\b[a-zA-Z]\^[0-9]|\b[a-zA-Z]_[0-9]|\bS\s*=|\\vec/.test(str);
+    // Phục hồi phân số cơ bản bị mất dấu gạch chéo: frac{a}{b} -> \frac{a}{b}
+    str = str.replace(/(?<!\\)frac\{/g, "\\frac{");
+    str = str.replace(/(?<!\\)frac(\d)(\d)(?!\d)/g, "\\frac{$1}{$2}");
 
-    // Nếu không chứa bất kỳ dấu $ nào và có chỉ dấu toán học
-    if (!str.includes("$") && hasMathIndicators) {
-        const isShortOrPureMath = !/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(str) || str.length < 60;
-        if (isShortOrPureMath) {
-            return `$${str}$`;
+    // Chỉ phục hồi lệnh LaTeX BÊN TRONG các cặp $...$ hoặc $$...$$ đã tồn tại, tuyệt đối không đụng vào chữ tiếng Việt bên ngoài
+    str = str.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (match) => {
+        let math = match;
+        math = math.replace(/-\s*-\s*\\?infty/g, "-\\infty");
+        const mathKw = "frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|delta|theta|sigma|infty|times|cdot|pm|le|ge|ne|approx|sum|lim|to|in";
+        const re = new RegExp("(?<!\\)\\b(" + mathKw + ")\\b", "g");
+        math = math.replace(re, "\\$1");
+        math = math.replace(/\\?intcos\b/g, "\\int \\cos ");
+        math = math.replace(/\\?intsin\b/g, "\\int \\sin ");
+        math = math.replace(/\\?intdx\b/g, "\\int dx");
+        return math;
+    });
+
+    // Bước 2: Chỉ tự động bọc $...$ cho chuỗi đáp án (option) THUẦN TOÁN HỌC
+    if (isOption) {
+        const trimmed = str.trim();
+        const hasDollar = trimmed.includes("$");
+        const hasVietnamese = /[\u00C0-\u1EF9]/i.test(trimmed);
+        const hasVietnameseWords = /\b(câu|chọn|đúng|sai|cả|và|hoặc|không|có|là|tại|với|khi|mệnh|đề|phát|biểu)\b/i.test(trimmed);
+        const hasMathSymbols = /[\\^_=<>≤≥∫]/.test(trimmed) || /\\(frac|sqrt|vec|int|sin|cos|log|ln|pi|infty)/.test(trimmed);
+
+        if (!hasDollar && !hasVietnamese && !hasVietnameseWords && hasMathSymbols) {
+            str = `$${trimmed}$`;
         }
     }
-
-    // Tự động bọc $...$ cho các biểu thức toán cục bộ bị quên dấu $:
-    // 1. Tập hợp S = \{ ... \}
-    str = str.replace(/(?<!\$)\b([a-zA-Z]\s*=\s*(?:\\mathbb\{[A-Z]\}|\\?\{[^$}\n]+\}))(?![\$\w])/g, '$$$1$$');
-    // 2. Vector: \vec{u} = (x; y; z) hoặc \vec{u}_1 = (2; -1; 3)
-    str = str.replace(/(?<!\$)((?:\\vec\{[^{}]+\}|\\?[a-zA-Z])(?:_[0-9a-zA-Z]+)?\s*=\s*\([^$)\n]+\))(?![\$\w])/g, '$$$1$$');
-    // 3. Góc độ: 30^{\circ}, 45^\circ, 60^{\circ}
-    str = str.replace(/(?<!\$)\b(\d+[\^]\{?\\?circ\}?)(?![\$\w])/g, '$$$1$$');
-    // 4. Tập xác định: \mathbb{R} \setminus \{...\}
-    str = str.replace(/(?<!\$)((?:\\mathbb\{[A-Z]\}|R)\s*\\setminus\s*\\?\{[^$}\n]+\})(?![\$\w])/g, '$$$1$$');
-    // 5. Đơn thức lũy thừa như 2a^3, a^3\sqrt{2}, x^2, y^3
-    str = str.replace(/(?<![\$\w\\])(\d*[a-zA-Z]\^[0-9a-zA-Z]+(?:\s*\\sqrt\{\d+\})?)(?![\$\w])/g, '$$$1$$');
 
     return str;
 }
 
-// Helper: Hiển thị Bảng biến thiên (BBT) & Đồ thị SVG dưới đề bài
+function formatQuizMathText(text, isOption = false) {
+    return cleanAndFormatMath(text, isOption);
+}
+
+// Helper: Hiển thị Bảng số liệu (dataTable), Bảng biến thiên (variationTable) & Đồ thị SVG dưới đề bài
 function renderQuestionMedia(q) {
     if (!q) return "";
     let mediaHtml = "";
 
-    // 1. Variation Table (Bảng biến thiên)
+    // 1. Data Table (Bảng số liệu ghép nhóm / bán hàng / thống kê)
+    const dt = q.dataTable || q.data_table || q.table || q.bang_so_lieu;
+    if (dt) {
+        if (typeof dt === "string") {
+            if (dt.includes("<table")) {
+                mediaHtml += `<div class="quiz-data-table-wrapper">${dt}</div>`;
+            } else {
+                mediaHtml += `<div class="quiz-data-table-wrapper">${formatQuizMathText(dt)}</div>`;
+            }
+        } else if (typeof dt === "object") {
+            const title = dt.title ? `<div class="quiz-table-caption fw-semibold small mb-2 text-center">${escapeHtml(dt.title)}</div>` : "";
+            const headers = dt.headers || dt.columns || [];
+            const rows = dt.rows || dt.data || [];
+
+            let headerHtml = "";
+            if (headers.length > 0) {
+                headerHtml = `<thead><tr>${headers.map(h => `<th>${formatQuizMathText(String(h))}</th>`).join("")}</tr></thead>`;
+            }
+
+            let rowsHtml = "";
+            rows.forEach(row => {
+                if (Array.isArray(row)) {
+                    rowsHtml += `<tr>${row.map(cell => `<td>${formatQuizMathText(String(cell))}</td>`).join("")}</tr>`;
+                } else if (typeof row === "object" && row !== null) {
+                    const vals = Object.values(row);
+                    rowsHtml += `<tr>${vals.map(cell => `<td>${formatQuizMathText(String(cell))}</td>`).join("")}</tr>`;
+                }
+            });
+
+            mediaHtml += `
+                <div class="quiz-data-table-wrapper">
+                    ${title}
+                    <div class="table-responsive">
+                        <table class="quiz-data-table table table-bordered mb-0">
+                            ${headerHtml}
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 2. Variation Table (Bảng biến thiên chuẩn SGK Toán Việt Nam: 3 dòng x, y', y)
     const vt = q.variationTable || q.variation_table || q.bbt || q.bang_bien_thien;
     if (vt) {
         if (typeof vt === "string") {
@@ -4292,37 +4347,76 @@ function renderQuestionMedia(q) {
                 mediaHtml += `<div class="quiz-variation-table-wrapper">${formatQuizMathText(vt)}</div>`;
             }
         } else if (typeof vt === "object") {
-            let xRow = "";
-            let yPrimeRow = "";
-            let yRow = "";
             const xVals = vt.x || [];
             const yPrimeVals = vt.yPrime || vt.y_prime || vt.fPrime || [];
             const yVals = vt.y || vt.f || [];
 
+            let xRow = "";
+            let yPrimeRow = "";
+            let yRow = "";
+
             xVals.forEach(val => {
-                xRow += `<th>${formatQuizMathText(String(val))}</th>`;
+                const str = String(val).trim();
+                const isDouble = (str === "||" || str === "|");
+                const cls = isDouble ? "bbt-double-line" : "";
+                const content = isDouble ? '<span class="bbt-pipe-symbol">||</span>' : formatQuizMathText(str);
+                xRow += `<th class="${cls}">${content}</th>`;
             });
+
             yPrimeVals.forEach(val => {
-                yPrimeRow += `<td>${formatQuizMathText(String(val))}</td>`;
+                const str = String(val).trim();
+                const isDouble = (str === "||" || str === "|");
+                const cls = isDouble ? "bbt-double-line" : "";
+                const content = isDouble ? '<span class="bbt-pipe-symbol">||</span>' : formatQuizMathText(str);
+                yPrimeRow += `<td class="${cls}">${content}</td>`;
             });
+
             yVals.forEach(val => {
-                const textVal = typeof val === "object" ? (val.val || val.text || "") : String(val);
-                yRow += `<td>${formatQuizMathText(textVal)}</td>`;
+                let cellContent = "";
+                let isDouble = false;
+                if (typeof val === "object" && val !== null) {
+                    const left = val.left || val.from || "";
+                    const arrow = val.arrow || "↗";
+                    const right = val.right || val.to || "";
+                    cellContent = `
+                        <div class="bbt-arrow-flow">
+                            <span class="bbt-val-from">${formatQuizMathText(String(left))}</span>
+                            <span class="bbt-arrow">${arrow}</span>
+                            <span class="bbt-val-to">${formatQuizMathText(String(right))}</span>
+                        </div>
+                    `;
+                } else {
+                    const strVal = String(val).trim();
+                    if (strVal === "||" || strVal === "|") {
+                        isDouble = true;
+                        cellContent = '<span class="bbt-pipe-symbol">||</span>';
+                    } else if (strVal.includes("->") || strVal.includes("=>") || strVal.includes("↗") || strVal.includes("↘") || strVal.includes("\\nearrow") || strVal.includes("\\searrow")) {
+                        let formatted = strVal
+                            .replace(/\\nearrow/g, " ↗ ")
+                            .replace(/\\searrow/g, " ↘ ")
+                            .replace(/->/g, " ↗ ");
+                        cellContent = `<span class="bbt-trend-text">${formatQuizMathText(formatted)}</span>`;
+                    } else {
+                        cellContent = formatQuizMathText(strVal);
+                    }
+                }
+                const cls = isDouble ? "bbt-double-line" : "";
+                yRow += `<td class="${cls}">${cellContent}</td>`;
             });
 
             mediaHtml += `
                 <div class="quiz-variation-table-wrapper">
-                    <table class="variation-table">
-                        <tr><th style="width: 50px;">x</th>${xRow}</tr>
-                        <tr><th>y'</th>${yPrimeRow}</tr>
-                        <tr><th>y</th>${yRow}</tr>
+                    <table class="quiz-bbt-table">
+                        <tr class="bbt-row-x"><th class="bbt-label-col">x</th>${xRow}</tr>
+                        <tr class="bbt-row-yprime"><th class="bbt-label-col">y'</th>${yPrimeRow}</tr>
+                        <tr class="bbt-row-y"><th class="bbt-label-col">y</th>${yRow}</tr>
                     </table>
                 </div>
             `;
         }
     }
 
-    // 2. SVG Graph (Đồ thị Oxy)
+    // 3. SVG Graph (Đồ thị Oxy)
     const svg = q.svgGraph || q.svg_graph || q.svg || q.do_thi_svg;
     if (svg && typeof svg === "string") {
         let cleanSvg = svg.trim().replace(/<script[\s\S]*?<\/script>/gi, "");
@@ -4332,60 +4426,6 @@ function renderQuestionMedia(q) {
     }
 
     return mediaHtml;
-}
-
-// Helper: Chuẩn hóa và sửa triệt để lỗi vỡ công thức LaTeX (frac12, intcos, \sin, ...)
-function normalizeMathLatex(text) {
-    if (!text) return "";
-    let str = String(text);
-
-    // Tự động bảo vệ và bọc dấu $ cho biểu thức toán học
-    str = ensureMathDelimiters(str);
-
-    // 1. Phục hồi phân số bị dính số hoặc mất ngoặc nhọn: frac12 -> \frac{1}{2}, frac13 -> \frac{1}{3}, \frac12 -> \frac{1}{2}
-    str = str.replace(/(^|[^\\a-zA-Z])frac(\d)(\d)(?!\d)/g, '$1\\frac{$2}{$3}');
-    str = str.replace(/(^|[^\\a-zA-Z])frac\{/g, '$1\\frac{');
-    str = str.replace(/\\?frac(\d)(\d)(?!\d)/g, "\\frac{$1}{$2}");
-
-    // 2. Khôi phục dấu \ cho các toán tử và hàm toán học phổ biến nếu bị mất
-    str = str.replace(/(^|[^\\a-zA-Z])(int|pi|sin|cos|tan|cot|ln|log|sqrt|lim|sum|infty|alpha|beta|gamma|Delta|vec|left|right|le|ge|ne|approx|cdot|times)(?=[_\^\{\(\|\[\s0-9a-zA-Z])/g, '$1\\$2');
-
-    // Phục hồi dính toán tử: intcos -> \int \cos, intsin -> \int \sin, intdx -> \int dx
-    str = str.replace(/(?<!\\)intcos\b/g, "\\int \\cos ");
-    str = str.replace(/(?<!\\)intsin\b/g, "\\int \\sin ");
-    str = str.replace(/(?<!\\)intdx\b/g, "\\int dx");
-    str = str.replace(/\\intcos\b/g, "\\int \\cos ");
-    str = str.replace(/\\intsin\b/g, "\\int \\sin ");
-    str = str.replace(/\\intdx\b/g, "\\int dx");
-
-    // 3. Khôi phục dấu \ cho các toán tử và hàm toán học phổ biến khác
-    const mathKeywords = [
-        "frac", "sqrt", "int", "iint", "iiint", "oint", "sum", "prod", "lim",
-        "sin", "cos", "tan", "cot", "arcsin", "arccos", "arctan",
-        "ln", "log", "exp", "pi", "alpha", "beta", "gamma", "Delta", "delta", "theta",
-        "omega", "lambda", "mu", "sigma", "epsilon", "infty",
-        "times", "div", "pm", "mp", "cdot", "leq", "geq", "neq", "approx", "equiv",
-        "in", "notin", "subset", "subseteq", "cap", "cup", "forall", "exists", "to",
-        "rightarrow", "leftarrow", "leftrightarrow", "Rightarrow", "Leftarrow", "Leftrightarrow",
-        "partial", "vec", "left", "right"
-    ];
-    const kwRegex = new RegExp("(?<!\\\\)\b(" + mathKeywords.join("|") + ")\b", "g");
-    str = str.replace(kwRegex, "\\$1");
-
-    // 4. Chèn dấu cách sau các toán tử nếu dính liền với biến hoặc ngoặc
-    str = str.replace(/\\(int|sum|lim|sin|cos|tan|cot|ln|log)(?=[a-zA-Z0-9])/g, "\\$1 ");
-
-    // 5. Tự động bọc $...$ nếu có cú pháp LaTeX mà chưa nằm trong cặp dấu $
-    if (!/(\$|\\\(|\\\[)/.test(str)) {
-        if (/(\\frac|\\sqrt|\\int|\\sum|\\lim|\\sin|\\cos|\\tan|\\cot|\\ln|\\log|\\pi|\\alpha|\\beta|\\Delta|\\infty)/.test(str)) {
-            str = `$${str.trim()}$`;
-        }
-    }
-
-    return str;
-}
-function formatQuizMathText(text) {
-    return normalizeMathLatex(text);
 }
 
 // Làm sạch JSON chuỗi trắc nghiệm tránh hỏng escape sequence KaTeX
@@ -4468,7 +4508,7 @@ function renderStandardQuizWidget(qid, data) {
             optionsHtml += `
                 <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-idx="${idx}" data-key="${keyLetter}" onclick="selectQuizOption('${qid}', ${idx}, '${keyLetter}', this)">
                     <span class="quiz-opt-letter">${keyLetter}</span>
-                    <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal)}</span>
+                    <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal, true)}</span>
                 </div>
             `;
             optIndex++;
@@ -4553,7 +4593,7 @@ function renderThptqgQuizWidget(qid, data) {
             optionsHtml += `
                 <div class="quiz-option-btn quiz-option-label d-flex align-items-center gap-2.5 p-2.5 rounded-3 mb-2 cursor-pointer" data-qid="${qid}" data-part="p1" data-idx="${idx}" data-key="${keyLetter}" onclick="selectThptqgP1Option('${qid}', ${idx}, '${keyLetter}', this)">
                     <span class="quiz-opt-letter">${keyLetter}</span>
-                    <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal)}</span>
+                    <span class="quiz-opt-text flex-grow-1">${formatQuizMathText(cleanVal, true)}</span>
                 </div>
             `;
             optIndex++;
@@ -5767,7 +5807,7 @@ QUY TẮC CHƯƠNG TRÌNH GDPT 2018 MỚI (ĐỀ THI 2025–2026):
 - TUYỆT ĐỐI LOẠI BỎ 100% KIẾN THỨC SỐ PHỨC ($z=a+bi$). Cấm ra bất kỳ câu nào về số phức!
 - Cấu trúc bám sát ma trận mới: Khảo sát hàm số (tiệm cận xiên), Mũ - Logarit, Tích phân & ứng dụng, Hình học Oxyz, Thống kê số liệu ghép nhóm, Xác suất Bayes / xác suất toàn phần.
 - BẮT BUỘC 35%–40% BÀI TOÁN THỰC TẾ: Phần II có ít nhất 2 câu ứng dụng thực tế; Phần III có ít nhất 4 câu ứng dụng thực tế.
-- BẢNG BIẾN THIÊN & ĐỒ THỊ SVG (CẤM CÂU HỎI THIẾU HÌNH): Nếu câu hỏi dùng đồ thị hoặc bảng biến thiên, BẮT BUỘC cung cấp trường "variationTable" (bảng HTML/CSS 3 hàng) hoặc "svgGraph" (mã SVG đồ thị Oxy). NẾU KHÔNG CÓ, TUYỆT ĐỐI CẤM dùng câu 'như hình bên', 'dựa vào bảng biến thiên' mà phải cho công thức đại số tường minh của $y=f(x)$ hoặc $f'(x)$.
+- BẢNG SỐ LIỆU & BẢNG BIẾN THIÊN (CẤM TUYỆT ĐỐI BẢNG ASCII): Mọi bảng số liệu ghép nhóm hoặc bảng bán hàng BẮT BUỘC xuất qua trường JSON "dataTable": {"title": "...", "headers": [...], "rows": [[...], ...]}. Bảng biến thiên BẮT BUỘC xuất qua trường JSON "variationTable": {"x": [...], "yPrime": [...], "y": [...]}. TUYỆT ĐỐI CẤM in bảng ký tự ASCII (---|---|---, |, &) vào chuỗi question!
 - Mọi công thức Toán/Lý/Hóa/Sinh bắt buộc viết bằng LaTeX chuẩn, luôn dùng 2 dấu gạch chéo \\ trong JSON (ví dụ \\frac{1}{2}, \\int \\cos x dx).
 - Bắt buộc đầy đủ cặp ngoặc nhọn: \\frac{1}{2}, \\frac{3}{4} (TUYỆT ĐỐI KHÔNG viết \\frac12 hay frac12).
 - Luôn có dấu cách sau các toán tử: \\int \\cos(2x+1)\\,dx, \\sqrt{x^2+1}.

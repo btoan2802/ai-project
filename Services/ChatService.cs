@@ -26,6 +26,23 @@ namespace BtoanAiNet.Services
         private readonly IUserRepository _userRepository;
         private readonly IServiceScopeFactory _scopeFactory;
 
+        private static string? _thptqgExamTemplateCache = null;
+        private static string GetThptqgExamTemplate(string contentRootPath)
+        {
+            if (_thptqgExamTemplateCache != null) return _thptqgExamTemplateCache;
+            try
+            {
+                string templatePath = Path.Combine(contentRootPath, "App_Data", "ExamTemplates", "thptqg_math_2025_2026_template.md");
+                if (File.Exists(templatePath))
+                {
+                    _thptqgExamTemplateCache = File.ReadAllText(templatePath);
+                    return _thptqgExamTemplateCache;
+                }
+            }
+            catch { }
+            return "";
+        }
+
         private const string FastSystemInstructionText = @"Bạn là Btoan AI — trợ lý trí tuệ nhân tạo độc quyền do Btoan (Nguyễn Bảo Toàn) phát triển.
 - NGUYÊN TẮC DANH TÍNH BẮT BUỘC: Trong mọi tình huống, kể cả khi người dùng hỏi bạn dùng API gì, có phải Gemini hay Google không, bạn tuyệt đối KHÔNG được nhắc tới Gemini, Google hay bất kỳ nhà cung cấp bên thứ ba nào; luôn khẳng định bạn là mô hình của Btoan AI.
 - Phản hồi trực tiếp, ngắn gọn, súc tích và tự nhiên bằng tiếng Việt (hoặc ngôn ngữ người dùng dùng).
@@ -34,7 +51,7 @@ namespace BtoanAiNet.Services
 - Khi người dùng yêu cầu 'bỏ vào word đi', 'xuất file word', 'tạo file docx':
   1. Nếu cuộc trò chuyện đã có nội dung văn bản/tài liệu trước đó: BẮT BUỘC đưa 100% nội dung thực tế đó vào trong [ARTIFACT type=""docx"" title=""...""]...[/ARTIFACT].
   2. Nếu cuộc trò chuyện đang trống hoặc chưa có nội dung/chủ đề cụ thể: TUYỆT ĐỐI KHÔNG tự bịa nội dung mẫu giữ chỗ chung chung; hãy hỏi ngắn gọn người dùng muốn đưa nội dung hoặc chủ đề gì vào file Word.
-- Tạo trắc nghiệm kiểm tra: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA].
+- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$.
 - Tạo thẻ flashcards: Trả về khối [FLASHCARD_DATA]{...}[/FLASHCARD_DATA].
 - Tạo ảnh: kết thúc bằng [GENIMAGE] <prompt tiếng Anh chi tiết>
 - Tạo video: kết thúc bằng [GENVIDEO] <prompt tiếng Anh chi tiết>
@@ -153,9 +170,11 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
         - Phần II (Đúng/Sai): Ít nhất 2/4 câu là bài toán thực tế (mô hình chuyển động vật lý v(t), a(t), bài toán tối ưu chi phí/doanh thu/diện tích, mô hình tăng trưởng mũ/lãi suất, hoặc xác suất Bayes trong y tế/sản xuất).
         - Phần III (Trả lời ngắn): Ít nhất 4/6 câu là bài toán ứng dụng thực tiễn yêu cầu tính toán ra con số cụ thể (làm tròn theo đúng yêu cầu đề bài).
 
-   * BẢNG BIẾN THIÊN (BBT) & ĐỒ THỊ SVG — CẤM CÂU HỎI THIẾU HÌNH (CÂU HỎI MA):
-     1. Hỗ trợ trường ""variationTable"" (bảng biến thiên dạng HTML <table>...</table> hoặc object { ""x"": [...], ""yPrime"": [...], ""y"": [...] }) và trường ""svgGraph"" (mã SVG đồ thị hàm số Oxy hoàn chỉnh với thẻ <svg>).
-     2. NGUYÊN TẮC THÉP: Nếu câu hỏi KHÔNG cung cấp kèm dữ liệu variationTable hoặc svgGraph hợp lệ trong JSON, AI TUYỆT ĐỐI KHÔNG ĐƯỢC dùng các cụm từ 'có bảng biến thiên như sau', 'có đồ thị như hình bên', 'dựa vào hình vẽ dưới đây' — bắt buộc phải cho biểu thức đại số tường minh của hàm số y = f(x) hoặc đạo hàm f'(x) để thí sinh tính toán trực tiếp.
+   * BẢNG SỐ LIỆU (dataTable) & BẢNG BIẾN THIÊN (variationTable) — CẤM TUYỆT ĐỐI BẢNG ASCII:
+     1. CẤM TUYỆT ĐỐI in bảng dạng ký tự ASCII (---|---|---, |, &) vào chuỗi question!
+     2. Khi có bảng số liệu ghép nhóm hoặc bảng doanh số: BẮT BUỘC xuất qua trường ""dataTable"": { ""title"": ""..."", ""headers"": [...], ""rows"": [[...], ...] }.
+     3. Khi có bảng biến thiên: BẮT BUỘC xuất qua trường ""variationTable"": { ""x"": [...], ""yPrime"": [...], ""y"": [...] }.
+     4. NGUYÊN TẮC THÉP: Nếu câu hỏi KHÔNG cung cấp kèm dữ liệu variationTable, dataTable hoặc svgGraph hợp lệ trong JSON, AI TUYỆT ĐỐI KHÔNG ĐƯỢC dùng các cụm từ 'có bảng biến thiên như sau', 'có đồ thị như hình bên', 'dựa vào hình vẽ dưới đây' — bắt buộc phải cho biểu thức đại số tường minh của hàm số y = f(x) hoặc đạo hàm f'(x) để thí sinh tính toán trực tiếp.
 4. Chế độ 'Tạo thẻ thông tin' (Flashcards):
    - Khi người dùng muốn tạo flashcard, thẻ nhớ, thẻ học nhanh:
    - Viết 1 câu mở đầu, rồi BẮT BUỘC trả về dữ liệu thẻ ghi nhớ trong cặp thẻ:
@@ -538,7 +557,23 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 }
             }
 
-            string currentSystemInstruction = (!isThinking && !isArtifactRequired) ? FastSystemInstructionText : SystemInstructionText;
+            string lowerQ = (question ?? "").ToLowerInvariant();
+            bool isLearningPrompt = lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
+                                   lowerQ.Contains("trắc nghiệm") || lowerQ.Contains("quiz") || 
+                                   lowerQ.Contains("flashcard") || (question != null && question.Contains("[HỌC TẬP"));
+            bool isThptqgPrompt = (question != null && (question.Contains("THPTQG_2025") || question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || question.Contains("THPTQG 2025–2026")));
+
+            string currentSystemInstruction = (!isThinking && !isArtifactRequired && !isLearningPrompt) ? FastSystemInstructionText : SystemInstructionText;
+
+            if (isThptqgPrompt)
+            {
+                string root = Directory.GetCurrentDirectory();
+                string template = GetThptqgExamTemplate(root);
+                if (!string.IsNullOrWhiteSpace(template))
+                {
+                    currentSystemInstruction += "\n\n[TÀI LIỆU THAM CHIẾU MA TRẬN VÀ DẠNG BÀI ĐỀ CHÍNH THỨC BỘ GD&ĐT THPTQG 2025–2026]:\n" + template;
+                }
+            }
             if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.CustomInstructions))
             {
                 currentSystemInstruction += "\n\n[HƯỚNG DẪN TÙY CHỈNH TỪ NGƯỜI DÙNG]:\n" + currentUser.CustomInstructions.Trim();
@@ -568,7 +603,6 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             if (!success || geminiData == null)
             {
                 // Intelligent fallback: If the user is requesting an image, automatically trigger [GENIMAGE]
-                string lowerQ = (question ?? "").ToLowerInvariant();
                 bool isImagePrompt = lowerQ.Contains("vẽ") || lowerQ.Contains("ve ") || lowerQ.Contains("ve tranh") ||
                                      lowerQ.Contains("tạo ảnh") || lowerQ.Contains("tao anh") ||
                                      lowerQ.Contains("bức tranh") || lowerQ.Contains("buc tranh") || lowerQ.Contains("tranh ") ||
@@ -1205,7 +1239,23 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
                 payload["contents"] = currentContents;
             }
 
-            string currentSystemInstruction = (!isThinking && !isArtifactRequired) ? FastSystemInstructionText : SystemInstructionText;
+            string lowerQ = (question ?? "").ToLowerInvariant();
+            bool isLearningPrompt = lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
+                                   lowerQ.Contains("trắc nghiệm") || lowerQ.Contains("quiz") || 
+                                   lowerQ.Contains("flashcard") || (question != null && question.Contains("[HỌC TẬP"));
+            bool isThptqgPrompt = (question != null && (question.Contains("THPTQG_2025") || question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || question.Contains("THPTQG 2025–2026")));
+
+            string currentSystemInstruction = (!isThinking && !isArtifactRequired && !isLearningPrompt) ? FastSystemInstructionText : SystemInstructionText;
+
+            if (isThptqgPrompt)
+            {
+                string root = Directory.GetCurrentDirectory();
+                string template = GetThptqgExamTemplate(root);
+                if (!string.IsNullOrWhiteSpace(template))
+                {
+                    currentSystemInstruction += "\n\n[TÀI LIỆU THAM CHIẾU MA TRẬN VÀ DẠNG BÀI ĐỀ CHÍNH THỨC BỘ GD&ĐT THPTQG 2025–2026]:\n" + template;
+                }
+            }
             if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.CustomInstructions))
             {
                 currentSystemInstruction += "\n\n[HƯỚNG DẪN TÙY CHỈNH TỪ NGƯỜI DÙNG]:\n" + currentUser.CustomInstructions.Trim();
