@@ -32,11 +32,19 @@ namespace BtoanAiNet.Services
             if (_thptqgExamTemplateCache != null) return _thptqgExamTemplateCache;
             try
             {
-                string templatePath = Path.Combine(contentRootPath, "App_Data", "ExamTemplates", "thptqg_math_2025_2026_template.md");
-                if (File.Exists(templatePath))
+                var candidatePaths = new List<string>
                 {
-                    _thptqgExamTemplateCache = File.ReadAllText(templatePath);
-                    return _thptqgExamTemplateCache;
+                    Path.Combine(contentRootPath, "App_Data", "ExamTemplates", "thptqg_math_2025_2026_template.md"),
+                    Path.Combine(AppContext.BaseDirectory, "App_Data", "ExamTemplates", "thptqg_math_2025_2026_template.md"),
+                    Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "ExamTemplates", "thptqg_math_2025_2026_template.md")
+                };
+                foreach (var path in candidatePaths)
+                {
+                    if (File.Exists(path))
+                    {
+                        _thptqgExamTemplateCache = File.ReadAllText(path);
+                        return _thptqgExamTemplateCache;
+                    }
                 }
             }
             catch { }
@@ -51,7 +59,7 @@ namespace BtoanAiNet.Services
 - Khi người dùng yêu cầu 'bỏ vào word đi', 'xuất file word', 'tạo file docx':
   1. Nếu cuộc trò chuyện đã có nội dung văn bản/tài liệu trước đó: BẮT BUỘC đưa 100% nội dung thực tế đó vào trong [ARTIFACT type=""docx"" title=""...""]...[/ARTIFACT].
   2. Nếu cuộc trò chuyện đang trống hoặc chưa có nội dung/chủ đề cụ thể: TUYỆT ĐỐI KHÔNG tự bịa nội dung mẫu giữ chỗ chung chung; hãy hỏi ngắn gọn người dùng muốn đưa nội dung hoặc chủ đề gì vào file Word.
-- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Mỗi câu hỏi BẮT BUỘC có trường 'topic'. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$. TUYỆT ĐỐI CẤM dùng 'như hình bên' / 'trong hình vẽ bên' khi không có hình; với khảo sát hàm số thì cho công thức tường minh y = f(x) hoặc xuất qua 'variationTable'. Luôn ngẫu nhiên hóa đề bài và toán thực tế (35%-40%).
+- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Mỗi câu hỏi BẮT BUỘC có trường 'topic'. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$. TUYỆT ĐỐI CẤM dùng 'như hình bên' / 'trong hình vẽ bên' khi không có hình; với khảo sát hàm số thì cho công thức tường minh y = f(x) hoặc xuất qua 'variationTable'. Luôn ngẫu nhiên hóa đề bài và toán thực tế (35%-40%). Khi người dùng yêu cầu Đề thi THPTQG môn Toán 2025–2026: BẮT BUỘC sinh ĐỦ 22 CÂU (Phần I: 12 câu trắc nghiệm A/B/C/D, Phần II: 4 câu Đúng/Sai 4 ý a/b/c/d, Phần III: 6 câu Trả lời ngắn). TUYỆT ĐỐI KHÔNG ghi tiền tố 'Câu 1:', 'Câu 2:' trong nội dung question/context.
 - Mô phỏng tương tác: Trả về khối [SIMULATION_DATA]{""title"": ""..."", ""subject"": ""..."", ""instructions"": ""..."", ""html"": ""<!DOCTYPE html>...""}[/SIMULATION_DATA].
 - Gia sư gợi mở (Socratic): Không đưa đáp án ngay, chia 3 phần: Phân tích nhanh, Gợi ý công thức, Câu hỏi tương tác.
 - Tạo thẻ flashcards: Trả về khối [FLASHCARD_DATA]{...}[/FLASHCARD_DATA].

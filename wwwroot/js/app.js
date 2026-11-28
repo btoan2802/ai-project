@@ -4579,10 +4579,11 @@ function renderStandardQuizWidget(qid, data) {
             optIndex++;
         }
 
+        const cleanQ = (q.question || "").replace(/^(?:Câu\s*\d+\s*[:.]\s*)/i, "").trim();
         questionsHtml += `
             <div class="quiz-question-item mb-4 p-3 rounded-3" id="qitem_${qid}_${idx}">
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
-                    <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
+                    <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(cleanQ)}
                 </div>
                 ${renderQuestionMedia(q)}
                 <div class="quiz-options-group">${optionsHtml}</div>
@@ -4664,10 +4665,11 @@ function renderThptqgQuizWidget(qid, data) {
             optIndex++;
         }
 
+        const cleanP1Q = (q.question || "").replace(/^(?:Câu\s*\d+\s*[:.]\s*)/i, "").trim();
         p1Html += `
             <div class="quiz-question-item mb-4 p-3 rounded-3" id="thptqg_p1_${qid}_${idx}">
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
-                    <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
+                    <span class="badge bg-primary me-2">Câu ${idx + 1}</span>${formatQuizMathText(cleanP1Q)}
                 </div>
                 ${renderQuestionMedia(q)}
                 <div class="quiz-options-group">${optionsHtml}</div>
@@ -4705,10 +4707,11 @@ function renderThptqgQuizWidget(qid, data) {
             `;
         });
 
+        const cleanP2Context = (q.context || q.question || "").replace(/^(?:Câu\s*\d+\s*[:.]\s*)/i, "").trim();
         p2Html += `
             <div class="quiz-question-item mb-4 p-3 rounded-3" id="thptqg_p2_${qid}_${idx}">
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
-                    <span class="badge bg-success me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.context || q.question || "")}
+                    <span class="badge bg-success me-2">Câu ${idx + 1}</span>${formatQuizMathText(cleanP2Context)}
                 </div>
                 ${renderQuestionMedia(q)}
                 <div class="thptqg-statements-group mb-2">${stmtsHtml}</div>
@@ -4723,10 +4726,11 @@ function renderThptqgQuizWidget(qid, data) {
     // --- PHẦN 3: TRẮC NGHIỆM TRẢ LỜI NGẮN ---
     let p3Html = "";
     part3.forEach((q, idx) => {
+        const cleanP3Q = (q.question || "").replace(/^(?:Câu\s*\d+\s*[:.]\s*)/i, "").trim();
         p3Html += `
             <div class="quiz-question-item mb-4 p-3 rounded-3" id="thptqg_p3_${qid}_${idx}">
                 <div class="fw-bold fs-6 quiz-question-text mb-2.5">
-                    <span class="badge bg-warning text-dark me-2">Câu ${idx + 1}</span>${formatQuizMathText(q.question)}
+                    <span class="badge bg-warning text-dark me-2">Câu ${idx + 1}</span>${formatQuizMathText(cleanP3Q)}
                 </div>
                 ${renderQuestionMedia(q)}
                 <div class="d-flex align-items-center gap-2.5 mt-2">

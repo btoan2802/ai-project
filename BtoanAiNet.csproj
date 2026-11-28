@@ -11,6 +11,10 @@
     <Content Remove="App_Data\**" />
     <EmbeddedResource Remove="App_Data\**" />
     <None Remove="App_Data\**" />
+    <Content Include="App_Data\ExamTemplates\**">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
 
     <Compile Remove="App_Data_Backup\**" />
     <Content Remove="App_Data_Backup\**" />
