@@ -56,7 +56,17 @@ function renderMarkdownWithMath(text) {
         processed = processed.replace(/\[FLASHCARD_DATA\][\s\S]*$/i, "\n\n@@FLASHCARD_STREAMING_PLACEHOLDER@@\n\n");
     }
 
-    // 3. TÁCH KHỐI [ARTIFACT type="docx"]
+    // 3. TÁCH KHỐI [SIMULATION_DATA] TRƯỚC MARKDOWN (STEM LAB / HTML5)
+    let isStreamingSimulation = false;
+    processed = processed.replace(/\[SIMULATION_DATA\]([\s\S]*?)\[\/SIMULATION_DATA\]/gi, (match, jsonStr) => {
+        return `\n\n@@SIMULATION_BLOCK_${registerSimulationData(jsonStr)}@@\n\n`;
+    });
+    if (/\[SIMULATION_DATA\](?![\s\S]*?\[\/SIMULATION_DATA\])/i.test(processed)) {
+        isStreamingSimulation = true;
+        processed = processed.replace(/\[SIMULATION_DATA\][\s\S]*$/i, "\n\n@@SIMULATION_STREAMING_PLACEHOLDER@@\n\n");
+    }
+
+    // 4. TÁCH KHỐI [ARTIFACT type="docx"]
     let isStreamingDocx = false;
     if (/\[ARTIFACT\s+type=["']docx["'][^\]]*\](?![\s\S]*?\[\/ARTIFACT\])/i.test(processed)) {
         isStreamingDocx = true;
@@ -114,7 +124,16 @@ function renderMarkdownWithMath(text) {
         `);
     }
 
-    // Restore interactive Quiz & Flashcard placeholders
+    if (isStreamingSimulation) {
+        html = html.replace("@@SIMULATION_STREAMING_PLACEHOLDER@@", `
+            <div class="simulation-streaming-card rounded-3 p-3 my-2 d-flex align-items-center gap-2 border border-info-subtle bg-body-tertiary">
+                <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                <span class="text-info small fw-semibold">Đang nạp ứng dụng mô phỏng tương tác HTML5 STEM Lab...</span>
+            </div>
+        `);
+    }
+
+    // Restore interactive Quiz & Flashcard & Simulation placeholders
     if (window.quizBlocks) {
         Object.keys(window.quizBlocks).forEach(qid => {
             html = html.replace(`@@QUIZ_BLOCK_${qid}@@`, window.quizBlocks[qid]);
@@ -123,6 +142,11 @@ function renderMarkdownWithMath(text) {
     if (window.flashcardBlocks) {
         Object.keys(window.flashcardBlocks).forEach(fcid => {
             html = html.replace(`@@FLASHCARD_BLOCK_${fcid}@@`, window.flashcardBlocks[fcid]);
+        });
+    }
+    if (window.simulationBlocks) {
+        Object.keys(window.simulationBlocks).forEach(simId => {
+            html = html.replace(`@@SIMULATION_BLOCK_${simId}@@`, window.simulationBlocks[simId]);
         });
     }
 
@@ -548,6 +572,24 @@ function createMessageActions({ text, exportType = null, onExport = null }) {
         actions.appendChild(exportBtn);
     }
 
+    if (window._isSocraticActive || /Câu hỏi tương tác cho bạn|Gia sư gợi mở|Gia sư Socratic/i.test(text)) {
+        const socraticRow = document.createElement("div");
+        socraticRow.className = "socratic-quick-chips w-100 d-flex align-items-center flex-wrap gap-2 mt-2 pt-2 border-top border-secondary-subtle";
+        socraticRow.innerHTML = `
+            <span class="extra-small text-muted fw-semibold me-1">🧠 Gia sư gợi mở:</span>
+            <button type="button" class="btn btn-sm btn-outline-info rounded-pill extra-small socratic-chip-btn" onclick="sendSocraticQuickAction('hint')">
+                <i class="bi bi-lightbulb-fill text-warning me-1"></i>💡 Gợi ý thêm
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill extra-small socratic-chip-btn" onclick="sendSocraticQuickAction('simplify')">
+                <i class="bi bi-arrow-repeat text-primary me-1"></i>🔄 Giảng dễ hiểu hơn
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success rounded-pill extra-small socratic-chip-btn" onclick="sendSocraticQuickAction('solve')">
+                <i class="bi bi-unlock-fill text-success me-1"></i>🔓 Xem lời giải đầy đủ
+            </button>
+        `;
+        actions.appendChild(socraticRow);
+    }
+
     return actions;
 }
 
@@ -873,7 +915,7 @@ function streamBot(text, exportType = null) {
             content.textContent = cleanedCurrent;
         }
 
-        const isStreamBotQuiz = normalizedText.includes("[QUIZ_DATA]") || normalizedText.includes("[FLASHCARD_DATA]");
+        const isStreamBotQuiz = normalizedText.includes("[QUIZ_DATA]") || normalizedText.includes("[FLASHCARD_DATA]") || normalizedText.includes("[SIMULATION_DATA]");
         if (!isStreamBotQuiz) {
             chatEl.scrollTop = chatEl.scrollHeight;
         }
@@ -883,7 +925,7 @@ function streamBot(text, exportType = null) {
             isSending = false;
 
             if (isStreamBotQuiz) {
-                const targetCard = bubble.querySelector(".quiz-card-container, .flashcard-deck-container") || bubble.closest(".msgrow") || bubble;
+                const targetCard = bubble.querySelector(".quiz-card-container, .flashcard-deck-container, .simulation-card-container") || bubble.closest(".msgrow") || bubble;
                 const scrollContainer = document.getElementById("chatScrollWrapper") || chatEl;
                 if (scrollContainer && targetCard) {
                     setTimeout(() => {
@@ -969,9 +1011,9 @@ function renderStreamingFinalBubble(bubble, text, exportType = null) {
         bubble.appendChild(createMessageActions({ text, exportType }));
     }
 
-    const isQuizOrCard = text.includes("[QUIZ_DATA]") || text.includes("[FLASHCARD_DATA]") || bubble.querySelector(".quiz-card-container, .flashcard-deck-container");
+    const isQuizOrCard = text.includes("[QUIZ_DATA]") || text.includes("[FLASHCARD_DATA]") || text.includes("[SIMULATION_DATA]") || bubble.querySelector(".quiz-card-container, .flashcard-deck-container, .simulation-card-container");
     if (isQuizOrCard) {
-        const targetCard = bubble.querySelector(".quiz-card-container, .flashcard-deck-container") || bubble.closest(".msgrow") || bubble;
+        const targetCard = bubble.querySelector(".quiz-card-container, .flashcard-deck-container, .simulation-card-container") || bubble.closest(".msgrow") || bubble;
         const scrollContainer = document.getElementById("chatScrollWrapper") || chatEl;
         if (scrollContainer && targetCard) {
             setTimeout(() => {
@@ -1026,7 +1068,7 @@ async function streamGeminiChat(userText, images, files, onChunk) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             model: mode === "thinking" ? "gemini-2.5-flash" : "gemini-2.5-flash",
-            payload: { ...payload, mode: mode },
+            payload: { ...payload, mode: mode, socraticMode: !!window._isSocraticActive, socratic: !!window._isSocraticActive },
             user_id: localStorage.getItem("user_id") || "1",
             conversation_id: conversation_id,
             intent: "chat"
@@ -1218,7 +1260,9 @@ async function callGemini(userText, images, files) {
                 model: mode === "thinking" ? "gemini-2.5-flash" : "gemini-2.5-flash",
                 payload: {
                     ...payload,
-                    mode: mode
+                    mode: mode,
+                    socraticMode: !!window._isSocraticActive,
+                    socratic: !!window._isSocraticActive
                 },
                 user_id: localStorage.getItem("user_id"),
                 conversation_id: conversation_id,
@@ -4225,6 +4269,9 @@ function triggerKaTeX(el) {
             MathJax.typesetPromise(el ? [el] : undefined).catch(() => { });
         } catch (e) { }
     }
+    if (typeof initSimulationIframes === "function") {
+        try { initSimulationIframes(); } catch (e) { }
+    }
 }
 
 // Helper: Tự động xóa ký hiệu A., B., C., D. bị lặp ở đầu phương án (kể cả khi nằm trong $ ... $)
@@ -4974,6 +5021,67 @@ function gradeThptqgQuiz(qid) {
     const oldRetry = document.getElementById(`btnRetry_${qid}`);
     if (oldRetry) oldRetry.remove();
 
+    // Auto-record to Knowledge Radar
+    try {
+        const recordItems = [];
+        part1.forEach((q, idx) => {
+            let optObj = q.options || {};
+            if (Array.isArray(optObj)) {
+                const map = {};
+                optObj.forEach((optText, i) => { map[String.fromCharCode(65 + i)] = optText; });
+                optObj = map;
+            }
+            let uChoice = data.p1Answers[idx] ? String(data.p1Answers[idx]).trim().toUpperCase() : "";
+            let cChoice = extractCorrectOptionKey(q, optObj);
+            recordItems.push({
+                topic: q.topic || "Khảo sát hàm số & Tích phân",
+                isCorrect: uChoice === cChoice
+            });
+        });
+        part2.forEach((q, idx) => {
+            const statements = q.statements || [];
+            let stRight = 0;
+            statements.forEach(st => {
+                const ansKey = `${idx}_${st.key}`;
+                const userVal = data.p2Answers[ansKey];
+                const correctVal = (st.answer === true || String(st.answer).toLowerCase() === "true" || st.answer === 1);
+                if (userVal === correctVal) stRight++;
+            });
+            recordItems.push({
+                topic: q.topic || "Đúng / Sai thực tế",
+                isCorrect: stRight === statements.length
+            });
+        });
+        part3.forEach((q, idx) => {
+            const rawUser = String(data.p3Answers[idx] || "").trim().replace(",", ".").replace(/\$/g, "");
+            const rawAns = q.answer !== undefined ? q.answer : (q.result !== undefined ? q.result : "");
+            const rawCorrect = String(rawAns || "").trim().replace(",", ".").replace(/\$/g, "");
+            let isRight = false;
+            if (rawUser && rawCorrect) {
+                const numUser = parseFloat(rawUser);
+                const numCorrect = parseFloat(rawCorrect);
+                if (!isNaN(numUser) && !isNaN(numCorrect)) {
+                    isRight = Math.abs(numUser - numCorrect) < 0.001;
+                } else {
+                    isRight = rawUser.toLowerCase() === rawCorrect.toLowerCase();
+                }
+            }
+            recordItems.push({
+                topic: q.topic || "Toán ứng dụng thực tiễn",
+                isCorrect: isRight
+            });
+        });
+        fetch('/api/learning/record-result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: data.subject || "Toán",
+                gradeLevel: "THPT",
+                items: recordItems
+            })
+        }).catch(() => {});
+    } catch (e) { }
+
     const retryBtn = document.createElement("button");
     retryBtn.id = `btnRetry_${qid}`;
     retryBtn.className = "btn btn-outline-primary rounded-pill px-4 btn-sm fw-semibold";
@@ -5215,6 +5323,33 @@ function gradeQuiz(qid) {
         scoreTextEl.innerHTML = `🎉 Điểm số: <span class="text-success fw-bold fs-5">${score10}/10</span> (Đúng ${correctCount}/${total} câu)`;
     }
 
+    // Auto-record to Knowledge Radar
+    try {
+        const recordItems = (data.questions || []).map((q, idx) => {
+            let optObj = q.options || {};
+            if (Array.isArray(optObj)) {
+                const map = {};
+                optObj.forEach((optText, i) => { map[String.fromCharCode(65 + i)] = optText; });
+                optObj = map;
+            }
+            let uChoice = data.answers[idx] ? String(data.answers[idx]).trim().toUpperCase() : "";
+            let cChoice = extractCorrectOptionKey(q, optObj);
+            return {
+                topic: q.topic || data.subject || "Chung",
+                isCorrect: uChoice === cChoice
+            };
+        });
+        fetch('/api/learning/record-result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: data.subject || "Toán",
+                gradeLevel: data.gradeLevel || "THPT",
+                items: recordItems
+            })
+        }).catch(() => {});
+    } catch (e) { }
+
     const actionBox = document.getElementById(`quizActionBar_${qid}`);
     const gradeBtn = document.getElementById(`btnGrade_${qid}`);
     if (gradeBtn) gradeBtn.style.display = "none";
@@ -5390,6 +5525,18 @@ function markMastered(fcid) {
     const state = window.flashcardRegistry[fcid];
     if (!state) return;
     state.mastered.add(state.index);
+    const card = state.cards && state.cards[state.index];
+    if (card) {
+        fetch('/api/learning/record-result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: state.subject || "Tổng hợp",
+                gradeLevel: "THPT",
+                items: [{ topic: card.topic || card.front || "Flashcard", isCorrect: true }]
+            })
+        }).catch(() => {});
+    }
     navFlashcard(fcid, 1);
 }
 
@@ -5397,6 +5544,18 @@ function markReview(fcid) {
     const state = window.flashcardRegistry[fcid];
     if (!state) return;
     state.mastered.delete(state.index);
+    const card = state.cards && state.cards[state.index];
+    if (card) {
+        fetch('/api/learning/record-result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: state.subject || "Tổng hợp",
+                gradeLevel: "THPT",
+                items: [{ topic: card.topic || card.front || "Flashcard", isCorrect: false }]
+            })
+        }).catch(() => {});
+    }
     navFlashcard(fcid, 1);
 }
 
@@ -5623,15 +5782,30 @@ function selectLearningCard(modeKey) {
 
     const modeMeta = {
         notebook: { title: "Biến đề cương thành sổ ghi chú học tập (Word .docx)", icon: "📖" },
-        visual: { title: "Thử trải nghiệm khám phá sống động đa tầng", icon: "🌌" },
+        visual: { title: "Mô phỏng tương tác trực quan (HTML5 STEM Lab)", icon: "🧪" },
         quiz: { title: "Tự kiểm tra kiến thức (Đề thi trắc nghiệm chấm điểm)", icon: "🎯" },
         flashcard: { title: "Tạo thẻ thông tin ghi nhớ (Flashcards 3D)", icon: "🎴" },
-        socratic: { title: "Học có hướng dẫn cùng Gia sư Socratic", icon: "👨‍🏫" }
+        socratic: { title: "Học có hướng dẫn cùng Gia sư gợi mở (Socratic)", icon: "👨‍🏫" }
     };
 
     const meta = modeMeta[modeKey] || modeMeta.notebook;
     if (titleEl) titleEl.innerText = meta.title;
     if (iconEl) iconEl.innerText = meta.icon;
+
+    const simSuggestions = document.getElementById("learningSimSuggestionsWrapper");
+    if (simSuggestions) simSuggestions.style.display = (modeKey === "visual") ? "block" : "none";
+
+    const socraticToggle = document.getElementById("learningSocraticToggleWrapper");
+    if (socraticToggle) {
+        socraticToggle.style.display = (modeKey === "socratic" || modeKey === "notebook") ? "block" : "none";
+        const socraticSwitch = document.getElementById("learningSocraticSwitch");
+        if (socraticSwitch) {
+            socraticSwitch.checked = (modeKey === "socratic");
+            window._isSocraticActive = (modeKey === "socratic");
+            const badge = document.getElementById("socraticActiveBadge");
+            if (badge) badge.style.display = window._isSocraticActive ? "inline-flex" : "none";
+        }
+    }
 
     if (extraOpts) {
         extraOpts.style.display = (modeKey === "quiz" || modeKey === "flashcard") ? "block" : "none";
@@ -5789,7 +5963,22 @@ async function startLearningSession() {
             prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - SỔ GHI CHÚ KHOA HỌC]\nHãy tổng hợp và biên soạn toàn bộ nội dung sau thành một Sổ tay ghi chú học tập chi tiết, khoa học, đầy đủ công thức toán/lý/hóa (định dạng LaTeX $$...$$) và tạo sẵn tệp Word (.docx) chuẩn hóa với thẻ [ARTIFACT type="docx" title="So_tay_ghi_chu_${subjectText}"] để tôi tải về:\n"${topic}"${fileContextInstruction}`;
             break;
         case "visual":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - KHÁM PHÁ SỐNG ĐỘNG]\nHãy giải thích chủ đề sau bằng phương pháp trực quan hóa đa tầng, dùng ví dụ đời thực sinh động, hình tượng hóa, công thức KaTeX ($$...$$) và các thẻ <details><summary>Xem chi tiết tầng kiến thức...</summary></details> để phân tích sâu từng lớp khái niệm:\n"${topic}"${fileContextInstruction}`;
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - MÔ PHỎNG TƯƠNG TÁC HTML5 STEM LAB]
+Chủ đề / Bài toán: "${topic}".
+1. Hãy giải thích ngắn gọn lý thuyết cốt lõi (3–5 dòng).
+2. BẮT BUỘC xuất kèm ứng dụng mô phỏng độc lập hoàn chỉnh trong cặp thẻ:
+[SIMULATION_DATA]
+{
+  "title": "Mô phỏng: ${topic}",
+  "subject": "${subjectText}",
+  "instructions": "Kéo các thanh trượt và quan sát sự biến đổi trực quan theo thời gian thực.",
+  "html": "<!DOCTYPE html><html><head><meta charset=\\"UTF-8\\"><style>body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f8fafc;color:#0f172a;padding:12px}...</style></head><body>...<script>...</script></body></html>"
+}
+[/SIMULATION_DATA]
+Quy chuẩn mã HTML:
+- Phải là 1 file HTML5 tự chạy 100% trong iframe sandbox, KHÔNG dùng script CDN bên ngoài.
+- Dùng Canvas hoặc SVG sắc nét (retina display), responsive 100%.
+- Bắt buộc có bảng điều khiển ít nhất 2–4 thanh trượt <input type="range"> hiển thị số thực tế và khung kết quả tính toán động.${fileContextInstruction}`;
             break;
         case "quiz":
             if (isThptqgExam) {
@@ -5846,7 +6035,17 @@ Trả về toàn bộ dữ liệu bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] đ
             prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - FLASHCARDS 3D]\nHãy tạo bộ thẻ ghi nhớ gồm ${count} thẻ (mặt trước: câu hỏi/khái niệm/công thức, mặt sau: đáp án/giải thích súc tích) về chủ đề "${topic}". Trả về cấu trúc JSON chuẩn xác bên trong thẻ [FLASHCARD_DATA]...[/FLASHCARD_DATA] để hệ thống hiển thị thẻ 3D lật 2 mặt.${fileContextInstruction}`;
             break;
         case "socratic":
-            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - GIA SƯ SOCRATIC]\nBạn là một gia sư AI kiên nhẫn và thông thái theo phương pháp gợi mở Socratic. Tôi muốn học về môn ${subjectText}: "${topic}".\nHãy bắt đầu bằng cách chia nhỏ lộ trình học thành các nấc kiến thức, đặt cho tôi đúng 1 câu hỏi đầu tiên để kiểm tra hiểu biết ban đầu của tôi, TUYỆT ĐỐI KHÔNG đưa ngay đáp án!${fileContextInstruction}`;
+            window._isSocraticActive = true;
+            const socBadge = document.getElementById("socraticActiveBadge");
+            if (socBadge) socBadge.style.display = "inline-flex";
+            prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText} - GIA SƯ SOCRATIC]
+Đề bài / Câu hỏi: "${topic}".
+Yêu cầu bắt buộc theo phương pháp Gia sư Socratic Btoan AI:
+- TUYỆT ĐỐI KHÔNG đưa ra đáp án cuối cùng hay lời giải hoàn chỉnh ngay ở lượt đầu!
+- Trình bày ngắn gọn, thân thiện theo đúng 3 phần rõ ràng:
+  1. Phân tích nhanh: Đề bài cho gì, yêu cầu tìm gì?
+  2. Gợi ý công thức / Định hướng Bước 1: Nhắc lại công thức chìa khóa (dùng KaTeX chuẩn $...$, không bọc tiếng Việt trong $...$).
+  3. Câu hỏi tương tác cho bạn: Đặt đúng 1 câu hỏi nhỏ cụ thể để học sinh tự tính bước đầu tiên rồi trả lời.${fileContextInstruction}`;
             break;
         default:
             prompt = `[HỌC TẬP: ${gradeText} - MÔN: ${subjectText}]\nChủ đề: ${topic}${fileContextInstruction}`;
@@ -5893,7 +6092,542 @@ Trả về toàn bộ dữ liệu bên trong thẻ [QUIZ_DATA]...[/QUIZ_DATA] đ
     }
 }
 
-// 4. Advanced Settings Controller
+// ====== BTOAN LEARNING UPGRADE: RADAR, ROADMAP, SOCRATIC, SIMULATION CONTROLLER ======
+
+// 1. SUB-TABS CONTROLLER
+window.currentLearningSubTab = 'methods';
+function switchLearningSubTab(tab) {
+    window.currentLearningSubTab = tab;
+    const tabMethods = document.getElementById("learningTabMethods");
+    const tabRadar = document.getElementById("learningTabRadar");
+    const tabRoadmap = document.getElementById("learningTabRoadmap");
+
+    const btnMethods = document.getElementById("tabBtnMethods");
+    const btnRadar = document.getElementById("tabBtnRadar");
+    const btnRoadmap = document.getElementById("tabBtnRoadmap");
+
+    if (tabMethods) tabMethods.style.display = (tab === 'methods') ? "block" : "none";
+    if (tabRadar) tabRadar.style.display = (tab === 'radar') ? "block" : "none";
+    if (tabRoadmap) tabRoadmap.style.display = (tab === 'roadmap') ? "block" : "none";
+
+    if (btnMethods) btnMethods.classList.toggle("active", tab === 'methods');
+    if (btnRadar) btnRadar.classList.toggle("active", tab === 'radar');
+    if (btnRoadmap) btnRoadmap.classList.toggle("active", tab === 'roadmap');
+
+    if (tab === 'radar') {
+        loadRadarData();
+    } else if (tab === 'roadmap') {
+        loadRoadmapsData();
+    }
+}
+window.switchLearningSubTab = switchLearningSubTab;
+
+// 2. RADAR LỖ HỔNG KIẾN THỨC
+async function loadRadarData() {
+    const filter = document.getElementById("radarSubjectFilter")?.value || "all";
+    const totalEl = document.getElementById("statRadarTotal");
+    const accEl = document.getElementById("statRadarAccuracy");
+    const strongEl = document.getElementById("statRadarStrong");
+    const weakEl = document.getElementById("statRadarWeak");
+    const container = document.getElementById("radarTopicsContainer");
+    const emptyState = document.getElementById("radarEmptyState");
+    const countBadge = document.getElementById("radarTopicCountBadge");
+    const weakestBanner = document.getElementById("radarWeakestBanner");
+    const weakestName = document.getElementById("radarWeakestName");
+    const weakestDesc = document.getElementById("radarWeakestDesc");
+
+    try {
+        const res = await fetch(`/api/learning/radar?subject=${encodeURIComponent(filter)}`);
+        if (!res.ok) throw new Error("Không thể tải dữ liệu radar");
+        const data = await res.json();
+        if (!data.ok) return;
+
+        const sum = data.summary || {};
+        if (totalEl) totalEl.innerText = sum.totalPracticed || 0;
+        if (accEl) accEl.innerText = (sum.overallAccuracy || 0) + "%";
+        if (strongEl) strongEl.innerText = sum.strongTopicsCount || 0;
+        if (weakEl) weakEl.innerText = sum.weakTopicsCount || 0;
+
+        const topics = data.topics || [];
+        if (countBadge) countBadge.innerText = `${topics.length} chuyên đề`;
+
+        if (data.weakestTopic && weakestBanner) {
+            weakestBanner.style.display = "block";
+            if (weakestName) weakestName.innerText = data.weakestTopic.topicName;
+            if (weakestDesc) {
+                weakestDesc.innerText = `Môn: ${data.weakestTopic.subject} • Tỷ lệ đúng: ${data.weakestTopic.masteryPercent}% (${data.weakestTopic.correctQuestions || 0}/${data.weakestTopic.totalQuestions || 0} câu). Bấm nút bên dưới để ôn ngay!`;
+            }
+            window._currentWeakestTopic = data.weakestTopic;
+        } else if (weakestBanner) {
+            weakestBanner.style.display = "none";
+            window._currentWeakestTopic = null;
+        }
+
+        if (topics.length === 0) {
+            if (container) container.innerHTML = "";
+            if (emptyState) emptyState.style.display = "block";
+        } else {
+            if (emptyState) emptyState.style.display = "none";
+            if (container) {
+                container.innerHTML = topics.map(t => {
+                    const percent = t.masteryPercent || 0;
+                    let barClass = "bg-danger";
+                    let labelText = "Cần ưu tiên gấp";
+                    let badgeClass = "bg-danger-subtle text-danger border-danger-subtle";
+
+                    if (percent >= 80) {
+                        barClass = "bg-success";
+                        labelText = "Đã vững";
+                        badgeClass = "bg-success-subtle text-success border-success-subtle";
+                    } else if (percent >= 50) {
+                        barClass = "bg-warning";
+                        labelText = "Cần củng cố";
+                        badgeClass = "bg-warning-subtle text-warning-emphasis border-warning-subtle";
+                    }
+
+                    return `
+                    <div class="topic-progress-row p-3 rounded-3 border d-flex flex-column gap-2 bg-body">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge ${badgeClass} border extra-small">${t.subject}</span>
+                                <span class="fw-bold small topic-name text-body">${escapeHtml(t.topicName)}</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <span class="badge ${badgeClass} border extra-small">${labelText} (${percent}%)</span>
+                                <span class="extra-small text-muted">${t.correctQuestions}/${t.totalQuestions} câu đúng</span>
+                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-0.5 extra-small" onclick="practiceSpecificTopic('${escapeHtml(t.topicName)}', '${escapeHtml(t.subject)}')">
+                                    <i class="bi bi-lightning-charge-fill me-1"></i>Ôn ngay
+                                </button>
+                            </div>
+                        </div>
+                        <div class="topic-mastery-bar w-100">
+                            <div class="progress-bar ${barClass}" role="progressbar" style="width: ${Math.max(5, percent)}%; height: 100%;"></div>
+                        </div>
+                    </div>
+                    `;
+                }).join("");
+            }
+        }
+    } catch (e) {
+        console.warn("Lỗi loadRadarData:", e);
+    }
+}
+window.loadRadarData = loadRadarData;
+
+function practiceWeakestTopic() {
+    if (window._currentWeakestTopic) {
+        practiceSpecificTopic(window._currentWeakestTopic.topicName, window._currentWeakestTopic.subject);
+    } else {
+        switchLearningSubTab('methods');
+        selectLearningCard('quiz');
+    }
+}
+window.practiceWeakestTopic = practiceWeakestTopic;
+
+function practiceSpecificTopic(topicName, subject) {
+    switchLearningSubTab('methods');
+    selectLearningCard('quiz');
+    const topicInput = document.getElementById("learningTopicInput");
+    if (topicInput) topicInput.value = topicName;
+    const subjectSelect = document.getElementById("learningSubjectSelect");
+    if (subjectSelect && subject) {
+        for (let i = 0; i < subjectSelect.options.length; i++) {
+            if (subjectSelect.options[i].value.toLowerCase().includes(subject.toLowerCase())) {
+                subjectSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    const countSelect = document.getElementById("learningCountSelect");
+    if (countSelect) countSelect.value = "5"; // quick 5 questions
+    startLearningSession();
+}
+window.practiceSpecificTopic = practiceSpecificTopic;
+
+// 3. LỘ TRÌNH ĐẾM NGƯỢC NGÀY THI
+function toggleRoadmapForm(show) {
+    const form = document.getElementById("roadmapCreateForm");
+    if (!form) return;
+    if (show === undefined) {
+        form.style.display = (form.style.display === "none") ? "block" : "none";
+    } else {
+        form.style.display = show ? "block" : "none";
+    }
+    if (form.style.display === "block") {
+        const dateInput = document.getElementById("rmExamDateInput");
+        if (dateInput && !dateInput.value) {
+            const d = new Date();
+            d.setDate(d.getDate() + 14);
+            dateInput.value = d.toISOString().split("T")[0];
+        }
+    }
+}
+window.toggleRoadmapForm = toggleRoadmapForm;
+
+async function loadRoadmapsData() {
+    const listContainer = document.getElementById("roadmapsListContainer");
+    const emptyState = document.getElementById("roadmapsEmptyState");
+    try {
+        const res = await fetch("/api/learning/roadmaps");
+        if (!res.ok) throw new Error("Không thể tải lộ trình");
+        const data = await res.json();
+        const roadmaps = data.roadmaps || [];
+
+        if (roadmaps.length === 0) {
+            if (listContainer) listContainer.innerHTML = "";
+            if (emptyState) emptyState.style.display = "block";
+            return;
+        }
+
+        if (emptyState) emptyState.style.display = "none";
+        if (listContainer) {
+            listContainer.innerHTML = roadmaps.map(r => {
+                const plan = r.plan || [];
+                const daysRemaining = r.daysRemaining || 0;
+                const progress = r.progressPercent || 0;
+
+                return `
+                <div class="roadmap-card card border rounded-4 bg-body shadow-sm overflow-hidden mb-3" id="rmCard_${r.id}">
+                    <div class="card-header p-3 bg-body-tertiary border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2.5">
+                            <span class="countdown-badge-pill">⏳ Còn ${daysRemaining} ngày</span>
+                            <div>
+                                <h5 class="fw-bold mb-0 text-body">${escapeHtml(r.title)}</h5>
+                                <div class="extra-small text-muted mt-0.5">
+                                    <span>Môn: <strong>${escapeHtml(r.subject)}</strong></span> • 
+                                    <span>Mục tiêu: <strong>${escapeHtml(r.targetScore)}</strong></span> • 
+                                    <span>Thời lượng: <strong>${r.dailyMinutes} phút/ngày</strong></span> • 
+                                    <span>Ngày thi: <strong>${r.examDate}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 extra-small" onclick="deleteStudyRoadmap(${r.id})" title="Xóa lộ trình này">
+                                <i class="bi bi-trash"></i> Xóa
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center justify-content-between mb-1.5 extra-small">
+                            <span class="fw-semibold text-muted">Tiến độ hoàn thành: <strong class="text-primary" id="rmProgressText_${r.id}">${r.completedTasks}/${r.totalTasks} nhiệm vụ (${progress}%)</strong></span>
+                            <span class="text-secondary">Cập nhật vào SQLite</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 8px; border-radius: 999px;">
+                            <div id="rmProgressBar_${r.id}" class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" style="width: ${progress}%;"></div>
+                        </div>
+
+                        <div class="roadmap-tasks-list d-flex flex-column gap-2" id="rmTaskList_${r.id}">
+                            ${plan.map(task => {
+                                const isDone = Boolean(task.completed);
+                                return `
+                                <div class="roadmap-task-item p-2.5 rounded-3 border d-flex align-items-center justify-content-between gap-2.5 ${isDone ? 'is-completed bg-body-secondary' : 'bg-body'}" id="rmTaskRow_${r.id}_${task.id}">
+                                    <div class="d-flex align-items-center gap-2.5 text-truncate">
+                                        <input class="form-check-input cursor-pointer fs-6 m-0" type="checkbox" id="chk_${r.id}_${task.id}" ${isDone ? 'checked' : ''} onchange="toggleStudyTask(${r.id}, '${task.id}', this.checked)">
+                                        <div class="text-truncate">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-secondary-subtle text-secondary border extra-small">Ngày ${task.day}</span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle extra-small">${escapeHtml(task.method || 'Giảng bài')}</span>
+                                                <span class="fw-semibold small task-title text-truncate text-body">${escapeHtml(task.title)}</span>
+                                            </div>
+                                            <div class="extra-small text-muted text-truncate mt-0.5">${escapeHtml(task.focus || '')}</div>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                        <span class="extra-small text-secondary">${task.estimatedMinutes || 60}p</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-0.5 extra-small fw-semibold" onclick="studyRoadmapTaskNow('${escapeHtml(r.subject)}', '${escapeHtml(task.title)}', '${escapeHtml(task.method || 'Giảng bài')}')">
+                                            Học ngay →
+                                        </button>
+                                    </div>
+                                </div>
+                                `;
+                            }).join("")}
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join("");
+        }
+    } catch (e) {
+        console.warn("Lỗi loadRoadmapsData:", e);
+    }
+}
+window.loadRoadmapsData = loadRoadmapsData;
+
+async function submitCreateRoadmap() {
+    const grade = document.getElementById("rmGradeSelect")?.value || "THPT (Lớp 12)";
+    const subject = document.getElementById("rmSubjectSelect")?.value || "Toán";
+    const examDate = document.getElementById("rmExamDateInput")?.value || "";
+    const targetScore = document.getElementById("rmTargetScoreSelect")?.value || "9.0+";
+    const dailyMinutes = parseInt(document.getElementById("rmDailyMinutesSelect")?.value || "60", 10);
+    const syllabus = document.getElementById("rmSyllabusInput")?.value || "";
+
+    const btn = document.getElementById("btnSubmitRoadmap");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang tạo lộ trình AI...`;
+    }
+
+    try {
+        const res = await fetch("/api/learning/roadmaps/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                subject,
+                gradeLevel: grade,
+                examDate,
+                targetScore,
+                dailyMinutes,
+                syllabusText: syllabus
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            toggleRoadmapForm(false);
+            await loadRoadmapsData();
+        } else {
+            alert(data.error || "Không thể tạo lộ trình");
+        }
+    } catch (e) {
+        alert("Lỗi kết nối máy chủ: " + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="bi bi-sparkles"></i> <span>✨ Tạo Lộ trình Ôn thi AI</span>`;
+        }
+    }
+}
+window.submitCreateRoadmap = submitCreateRoadmap;
+
+async function toggleStudyTask(roadmapId, taskId, completed) {
+    const row = document.getElementById(`rmTaskRow_${roadmapId}_${taskId}`);
+    if (row) {
+        row.classList.toggle("is-completed", completed);
+        if (completed) row.classList.add("bg-body-secondary");
+        else row.classList.remove("bg-body-secondary");
+    }
+
+    try {
+        const res = await fetch(`/api/learning/roadmaps/${roadmapId}/toggle-task`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ taskId, completed })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const bar = document.getElementById(`rmProgressBar_${roadmapId}`);
+            const txt = document.getElementById(`rmProgressText_${roadmapId}`);
+            if (bar) bar.style.width = `${data.progressPercent}%`;
+            if (txt) txt.innerText = `${data.completedTasks}/${data.totalTasks} nhiệm vụ (${data.progressPercent}%)`;
+        }
+    } catch (e) {
+        console.warn("Lỗi toggleStudyTask:", e);
+    }
+}
+window.toggleStudyTask = toggleStudyTask;
+
+async function deleteStudyRoadmap(id) {
+    if (!confirm("Bạn có chắc chắn muốn xóa lộ trình ôn thi này không?")) return;
+    try {
+        const res = await fetch(`/api/learning/roadmaps/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) {
+            document.getElementById(`rmCard_${id}`)?.remove();
+            loadRoadmapsData();
+        }
+    } catch (e) {
+        alert("Lỗi khi xóa lộ trình: " + e.message);
+    }
+}
+window.deleteStudyRoadmap = deleteStudyRoadmap;
+
+function studyRoadmapTaskNow(subject, topic, method) {
+    switchLearningSubTab('methods');
+    let targetMode = 'notebook';
+    if (method.includes('Trắc nghiệm')) targetMode = 'quiz';
+    else if (method.includes('Flashcards')) targetMode = 'flashcard';
+    else if (method.includes('THPTQG')) targetMode = 'quiz';
+
+    selectLearningCard(targetMode);
+    const topicInput = document.getElementById("learningTopicInput");
+    if (topicInput) topicInput.value = topic;
+
+    if (method.includes('THPTQG')) {
+        const countSelect = document.getElementById("learningCountSelect");
+        if (countSelect) {
+            countSelect.value = "THPTQG_2025";
+            window.onLearningCountSelectChanged();
+        }
+    }
+    startLearningSession();
+}
+window.studyRoadmapTaskNow = studyRoadmapTaskNow;
+
+// 4. INTERACTIVE SIMULATION (STEM LAB / HTML5)
+window.simulationRegistry = window.simulationRegistry || {};
+window.simulationBlocks = window.simulationBlocks || {};
+
+function registerSimulationData(rawJson) {
+    const simId = 'sim_' + Math.random().toString(36).substr(2, 9);
+    try {
+        let clean = rawJson.trim();
+        let data = JSON.parse(clean);
+        window.simulationRegistry[simId] = data;
+        window.simulationBlocks[simId] = renderSimulationCard(simId, data);
+    } catch (e) {
+        console.error("Simulation parse error:", e);
+        window.simulationBlocks[simId] = `<div class="alert alert-warning">Lỗi hiển thị mô phỏng tương tác: ${escapeHtml(e.message)}</div>`;
+    }
+    return simId;
+}
+window.registerSimulationData = registerSimulationData;
+
+function renderSimulationCard(simId, data) {
+    const title = data.title || "Mô phỏng tương tác";
+    const subject = data.subject || "STEM Lab";
+    const instructions = data.instructions || "Kéo các thanh trượt và tương tác trực tiếp trên đồ thị/khung mô phỏng.";
+    const encodedHtml = encodeURIComponent(data.html || "");
+
+    return `
+    <div class="simulation-card-container my-3 rounded-4 shadow-sm border overflow-hidden" id="simCard_${simId}">
+        <div class="simulation-card-header p-3 d-flex align-items-center justify-content-between flex-wrap gap-2 border-bottom">
+            <div class="d-flex align-items-center gap-2.5">
+                <div class="sim-icon-badge rounded-3 d-flex align-items-center justify-content-center p-2 bg-info bg-opacity-10 text-info">
+                    <i class="bi bi-flask fs-4"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-info-subtle text-info border border-info-subtle extra-small text-uppercase">${escapeHtml(subject)}</span>
+                        <h5 class="fw-bold mb-0 sim-title">${escapeHtml(title)}</h5>
+                    </div>
+                    <div class="extra-small text-muted mt-0.5 sim-instructions">${escapeHtml(instructions)}</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5" onclick="reloadSimulation('${simId}')" title="Đặt lại mô phỏng">
+                    <i class="bi bi-arrow-repeat"></i>
+                    <span class="d-none d-sm-inline extra-small">Đặt lại</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5" onclick="expandSimulation('${simId}')" title="Phóng to toàn màn hình">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                    <span class="d-none d-sm-inline extra-small">Toàn màn hình</span>
+                </button>
+            </div>
+        </div>
+        <div class="simulation-iframe-wrapper position-relative" style="background:#ffffff; min-height:480px;">
+            <iframe id="simIframe_${simId}" class="simulation-iframe w-100" sandbox="allow-scripts" loading="lazy" style="height:480px; border:none; display:block;" data-raw="${encodedHtml}"></iframe>
+        </div>
+    </div>
+    `;
+}
+window.renderSimulationCard = renderSimulationCard;
+
+function initSimulationIframes() {
+    document.querySelectorAll(".simulation-iframe[data-raw]").forEach(iframe => {
+        if (!iframe.srcdoc) {
+            try {
+                iframe.srcdoc = decodeURIComponent(iframe.getAttribute("data-raw"));
+            } catch (e) {
+                iframe.srcdoc = iframe.getAttribute("data-raw");
+            }
+        }
+    });
+}
+window.initSimulationIframes = initSimulationIframes;
+
+function reloadSimulation(simId) {
+    const iframe = document.getElementById(`simIframe_${simId}`);
+    if (iframe) {
+        const raw = iframe.getAttribute("data-raw");
+        iframe.srcdoc = "";
+        setTimeout(() => {
+            iframe.srcdoc = decodeURIComponent(raw);
+        }, 50);
+    }
+}
+window.reloadSimulation = reloadSimulation;
+
+function expandSimulation(simId) {
+    const data = window.simulationRegistry[simId];
+    if (!data) return;
+    const fsIframe = document.getElementById("fsSimIframe");
+    const fsTitle = document.getElementById("fsSimTitle");
+    if (fsTitle) fsTitle.innerText = `🧪 ${data.title || 'Mô phỏng tương tác'}`;
+    if (fsIframe) {
+        fsIframe.setAttribute("data-raw", encodeURIComponent(data.html || ""));
+        fsIframe.srcdoc = data.html || "";
+    }
+    const modalEl = document.getElementById("modalFullscreenSimulation");
+    if (modalEl && typeof bootstrap !== "undefined") {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+window.expandSimulation = expandSimulation;
+
+function reloadFsSimulation() {
+    const fsIframe = document.getElementById("fsSimIframe");
+    if (fsIframe) {
+        const raw = fsIframe.getAttribute("data-raw");
+        fsIframe.srcdoc = "";
+        setTimeout(() => {
+            fsIframe.srcdoc = decodeURIComponent(raw);
+        }, 50);
+    }
+}
+window.reloadFsSimulation = reloadFsSimulation;
+
+function setSimTopic(topic) {
+    const input = document.getElementById("learningTopicInput");
+    if (input) {
+        input.value = topic;
+        input.focus();
+    }
+}
+window.setSimTopic = setSimTopic;
+
+// 5. SOCRATIC TUTOR CONTROLLER
+window._isSocraticActive = false;
+function toggleSocraticSwitch(val) {
+    window._isSocraticActive = Boolean(val);
+    const badge = document.getElementById("socraticActiveBadge");
+    if (badge) badge.style.display = window._isSocraticActive ? "inline-flex" : "none";
+}
+window.toggleSocraticSwitch = toggleSocraticSwitch;
+
+function showSocraticBadge() {
+    const badge = document.getElementById("socraticActiveBadge");
+    if (badge) badge.style.display = "inline-flex";
+}
+window.showSocraticBadge = showSocraticBadge;
+
+function turnOffSocraticMode() {
+    window._isSocraticActive = false;
+    const badge = document.getElementById("socraticActiveBadge");
+    if (badge) badge.style.display = "none";
+    const sw = document.getElementById("learningSocraticSwitch");
+    if (sw) sw.checked = false;
+}
+window.turnOffSocraticMode = turnOffSocraticMode;
+
+function sendSocraticQuickAction(type) {
+    let msgText = "";
+    if (type === "hint") {
+        msgText = "Cho mình thêm một gợi ý nhỏ nữa cho bước này nhé.";
+    } else if (type === "simplify") {
+        msgText = "Bạn giải thích lại bước này bằng ví dụ đơn giản hơn giúp mình nhé.";
+    } else if (type === "solve") {
+        msgText = "Hãy trình bày lời giải chi tiết đầy đủ từ đầu đến cuối kèm đáp án chính xác cho bài này.";
+    }
+    const msgEl = document.getElementById("msg");
+    if (msgEl && msgText) {
+        msgEl.value = msgText;
+        const sendBtn = document.getElementById("send");
+        if (sendBtn) sendBtn.click();
+    }
+}
+window.sendSocraticQuickAction = sendSocraticQuickAction;
+
+// 6. Advanced Settings Controller
 function checkAndShowAdminTab(serverIsAdmin) {
     const adminTabBtn = document.getElementById("setTabBtn-admin");
     const adminDivider = document.getElementById("setAdminDivider");

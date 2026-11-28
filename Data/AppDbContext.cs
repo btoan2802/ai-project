@@ -39,10 +39,24 @@ namespace BtoanAiNet.Data
         public DbSet<UserGem> UserGems { get; set; } = null!;
         public DbSet<UserFeedback> UserFeedbacks { get; set; } = null!;
         public DbSet<SharedLink> SharedLinks { get; set; } = null!;
+        public DbSet<LearningTopicStat> LearningTopicStats { get; set; } = null!;
+        public DbSet<StudyRoadmap> StudyRoadmaps { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<LearningTopicStat>(entity =>
+            {
+                entity.ToTable("LearningTopicStats");
+                entity.HasIndex(e => new { e.UserId, e.Subject });
+            });
+
+            modelBuilder.Entity<StudyRoadmap>(entity =>
+            {
+                entity.ToTable("StudyRoadmaps");
+                entity.HasIndex(e => e.UserId);
+            });
 
             modelBuilder.Entity<User>(entity =>
             {

@@ -49,3 +49,7 @@ wwwroot/uploads/last_*.json
 wwwroot/files/*
 !wwwroot/uploads/.gitkeep
 !wwwroot/files/.gitkeep
+ 
+*.db
+*.db-shm
+*.db-wal

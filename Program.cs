@@ -327,6 +327,38 @@ CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessage
                 {
                     try { dbContext.Database.ExecuteSqlRaw(alter); } catch { }
                 }
+
+                // Ensure Learning Upgrade tables
+                dbContext.Database.ExecuteSqlRaw(@"
+CREATE TABLE IF NOT EXISTS LearningTopicStats (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Subject TEXT NOT NULL,
+    GradeLevel TEXT NOT NULL,
+    TopicName TEXT NOT NULL,
+    TotalQuestions INTEGER NOT NULL DEFAULT 0,
+    CorrectQuestions INTEGER NOT NULL DEFAULT 0,
+    MasteryPercent REAL NOT NULL DEFAULT 0,
+    LastPracticedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IDX_LearningTopicStats_User ON LearningTopicStats(UserId, Subject);
+
+CREATE TABLE IF NOT EXISTS StudyRoadmaps (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Title TEXT NOT NULL,
+    Subject TEXT NOT NULL,
+    GradeLevel TEXT NOT NULL,
+    ExamDate TEXT NOT NULL,
+    TargetScore TEXT NOT NULL,
+    DailyMinutes INTEGER NOT NULL DEFAULT 60,
+    SourceDocName TEXT NULL,
+    PlanJson TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    UpdatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IDX_StudyRoadmaps_User ON StudyRoadmaps(UserId);
+");
             }
             catch (Exception ex)
             {
@@ -840,6 +872,38 @@ CREATE INDEX IF NOT EXISTS IX_AgentChatMessages_User_Project ON AgentChatMessage
                 {
                     try { dbContext.Database.ExecuteSqlRaw(alter); } catch { }
                 }
+
+                // Ensure Learning Upgrade tables
+                dbContext.Database.ExecuteSqlRaw(@"
+CREATE TABLE IF NOT EXISTS LearningTopicStats (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Subject TEXT NOT NULL,
+    GradeLevel TEXT NOT NULL,
+    TopicName TEXT NOT NULL,
+    TotalQuestions INTEGER NOT NULL DEFAULT 0,
+    CorrectQuestions INTEGER NOT NULL DEFAULT 0,
+    MasteryPercent REAL NOT NULL DEFAULT 0,
+    LastPracticedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IDX_LearningTopicStats_User ON LearningTopicStats(UserId, Subject);
+
+CREATE TABLE IF NOT EXISTS StudyRoadmaps (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId INTEGER NOT NULL,
+    Title TEXT NOT NULL,
+    Subject TEXT NOT NULL,
+    GradeLevel TEXT NOT NULL,
+    ExamDate TEXT NOT NULL,
+    TargetScore TEXT NOT NULL,
+    DailyMinutes INTEGER NOT NULL DEFAULT 60,
+    SourceDocName TEXT NULL,
+    PlanJson TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    UpdatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IDX_StudyRoadmaps_User ON StudyRoadmaps(UserId);
+");
 
                 // Ensure Btoan AI settings tables for SQLite
                 string[] settingsSqlite = new[]

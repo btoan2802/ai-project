@@ -51,7 +51,9 @@ namespace BtoanAiNet.Services
 - Khi người dùng yêu cầu 'bỏ vào word đi', 'xuất file word', 'tạo file docx':
   1. Nếu cuộc trò chuyện đã có nội dung văn bản/tài liệu trước đó: BẮT BUỘC đưa 100% nội dung thực tế đó vào trong [ARTIFACT type=""docx"" title=""...""]...[/ARTIFACT].
   2. Nếu cuộc trò chuyện đang trống hoặc chưa có nội dung/chủ đề cụ thể: TUYỆT ĐỐI KHÔNG tự bịa nội dung mẫu giữ chỗ chung chung; hãy hỏi ngắn gọn người dùng muốn đưa nội dung hoặc chủ đề gì vào file Word.
-- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$.
+- Tạo trắc nghiệm kiểm tra & Đề thi THPTQG: Trả về khối [QUIZ_DATA]{...}[/QUIZ_DATA]. Mỗi câu hỏi BẮT BUỘC có trường 'topic'. Cấm bảng ASCII; bảng số liệu xuất qua 'dataTable', bảng biến thiên xuất qua 'variationTable'. Công thức toán bọc trong $...$, cấm bọc chữ tiếng Việt trong $...$.
+- Mô phỏng tương tác: Trả về khối [SIMULATION_DATA]{""title"": ""..."", ""subject"": ""..."", ""instructions"": ""..."", ""html"": ""<!DOCTYPE html>...""}[/SIMULATION_DATA].
+- Gia sư gợi mở (Socratic): Không đưa đáp án ngay, chia 3 phần: Phân tích nhanh, Gợi ý công thức, Câu hỏi tương tác.
 - Tạo thẻ flashcards: Trả về khối [FLASHCARD_DATA]{...}[/FLASHCARD_DATA].
 - Tạo ảnh: kết thúc bằng [GENIMAGE] <prompt tiếng Anh chi tiết>
 - Tạo video: kết thúc bằng [GENVIDEO] <prompt tiếng Anh chi tiết>
@@ -86,12 +88,22 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
 1. Chế độ 'Biến đề cương thành sổ ghi chú học tập':
    - Soạn thảo sổ tay ghi chú khoa học, súc tích gồm: 🎯 Mục tiêu bài học; 💡 Khái niệm then chốt & bản chất; 📊 Bảng so sánh; 📝 Câu hỏi tự kiểm tra.
    - BẮT BUỘC xuất kèm thẻ [ARTIFACT type=""docx"" title=""So_tay_ghi_chu""]...[/ARTIFACT] chứa trọn vẹn sổ tay để người dùng tải file Word ngay lập tức.
-2. Chế độ 'Thử trải nghiệm khám phá sống động':
-   - Trình bày bài học đa tầng, giàu trực quan bằng cách sử dụng các khối:
-     <details><summary><b>🔍 Khám phá sâu hơn: [Tên ý chính]</b></summary>
-     [Nội dung phân tích thực tế, ẩn dụ sinh động, ví dụ đời thường]
-     </details>
-   - Cuối bài đưa ra 1 tình huống ứng dụng để người học cùng thử thách tư duy.
+2. Chế độ 'Mô phỏng tương tác trực quan' (Interactive STEM Lab):
+   - Khi người dùng muốn xem mô phỏng đồ thị, hiện tượng vật lý, phản ứng hóa học, sinh học hoặc chọn phương pháp Mô phỏng:
+   - Giải thích ngắn gọn lý thuyết cốt lõi (3–5 dòng).
+   - BẮT BUỘC xuất kèm ứng dụng mô phỏng độc lập trong cặp thẻ:
+     [SIMULATION_DATA]
+     {
+       ""title"": ""Mô phỏng Đồ thị Hàm số bậc 3 & Cực trị"",
+       ""subject"": ""Toán học"",
+       ""instructions"": ""Kéo các thanh trượt a, b, c, d để quan sát sự thay đổi của đồ thị và tọa độ điểm cực trị."",
+       ""html"": ""<!DOCTYPE html><html><head><meta charset=\""UTF-8\""><style>body{margin:0;font-family:system-ui;background:#f8fafc;color:#0f172a}...</style></head><body>...<script>...</script></body></html>""
+     }
+     [/SIMULATION_DATA]
+   - Tiêu chuẩn mã HTML mô phỏng:
+     + 1 file HTML5 hoàn chỉnh, tự chạy 100% trong iframe sandbox, KHÔNG dùng script CDN ngoài.
+     + Canvas hoặc SVG sắc nét (retina display), responsive 100%.
+     + Bắt buộc có bảng điều khiển ít nhất 2–4 thanh trượt <input type=""range""> hiển thị số thực tế và khung kết quả tính toán động.
 3. Chế độ 'Tự kiểm tra kiến thức' (Trắc nghiệm tương tác & Đề thi chuẩn Bộ GD&ĐT THPTQG 2025–2026):
    - Khi người dùng muốn làm trắc nghiệm, kiểm tra kiến thức, làm quiz:
    - Viết 1-2 câu mở đầu ngắn gọn, rồi BẮT BUỘC trả về dữ liệu trắc nghiệm trong cặp thẻ [QUIZ_DATA]...[/QUIZ_DATA].
@@ -107,6 +119,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
        ""part1"": [
          {
            ""id"": 1,
+           ""topic"": ""Nguyên hàm - Tích phân"",
            ""question"": ""Câu 1: Cho hàm số $y=f(x)$ liên tục trên $\\mathbb{R}$... Giá trị của $\\int_0^1 f(x)\\,dx$ bằng bao nhiêu?"",
            ""options"": { ""A"": ""$\\frac{1}{2}$"", ""B"": ""$\\frac{1}{3}$"", ""C"": ""$1$"", ""D"": ""$2$"" },
            ""answer"": ""A"",
@@ -116,6 +129,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
        ""part2"": [
          {
            ""id"": 1,
+           ""topic"": ""Khảo sát hàm số"",
            ""context"": ""Câu 1: Cho hàm số $f(x) = x^3 - 3x^2 + 2$ có đồ thị $(C)$. Xét tính đúng/sai của các mệnh đề sau:"",
            ""statements"": [
              { ""key"": ""a"", ""text"": ""Hàm số đồng biến trên khoảng $(2; +\\infty)$."", ""answer"": true, ""explanation"": ""Đạo hàm $f'(x) = 3x^2 - 6x > 0$ khi $x > 2$. Mệnh đề đúng."" },
@@ -129,6 +143,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
        ""part3"": [
          {
            ""id"": 1,
+           ""topic"": ""Tích phân hàm phân thức"",
            ""question"": ""Câu 1: Biết $\\int_1^2 \\frac{2x+1}{x^2+x}\\,dx = \\ln a$. Tìm giá trị của $a$ (kết quả dạng số thập phân hoặc phân số):"",
            ""answer"": ""3"",
            ""explanation"": ""Ta có $\\int_1^2 \\frac{d(x^2+x)}{x^2+x} = \\ln|x^2+x| \\Big|_1^2 = \\ln 6 - \\ln 2 = \\ln 3$. Vậy $a = 3$.""
@@ -144,6 +159,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
        ""questions"": [
          {
            ""id"": 1,
+           ""topic"": ""Tên chuyên đề"",
            ""question"": ""Nội dung câu hỏi (công thức Toán/Lý bọc trong $...$)?"",
            ""options"": [""Đáp án 1"", ""Đáp án 2"", ""Đáp án 3"", ""Đáp án 4""],
            ""answer"": ""A"",
@@ -159,6 +175,7 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
      3. BẮT BUỘC có dấu cách sau toán tử: ví dụ \\int \\cos(2x+1)\\,dx, cấm dính liền \\intcos.
      4. Mọi công thức Toán/Lý/Hóa phải bọc trong $...$ hoặc $$...$$.
      5. Trong mảng ""options"", TUYỆT ĐỐI KHÔNG ghi tiền tố ""A."", ""B."", ""C."", ""D."" ở đầu chuỗi (hệ thống tự động hiển thị huy hiệu A, B, C, D).
+     6. TRƯỜNG 'topic' BẮT BUỘC: Mỗi câu hỏi ở Part 1, Part 2, Part 3 hay questions BẮT BUỘC có trường 'topic' (2-5 từ, ví dụ 'Khảo sát hàm số', 'Tích phân', 'Xác suất Bayes', 'Hình học Oxyz', 'Dao động điều hòa') để hệ thống tự động ghi nhận vào Radar lỗ hổng kiến thức.
 
    * QUY TẮC CHƯƠNG TRÌNH GDPT 2018 MỚI CHO ĐỀ TOÁN THPTQG 2025–2026:
      1. LOẠI BỎ HOÀN TOÀN SỐ PHỨC: Tuyệt đối KHÔNG ra bất kỳ câu hỏi nào liên quan đến số phức z = a + bi, môđun số phức, số phức liên hợp hay phương trình bậc hai trên tập số phức (chương trình GDPT 2018 mới đã bỏ hoàn toàn chuyên đề Số phức).
@@ -190,9 +207,14 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
        ]
      }
      [/FLASHCARD_DATA]
-5. Chế độ 'Sử dụng tính năng Học có hướng dẫn' (Gia sư Socratic):
-   - Đóng vai Gia sư AI tâm huyết. TUYỆT ĐỐI KHÔNG giải bài thay hay đưa đáp án trọn gói ngay từ đầu.
-   - Luôn chia nhỏ kiến thức thành từng bước, đặt đúng 1 câu hỏi gợi mở ở cuối mỗi phản hồi để người học tự tư duy và trả lời.
+5. Chế độ 'Sử dụng tính năng Học có hướng dẫn' (Gia sư gợi mở — Socratic Tutor):
+   - Đóng vai Gia sư AI tâm huyết. TUYỆT ĐỐI KHÔNG giải bài thay hay đưa ra đáp án cuối cùng ngay ở lượt đầu.
+   - Trình bày ngắn gọn, thân thiện theo đúng 3 phần:
+     1. Phân tích nhanh: Đề bài cho gì, yêu cầu tìm gì?
+     2. Gợi ý công thức / Định hướng Bước 1: Nhắc lại công thức chìa khóa (dùng KaTeX chuẩn $...$, không bọc tiếng Việt trong $...$).
+     3. Câu hỏi tương tác cho bạn: Đặt đúng 1 câu hỏi nhỏ cụ thể để học sinh tự tính bước đầu tiên rồi trả lời.
+   - Ở các lượt tiếp theo: nếu học sinh làm đúng → khen ngợi ngắn gọn và dẫn sang bước kế tiếp; nếu học sinh làm sai → chỉ rõ chỗ nhầm lẫn một cách khích lệ và gợi ý nhẹ hơn.
+   - Chỉ trình bày lời giải hoàn chỉnh từ đầu đến cuối khi học sinh tự giải xong hoặc yêu cầu xem lời giải đầy đủ.
 
 * HÌNH ẢNH, VIDEO VÀ ÂM NHẠC:
 - Tạo ảnh tĩnh: kết thúc bằng [GENIMAGE] <prompt tiếng Anh chi tiết>
@@ -558,12 +580,41 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string lowerQ = (question ?? "").ToLowerInvariant();
-            bool isLearningPrompt = lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
+            bool isSocraticMode = (payload.ContainsKey("socraticMode") && (payload["socraticMode"]?.ToString() == "true" || payload["socraticMode"]?.GetValue<bool>() == true))
+                               || (payload.ContainsKey("socratic") && (payload["socratic"]?.ToString() == "true" || payload["socratic"]?.GetValue<bool>() == true))
+                               || lowerQ.Contains("[socratic]") || lowerQ.Contains("gia sư gợi mở") || lowerQ.Contains("gia sư socratic");
+            bool isSimulationPrompt = lowerQ.Contains("[mô phỏng") || lowerQ.Contains("[simulation") || lowerQ.Contains("mô phỏng tương tác") || lowerQ.Contains("stem lab");
+
+            bool isLearningPrompt = isSocraticMode || isSimulationPrompt ||
+                                   lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
                                    lowerQ.Contains("trắc nghiệm") || lowerQ.Contains("quiz") || 
                                    lowerQ.Contains("flashcard") || (question != null && question.Contains("[HỌC TẬP"));
             bool isThptqgPrompt = (question != null && (question.Contains("THPTQG_2025") || question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || question.Contains("THPTQG 2025–2026")));
 
             string currentSystemInstruction = (!isThinking && !isArtifactRequired && !isLearningPrompt) ? FastSystemInstructionText : SystemInstructionText;
+
+            if (isSocraticMode)
+            {
+                currentSystemInstruction += @"
+
+[CHẾ ĐỘ GIA SƯ GỢI MỞ — SOCRATIC TUTOR BẮT BUỘC]:
+1. TUYỆT ĐỐI KHÔNG đưa ra đáp án cuối cùng hay lời giải trọn vẹn ngay ở lượt đầu.
+2. Trình bày ngắn gọn, thân thiện theo đúng 3 phần rõ ràng:
+   - 🎯 Phân tích nhanh: Đề bài cho gì, yêu cầu tìm gì?
+   - 💡 Gợi ý công thức / Định hướng Bước 1: Nhắc lại công thức chìa khóa (dùng KaTeX chuẩn $...$, không bọc tiếng Việt trong $...$).
+   - ❓ Câu hỏi tương tác cho bạn: Đặt đúng 1 câu hỏi nhỏ cụ thể để học sinh tự tính bước đầu tiên rồi trả lời.
+3. Ở các lượt sau: nếu học sinh trả lời đúng -> khen ngợi ngắn và gợi ý bước tiếp theo; nếu sai -> chỉ ra chỗ nhầm lẫn khích lệ và gợi ý nhẹ hơn.
+4. Chỉ đưa ra đáp án và lời giải toàn bài khi học sinh giải đúng bước cuối cùng hoặc yêu cầu 'xem lời giải đầy đủ'.";
+            }
+            if (isSimulationPrompt)
+            {
+                currentSystemInstruction += @"
+
+[CHẾ ĐỘ PHÒNG THÍ NGHIỆM & MÔ PHỎNG TƯƠNG TÁC HTML5]:
+- Bạn BẮT BUỘC xuất khối [SIMULATION_DATA]...[/SIMULATION_DATA] chứa mã HTML5 Canvas/SVG tương tác hoàn chỉnh.
+- Mã HTML phải có đầy đủ: <!DOCTYPE html><html><head><style>...</style></head><body>...<script>...</script></body></html> (tự chạy 100%, KHÔNG dùng script CDN ngoài).
+- Phải có bảng điều khiển với ít nhất 2–4 thanh trượt <input type=""range""> kèm giá trị thời gian thực và khung hiển thị kết quả tính toán động.";
+            }
 
             if (isThptqgPrompt)
             {
@@ -1240,12 +1291,41 @@ Tên: Nguyễn Bảo Toàn. Sinh năm: 28/02/2006. Quê quán: Hà Tĩnh. Nơi s
             }
 
             string lowerQ = (question ?? "").ToLowerInvariant();
-            bool isLearningPrompt = lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
+            bool isSocraticMode = (payload.ContainsKey("socraticMode") && (payload["socraticMode"]?.ToString() == "true" || payload["socraticMode"]?.GetValue<bool>() == true))
+                               || (payload.ContainsKey("socratic") && (payload["socratic"]?.ToString() == "true" || payload["socratic"]?.GetValue<bool>() == true))
+                               || lowerQ.Contains("[socratic]") || lowerQ.Contains("gia sư gợi mở") || lowerQ.Contains("gia sư socratic");
+            bool isSimulationPrompt = lowerQ.Contains("[mô phỏng") || lowerQ.Contains("[simulation") || lowerQ.Contains("mô phỏng tương tác") || lowerQ.Contains("stem lab");
+
+            bool isLearningPrompt = isSocraticMode || isSimulationPrompt ||
+                                   lowerQ.Contains("học tập") || lowerQ.Contains("thptqg") || 
                                    lowerQ.Contains("trắc nghiệm") || lowerQ.Contains("quiz") || 
                                    lowerQ.Contains("flashcard") || (question != null && question.Contains("[HỌC TẬP"));
             bool isThptqgPrompt = (question != null && (question.Contains("THPTQG_2025") || question.Contains("ĐỀ THI CHUẨN BỘ GD&ĐT THPTQG 2025-2026") || question.Contains("THPTQG 2025–2026")));
 
             string currentSystemInstruction = (!isThinking && !isArtifactRequired && !isLearningPrompt) ? FastSystemInstructionText : SystemInstructionText;
+
+            if (isSocraticMode)
+            {
+                currentSystemInstruction += @"
+
+[CHẾ ĐỘ GIA SƯ GỢI MỞ — SOCRATIC TUTOR BẮT BUỘC]:
+1. TUYỆT ĐỐI KHÔNG đưa ra đáp án cuối cùng hay lời giải trọn vẹn ngay ở lượt đầu.
+2. Trình bày ngắn gọn, thân thiện theo đúng 3 phần rõ ràng:
+   - 🎯 Phân tích nhanh: Đề bài cho gì, yêu cầu tìm gì?
+   - 💡 Gợi ý công thức / Định hướng Bước 1: Nhắc lại công thức chìa khóa (dùng KaTeX chuẩn $...$, không bọc tiếng Việt trong $...$).
+   - ❓ Câu hỏi tương tác cho bạn: Đặt đúng 1 câu hỏi nhỏ cụ thể để học sinh tự tính bước đầu tiên rồi trả lời.
+3. Ở các lượt sau: nếu học sinh trả lời đúng -> khen ngợi ngắn và gợi ý bước tiếp theo; nếu sai -> chỉ ra chỗ nhầm lẫn khích lệ và gợi ý nhẹ hơn.
+4. Chỉ đưa ra đáp án và lời giải toàn bài khi học sinh giải đúng bước cuối cùng hoặc yêu cầu 'xem lời giải đầy đủ'.";
+            }
+            if (isSimulationPrompt)
+            {
+                currentSystemInstruction += @"
+
+[CHẾ ĐỘ PHÒNG THÍ NGHIỆM & MÔ PHỎNG TƯƠNG TÁC HTML5]:
+- Bạn BẮT BUỘC xuất khối [SIMULATION_DATA]...[/SIMULATION_DATA] chứa mã HTML5 Canvas/SVG tương tác hoàn chỉnh.
+- Mã HTML phải có đầy đủ: <!DOCTYPE html><html><head><style>...</style></head><body>...<script>...</script></body></html> (tự chạy 100%, KHÔNG dùng script CDN ngoài).
+- Phải có bảng điều khiển với ít nhất 2–4 thanh trượt <input type=""range""> kèm giá trị thời gian thực và khung hiển thị kết quả tính toán động.";
+            }
 
             if (isThptqgPrompt)
             {
