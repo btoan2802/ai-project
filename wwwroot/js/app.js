@@ -4326,9 +4326,7 @@ function cleanAndFormatMath(rawText, isOption = false) {
     str = str.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g, (match) => {
         let math = match;
         math = math.replace(/-\s*-\s*\\?infty/g, "-\\infty");
-        const mathKw = "frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|delta|theta|sigma|infty|times|cdot|pm|le|ge|ne|approx|sum|lim|to|in";
-        const re = new RegExp("(?<!\\)\\b(" + mathKw + ")\\b", "g");
-        math = math.replace(re, "\\$1");
+        math = math.replace(/(?<!\\)\b(frac|sqrt|vec|mathbb|setminus|circ|int|cos|sin|tan|cot|ln|log|pi|alpha|beta|gamma|Delta|delta|theta|sigma|infty|times|cdot|pm|le|ge|ne|approx|sum|lim|to|in)\b/g, (m, p1) => "\\" + p1);
         math = math.replace(/\\?intcos\b/g, "\\int \\cos ");
         math = math.replace(/\\?intsin\b/g, "\\int \\sin ");
         math = math.replace(/\\?intdx\b/g, "\\int dx");
