@@ -339,9 +339,9 @@ body.dark-mode .quiz-card-footer,
 }
 
 /* ====== GIAO DIỆN 🎓 HỌC TẬP CHÍNH GIỮA MÀN HÌNH KHÔNG CẦN CUỘN ====== */
-#learning-hub-screen,
-#learningHubSection,
-.learning-hub-screen {
+#learning-hub-screen:not(.d-none):not([style*="display: none"]),
+#learningHubSection:not(.d-none):not([style*="display: none"]),
+.learning-hub-screen:not(.d-none):not([style*="display: none"]) {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -350,6 +350,22 @@ body.dark-mode .quiz-card-footer,
   width: 100%;
   padding: 16px 24px 120px 24px;
   margin: 0 auto;
+}
+
+#learning-hub-screen.d-none,
+#learning-hub-screen[style*="display: none"],
+#learningHubSection.d-none,
+#learningHubSection[style*="display: none"],
+.learning-hub-screen.d-none,
+.learning-hub-screen[style*="display: none"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
 /* ====== BẢNG BIẾN THIÊN (BBT) & ĐỒ THỊ SVG ====== */

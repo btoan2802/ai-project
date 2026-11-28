@@ -1374,6 +1374,7 @@ async function send() {
     }
     window._lastSendTimestamp = Date.now();
     isSending = true;
+    closeLearningHub();
     showWelcomeScreen(false);
 
 
@@ -2178,13 +2179,19 @@ function showWelcomeScreen(show) {
     if (show) {
         if (!window._isViewingLearningHub) {
             welcomeEl.style.display = "flex";
-            if (hubEl) hubEl.style.display = "none";
+            if (hubEl) {
+                hubEl.classList.add("d-none");
+                hubEl.style.setProperty("display", "none", "important");
+            }
             if (chatEl) chatEl.style.display = "none";
             updateWelcomeGreeting();
         }
     } else {
         welcomeEl.style.display = "none";
-        if (hubEl) hubEl.style.display = "none";
+        if (hubEl) {
+            hubEl.classList.add("d-none");
+            hubEl.style.setProperty("display", "none", "important");
+        }
         if (chatEl) chatEl.style.display = "block";
     }
 }
@@ -2343,8 +2350,12 @@ async function loadConversation(id, updateUrl = true) {
 
     window.isLoadingConversation = true;
     window._isViewingLearningHub = false;
+    closeLearningHub();
     const hubEl = document.getElementById("learning-hub-screen");
-    if (hubEl) hubEl.style.display = "none";
+    if (hubEl) {
+        hubEl.classList.add("d-none");
+        hubEl.style.setProperty("display", "none", "important");
+    }
     const welcomeEl = document.getElementById("welcome-screen");
     if (welcomeEl) welcomeEl.style.display = "none";
     if (chatEl) chatEl.style.display = "block";
@@ -2640,10 +2651,14 @@ window.onload = function () {
 
     if (cidToLoad) {
         console.log("🚀 BtoanAI: Restoring conversation", cidToLoad);
+        closeLearningHub();
         const welcomeEl = document.getElementById("welcome-screen");
         if (welcomeEl) welcomeEl.style.display = "none";
         const hubEl = document.getElementById("learning-hub-screen");
-        if (hubEl) hubEl.style.display = "none";
+        if (hubEl) {
+            hubEl.classList.add("d-none");
+            hubEl.style.setProperty("display", "none", "important");
+        }
         if (chatEl) chatEl.style.display = "block";
         loadConversation(cidToLoad, false);
     } else if (window.location.pathname === "/" || window.location.pathname.endsWith("index.php") || window.location.pathname === "") {
@@ -2871,8 +2886,12 @@ function newChat(updateUrl = true) {
     lastAIAnswer = ""
 
     window._isViewingLearningHub = false;
+    closeLearningHub();
     const hub = document.getElementById("learning-hub-screen");
-    if (hub) hub.style.display = "none";
+    if (hub) {
+        hub.classList.add("d-none");
+        hub.style.setProperty("display", "none", "important");
+    }
     document.querySelectorAll(".sidebar-menu-nav .nav-item").forEach(el => el.classList.remove("active"));
 
     conversation_id = null
@@ -5572,7 +5591,13 @@ function openLearningHub() {
     if (welcome) welcome.style.display = "none";
     if (chat) chat.style.display = "none";
     if (configPanel) configPanel.style.display = "none";
-    if (hub) hub.style.display = "flex";
+    if (hub) {
+        hub.classList.remove("d-none");
+        hub.style.setProperty("display", "flex", "important");
+    }
+
+    // Đảm bảo subtab hiển thị đúng
+    switchLearningSubTab(window.currentLearningSubTab || 'methods');
 
     // Bắt buộc reset vị trí cuộn ngay lập tức về đỉnh
     const scrollContainer = document.getElementById("chatScrollWrapper") || chat;
@@ -5592,10 +5617,19 @@ function openLearningHub() {
 function closeLearningHub() {
     window._isViewingLearningHub = false;
     const hub = document.getElementById("learning-hub-screen") || document.getElementById("learningHubSection");
-    if (hub) hub.style.display = "none";
+    if (hub) {
+        hub.classList.add("d-none");
+        hub.style.setProperty("display", "none", "important");
+    }
 
     const configPanel = document.getElementById("learningConfigPanel");
     if (configPanel) configPanel.style.display = "none";
+
+    // Ẩn dứt điểm toàn bộ các subtab bên trong
+    ["learningTabMethods", "learningTabRadar", "learningTabRoadmap", "radarEmptyState"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+    });
 
     const chat = document.getElementById("chat") || document.getElementById("chatMessagesContainer");
     if (chat && chat.children.length > 0) {
