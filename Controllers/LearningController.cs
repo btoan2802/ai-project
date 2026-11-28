@@ -28,7 +28,37 @@ namespace BtoanAiNet.Controllers
             _geminiService = geminiService;
         }
 
-        protected int CurrentUserId => AuthUserHelper.GetCurrentUserId(HttpContext);
+        protected int CurrentUserId
+        {
+            get
+            {
+                int uid = AuthUserHelper.GetCurrentUserId(HttpContext);
+                if (uid > 0) return uid;
+
+                if (Request.Cookies.TryGetValue("btoan_guest_uid", out var guestCookie) && int.TryParse(guestCookie, out int gUid) && gUid > 0)
+                {
+                    return gUid;
+                }
+                if (Request.Headers.TryGetValue("X-Guest-Id", out var gHeader) && int.TryParse(gHeader, out int ghUid) && ghUid > 0)
+                {
+                    return ghUid;
+                }
+
+                int newGuestId = Math.Abs((Environment.MachineName + "_" + (Request.Headers.UserAgent.ToString() ?? "guest") + "_" + DateTime.UtcNow.ToString("yyyyMMdd")).GetHashCode() % 1000000) + 9000000;
+                try
+                {
+                    Response.Cookies.Append("btoan_guest_uid", newGuestId.ToString(), new Microsoft.AspNetCore.Http.CookieOptions
+                    {
+                        Expires = DateTimeOffset.UtcNow.AddDays(30),
+                        HttpOnly = false,
+                        SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax
+                    });
+                }
+                catch { }
+
+                return newGuestId;
+            }
+        }
 
         // 1. POST /api/learning/record-result
         [HttpPost("record-result")]
